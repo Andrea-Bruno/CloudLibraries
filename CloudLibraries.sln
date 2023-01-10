@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.4.33103.184
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CloudSync", "CloudSync\CloudSync.csproj", "{2738ED29-106D-4E05-8FD5-BA2FFFD1161C}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CloudBox", "CloudBox\CloudBox.csproj", "{4AA3AA3C-A907-4680-9068-78024C7AD69B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		DEBUG_AND|Any CPU = DEBUG_AND|Any CPU
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2738ED29-106D-4E05-8FD5-BA2FFFD1161C}.DEBUG_AND|Any CPU.ActiveCfg = DEBUG_AND|Any CPU
+		{2738ED29-106D-4E05-8FD5-BA2FFFD1161C}.DEBUG_AND|Any CPU.Build.0 = DEBUG_AND|Any CPU
+		{2738ED29-106D-4E05-8FD5-BA2FFFD1161C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2738ED29-106D-4E05-8FD5-BA2FFFD1161C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2738ED29-106D-4E05-8FD5-BA2FFFD1161C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2738ED29-106D-4E05-8FD5-BA2FFFD1161C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4AA3AA3C-A907-4680-9068-78024C7AD69B}.DEBUG_AND|Any CPU.ActiveCfg = DEBUG_AND|Any CPU
+		{4AA3AA3C-A907-4680-9068-78024C7AD69B}.DEBUG_AND|Any CPU.Build.0 = DEBUG_AND|Any CPU
+		{4AA3AA3C-A907-4680-9068-78024C7AD69B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4AA3AA3C-A907-4680-9068-78024C7AD69B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4AA3AA3C-A907-4680-9068-78024C7AD69B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4AA3AA3C-A907-4680-9068-78024C7AD69B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {7E8BF2DC-5EB4-44B6-9EFA-5030FA30154D}
+	EndGlobalSection
+EndGlobal
