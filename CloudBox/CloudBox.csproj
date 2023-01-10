@@ -14,10 +14,4 @@
 	  <ProjectReference Include="..\CloudSync\CloudSync.csproj" />
 	</ItemGroup>
 
-	<ItemGroup>
-		<None Update="WesternDigitalLicense.txt">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-	</ItemGroup>
-
 </Project>
