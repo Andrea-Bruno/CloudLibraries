@@ -365,7 +365,7 @@ namespace CloudBox
             if (string.IsNullOrEmpty(defaultPath))
                 if (isServer)
                 {
-                    defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppDomain.CurrentDomain.FriendlyName, nameof(CloudBox));
+                    defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), nameof(CloudBox));
                     if (id != null)
                         defaultPath = Path.Combine(defaultPath, CloudDirName + id);
                 }

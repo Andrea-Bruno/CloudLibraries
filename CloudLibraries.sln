@@ -13,6 +13,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CommunicationChannel", "..\
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SecureStorage", "..\..\..\SecureStorage\SecureStorage.csproj", "{EA12BA31-31C7-4E1B-8BF6-1083DA087432}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{DF167887-2A62-4F42-9378-0F9FC5276865}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		DEBUG_A|Any CPU = DEBUG_A|Any CPU
