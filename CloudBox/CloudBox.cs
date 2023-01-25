@@ -32,17 +32,21 @@ namespace CloudBox
         /// Cloud Server will communicate to clients for making operations on cloud storage.
         /// </summary>
         /// <param name="cloudPath">Directoty position of the cloud (a null value will be considered the default path)</param>
-        /// <param name="entryPoint">The entry point of server, to access the network</param>
+        /// <param name="routerEntryPoint">The entry point of the router/server, to connect the cloud to the network</param>
         /// <param name="isServer">True if this instance is a server cloud</param>
         /// <param name="id">Used to create multiple instances</param>
         /// <param name="licenseOEM">The OEM private key for activating licenses.</param>
         /// <param name="name">A label name to assign to this instance (this does not affect how the cloud works)</param>
         /// <param name="doNotCreateSpecialFolders">If instantiated as a server it will automatically create specific subdirectories for documents, photos, etc., unless this parameter is specified</param>
-        public CloudBox(string entryPoint, string cloudPath = null, bool isServer = false, ulong? id = null, string licenseOEM = null, string name = null, bool doNotCreateSpecialFolders = false)
+        public CloudBox(string routerEntryPoint, string cloudPath = null, bool isServer = false, ulong? id = null, string licenseOEM = null, string name = null, bool doNotCreateSpecialFolders = false)
         {
             DoNotCreateSpecialFolders = doNotCreateSpecialFolders; ;
             _Name = name;
-            EntryPoint = entryPoint;
+            if (string.IsNullOrEmpty(routerEntryPoint))
+            {
+                throw  new Exception("Missing entryPoint");
+            }
+            RouterEntryPoint = routerEntryPoint;
             if (string.IsNullOrEmpty(licenseOEM))
                 licenseOEM = TestNetDefaultlicenseOEM;
             LicenseOEM = licenseOEM;
@@ -146,7 +150,7 @@ namespace CloudBox
 #endif
             // Creates a license activator if an OEM license is set during initialization
             var signLicense = string.IsNullOrEmpty(LicenseOEM) ? null : new OEM(LicenseOEM);
-            Context = new Context(EntryPoint, NetworkName, modality: Modality.Server, privateKeyOrPassphrase: passphrase, licenseActivator: signLicense, instanceId: ID.ToString())
+            Context = new Context(RouterEntryPoint, NetworkName, modality: Modality.Server, privateKeyOrPassphrase: passphrase, licenseActivator: signLicense, instanceId: ID.ToString())
             {
                 OnRouterConnectionChange = onRouterConnectionChange,
                 OnCommunicationErrorEvent = OnCommunicationError
@@ -202,7 +206,7 @@ namespace CloudBox
         /// <summary>
         /// Entry point to connetction to router
         /// </summary>
-        public string EntryPoint { get; private set; }
+        public string RouterEntryPoint { get; private set; }
 
         /// <summary>
         /// Login the Client to the Cloud Server by entry QrCode and Pin of server
@@ -228,7 +232,7 @@ namespace CloudBox
             {
                 var serverPublicKey = qr.Skyp(offset).Take(33).ToBase64();
                 offset += 33;
-                EntryPoint = qr.Skip(offset).ToASCII();
+                RouterEntryPoint = qr.Skip(offset).ToASCII();
                 return ConnectToRouter(pin, serverPublicKey);
             }
 

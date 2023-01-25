@@ -10,7 +10,10 @@ namespace CloudBox
         {
             PreservedElement = preservedElements;
         }
-        public readonly int PreservedElement;
+        /// <summary>
+        /// Number of items to preserve in the list (adding more will remove the last ones)
+        /// </summary>
+        public int PreservedElement;
         public Sync.OnCommandEventHandler OnCommandEvent;
 
         public void AddOnCommand(Sync.Commands command, ulong? userId, bool isOutput)

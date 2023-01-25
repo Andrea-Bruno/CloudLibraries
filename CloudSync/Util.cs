@@ -19,10 +19,8 @@ namespace CloudSync
     {
         static Util()
         {
-            UserDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             Sha256Hash = SHA256.Create();
         }
-        public static readonly string UserDirectory;
 
         private static readonly SHA256 Sha256Hash;
         public static byte[] Hash256(byte[] data)
