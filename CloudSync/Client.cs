@@ -1,7 +1,10 @@
-﻿using System;
+﻿using EncryptedMessaging;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Xml.Serialization;
+using static CloudSync.RoleManager;
 
 namespace CloudSync
 {
@@ -16,7 +19,7 @@ namespace CloudSync
         /// <param name="host">Non-TrustLess information as the proxy or whoever generates this data could falsify it. It is logged for access log purposes</param>
         /// <param name="userAgent">Non-TrustLess information as the proxy or whoever generates this data could falsify it. It is logged for access log purposes</param>
         /// <param name="generateAesKey">Generate a private key to be sent to the client to encrypt the data</param>
-        public Client(Sync sync, byte[] clientKey, uint authenticationProof, string host, string userAgent = null, bool generateAesKey = true)
+        public Client(Sync sync, byte[] clientKey, ProofOfPin authenticationProof, string host, string userAgent = null, bool generateAesKey = true)
         {
             Sync = sync;
             AddNewAccess(host, userAgent);
@@ -42,7 +45,7 @@ namespace CloudSync
         /// <param name="userAgent">Non-TrustLess information as the proxy or whoever generates this data could falsify it. It is logged for access log purposes</param>
         /// <param name="generateAesKey">Generate a private key to be sent to the client to encrypt the data</param>
 
-        public Client(Sync sync, ulong id, uint authenticationProof, string host, string userAgent = null, bool generateAesKey = false)
+        public Client(Sync sync, ulong id, ProofOfPin authenticationProof, string host, string userAgent = null, bool generateAesKey = false)
         {
             Sync = sync;
             AddNewAccess(host, userAgent);
@@ -74,8 +77,8 @@ namespace CloudSync
         {
             // for deserialization use;
         }
-        private uint? AuthenticationProof;
-        public void SetAuthenticationProof(uint authenticationProof) => AuthenticationProof = authenticationProof;
+        private ProofOfPin AuthenticationProof;
+        public void SetAuthenticationProof(ProofOfPin authenticationProof) => AuthenticationProof = authenticationProof;
         public bool Authenticate(byte[] authenticationProof)
         {
             var check = BitConverter.ToUInt32(authenticationProof, 0);
@@ -89,9 +92,10 @@ namespace CloudSync
                 return false;
             }
             LastAttempt = DateTime.UtcNow;
-            var passed = authenticationProof == AuthenticationProof;
+            var passed = AuthenticationProof.Validate(authenticationProof, out string pin);
             if (passed)
             {
+                Util.RemoveFromPins(Sync.Context, pin);
                 Save();
             }
             AuthenticationProof = null;

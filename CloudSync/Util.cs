@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -70,16 +71,125 @@ namespace CloudSync
             return new TimeSpan(timeOutMs * TimeSpan.TicksPerMillisecond);
         }
 
-        public static string GetPin(Context context) { return context.SecureStorage.Values.Get("pin", null); }
+        private static string GetPinsFile(Context context)
+        {
+            if (PinsFile == null)
+                PinsFile = context.SecureStorage.Values.Get("pins", "");
+            return PinsFile;
+        }
+        private static string PinsFile;
+
+        /// <summary>
+        /// Add a one-time pin to log in a client. The pin is valid only once.
+        /// </summary>
+        /// <param name="pin">Pins to add</param>
+        /// <param name="expiresHours">Expires in hours</param>
+        public static void AddPin(Context context, string pin, int expiresHours)
+        {
+            PinsFile = GetPinsFile(context);
+            PinsFile += pin + "\t" + DateTime.UtcNow.AddHours(expiresHours).ToFileTime() + "\n";
+            context.SecureStorage.Values.Set("pins", PinsFile);
+        }
+        /// <summary>
+        /// The list of currently active pins with the expiration date
+        /// </summary>
+        /// <param name="context">Context object</param>
+        /// <returns>list of active pins with their expiration</returns>
+        public static List<Tuple<string, DateTime>> GetPins(Context context)
+        {
+            var pins = new List<Tuple<string, DateTime>>();
+            var pin = GetPin(context);
+            pins.Add(new Tuple<string, DateTime>(pin, DateTime.MaxValue));
+            string newPinsFile = "";
+            var pinsFile = GetPinsFile(context);
+            if (!string.IsNullOrEmpty(pinsFile))
+            {
+                foreach (var pinParts in pinsFile.Split('\n'))
+                {
+                    if (string.IsNullOrEmpty(pinParts)) continue;
+                    var parts = pinParts.Split('\t');
+                    var expires = DateTime.FromFileTime(long.Parse(parts[1]));
+                    if (expires >= DateTime.UtcNow)
+                    {
+                        newPinsFile += pinParts + '\n';
+                        pins.Add(new Tuple<string, DateTime>(parts[0], expires));
+                    }
+                }
+            }
+            if (pinsFile != newPinsFile)
+            {
+                PinsFile = newPinsFile;
+                context.SecureStorage.Values.Set("pins", PinsFile);
+            }
+            return pins;
+        }
+        /// <summary>
+        /// Remove a disposable pin
+        /// </summary>
+        /// <param name="context">Context object</param>
+        /// <param name="pin"></param>
+        public static bool RemoveFromPins(Context context, string pin)
+        {
+            bool found = false;
+            string newPinsFile = "";
+            var pinsFile = GetPinsFile(context);
+            if (!string.IsNullOrEmpty(pinsFile))
+            {
+                foreach (var pinParts in pinsFile.Split('\n'))
+                {
+                    if (string.IsNullOrEmpty(pinParts)) continue;
+                    if (pinParts.StartsWith(pin + '\t'))
+                    {
+                        found = true;
+                        continue;
+                    }
+                    newPinsFile += pinParts + '\n';
+                }
+            }
+            if (pinsFile != newPinsFile)
+            {
+                PinsFile = newPinsFile;
+                context.SecureStorage.Values.Set("pins", PinsFile);
+            }
+            return found;
+        }
+        private static string _Pin;
+        public static string GetPin(Context context)
+        {
+            if (_Pin == null)
+                _Pin = context.SecureStorage.Values.Get("pin", null);
+            return _Pin;
+        }
+
+        /// <summary>
+        /// Set a 1 to 8 digit pin (this pin will replace the current one)
+        /// </summary>
+        /// <param name="context">Context</param>
+        /// <param name="oldPin">Old pin (for control check)</param>
+        /// <param name="newPin">New pin</param>
+        /// <returns></returns>
         public static bool SetPin(Context context, string oldPin, string newPin)
         {
             if (oldPin == GetPin(context))
             {
-                if (int.TryParse(newPin, out var _) && newPin.Length <= 8)
-                {
-                    context.SecureStorage.Values.Set("pin", newPin);
-                    return true;
-                }
+                SetPin(context, newPin);
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Set a 1 to 8 digit pin (this pin will replace the current one)
+        /// </summary>
+        /// <param name="context">Context</param>
+        /// <param name="newPin">New pin</param>
+        /// <returns>True if the pin is accepted</returns>
+        public static bool SetPin(Context context, string newPin)
+        {
+            if (int.TryParse(newPin, out var _) && newPin.Length <= 8)
+            {
+                _Pin = newPin;
+                context.SecureStorage.Values.Set("pin", newPin);
+                return true;
             }
             return false;
         }

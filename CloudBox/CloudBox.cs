@@ -44,7 +44,7 @@ namespace CloudBox
             _Name = name;
             if (string.IsNullOrEmpty(routerEntryPoint))
             {
-                throw  new Exception("Missing entryPoint");
+                throw new Exception("Missing entryPoint");
             }
             RouterEntryPoint = routerEntryPoint;
             if (string.IsNullOrEmpty(licenseOEM))
@@ -56,12 +56,10 @@ namespace CloudBox
                 _cloudPath = cloudPath;
             Communication = new Communication(CloudPath);
             if (!isServer)
+            {
+                CreateContext();
                 ConnectToRouter(); // & create a Context
-            //// Bind the event to change the connection when the connectivity changes
-            //NetworkChange.NetworkAvailabilityChanged += (sender, e) => Context.OnConnectivityChange(e.IsAvailable);
-
-            //// Set the current connection status
-            //Context.OnConnectivityChange(NetworkInterface.GetIsNetworkAvailable());            
+            }
         }
 
         private static void UnhandledExceptionEventHandler(object sender, UnhandledExceptionEventArgs e)
@@ -139,9 +137,28 @@ namespace CloudBox
         /// </summary>
         /// <param name="pin">If the client is running, this is the Pin on the server that is required to log in and then connect the client to the server</param>       
         /// <param name="serverPublicKey">It is the server to which this client must connect (the public key of the server)</param>
-        /// <param name="onRouterConnectionChange">Function that acts as an event and will be called when the connection was successful and the client is logged into the router (return true), or when the connection with the router is lost (return false). You can set this action as an event.</param>              
         /// <returns>Successful</returns>        
-        public bool ConnectToRouter(string pin = null, string serverPublicKey = null, Action<bool> onRouterConnectionChange = null)
+        public bool ConnectToRouter(string pin = null, string serverPublicKey = null)
+        {
+            if (!IsServer)
+            {
+                if (pin == null)
+                    pin = Context.SecureStorage.Values.Get("pin", null);
+                if (pin == null)
+                    return false;
+                Context.SecureStorage.Values.Set("pin", pin);
+                SetServerCloudContact(serverPublicKey);
+            }
+            var credential = IsServer ? null : new LoginCredential { Pin = pin, PublicKey = Context.My.GetPublicKeyBinary() };
+            StartSync(credential);
+            return true;
+        }
+
+        /// <summary>
+        /// Generate the context, i.e. initialize the environment for encrypted socket communication between devices
+        /// </summary>
+        /// <param name="onRouterConnectionChange">Function that acts as an event and will be called when the connection was successful and the client is logged into the router (return true), or when the connection with the router is lost (return false). You can set this action as an event.</param>
+        public void CreateContext(Action<bool> onRouterConnectionChange = null)
         {
             string passphrase = null;
 #if DEBUG || DEBUG_AND
@@ -162,19 +179,6 @@ namespace CloudBox
             lock (Instances)
                 Instances.Add(Context.My.Id, this);
             Context.OnContactEvent += OnContactEvent;
-
-            if (!IsServer)
-            {
-                if (pin == null)
-                    pin = Context.SecureStorage.Values.Get("pin", null);
-                if (pin == null)
-                    return false;
-                Context.SecureStorage.Values.Set("pin", pin);
-                SetServerCloudContact(serverPublicKey);
-            }
-            var credential = IsServer ? null : new LoginCredential { Pin = pin, PublicKey = Context.My.GetPublicKeyBinary() };
-            StartSync(credential);
-            return true;
         }
 
         private void SetServerCloudContact(string serverPublicKey)
@@ -342,12 +346,22 @@ namespace CloudBox
         public static readonly Dictionary<ulong, CloudBox> Instances = new Dictionary<ulong, CloudBox>();
 
         /// <summary>
-        /// Unmount corrent cloud
+        /// Unmount corrent instance
         /// </summary>
         public void Remove()
         {
             Instances.Remove(Context.My.Id);
             Context.Dispose();
+        }
+
+        /// <summary>
+        /// Dismount the instance and destroy all data within it. Since it is a dangerous operation this function requires the pin
+        /// </summary>
+        public void Destroy()
+        {
+            var dir = CloudPath;
+            Remove();
+            Directory.Delete(dir, true);
         }
 
         private readonly string _cloudPath;

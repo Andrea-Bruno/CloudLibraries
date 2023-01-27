@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Net.NetworkInformation;
 
 namespace CloudSync
 {
@@ -16,7 +18,7 @@ namespace CloudSync
         public readonly Dictionary<ulong, Client> Clients = new Dictionary<ulong, Client>();
         public readonly Dictionary<ulong, Client> TmpClients = new Dictionary<ulong, Client>();
         public List<Client> ClientsConnected()
-        {            
+        {
             var clients = new List<Client>();
             foreach (var client in Clients.Values)
             {
@@ -42,12 +44,12 @@ namespace CloudSync
             if (clientPubKey != null && id == null)
                 id = PublicKeyToUserId(clientPubKey);
 
-            var pin = Util.GetPin(Sync.Context);
-            if (pin == null)
+            var pins = Util.GetPins(Sync.Context);
+            if (pins == null || pins.Count == 0)
                 return;
             var randomBitesForAuthenticationProof = new byte[32];
             new Random().NextBytes(randomBitesForAuthenticationProof);
-            var authenticationProof = CryptographicProofOfPinKnowledge(randomBitesForAuthenticationProof, pin);
+            var authenticationProof = CryptographicProofOfPinKnowledge(randomBitesForAuthenticationProof, pins.Select(x => x.Item1));
             if (TryToGetCient((ulong)id, out var client, out var isTemp))
             {
                 if (!isTemp)
@@ -72,6 +74,35 @@ namespace CloudSync
             client.ChunkSize = chunkSizeSetting == 0 ? null : chunkSizeSetting;
             client.ThumbanailSize = thumnailSize;
             sendRequestOfValidationToClient(client, randomBitesForAuthenticationProof);
+        }
+
+        internal static ProofOfPin CryptographicProofOfPinKnowledge(byte[] randomBitesForAuthenticationProof, IEnumerable<string> pins)
+        {
+            return new ProofOfPin()
+            {
+                RandomBitesForAuthenticationProof = randomBitesForAuthenticationProof,
+                Pins = pins
+            };
+        }
+
+        public class ProofOfPin
+        {
+            internal byte[] RandomBitesForAuthenticationProof;
+            internal IEnumerable<string> Pins;
+            public bool Validate(uint ProofOfPinKnowledge, out string pin)
+            {
+                foreach (var p in Pins)
+                {
+                    var Proof = CryptographicProofOfPinKnowledge(RandomBitesForAuthenticationProof, p);
+                    if (Proof == ProofOfPinKnowledge)
+                    {
+                        pin = p;
+                        return true;
+                    }
+                }
+                pin = null;
+                return false;
+            }
         }
 
         internal static uint CryptographicProofOfPinKnowledge(byte[] randomBitesForAuthenticationProof, string pin)
