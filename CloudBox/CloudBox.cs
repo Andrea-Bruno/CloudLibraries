@@ -57,9 +57,13 @@ namespace CloudBox
             Communication = new Communication(CloudPath);
             if (!isServer)
             {
-                CreateContext();
-                ConnectToRouter(); // & create a Context
+                CreateContext(OnRouterConnectionChange);
             }
+        }
+        private void OnRouterConnectionChange(bool connectivity)
+        {
+            if (connectivity)
+                ConnectToRouter();
         }
 
         private static void UnhandledExceptionEventHandler(object sender, UnhandledExceptionEventArgs e)

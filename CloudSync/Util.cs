@@ -73,11 +73,14 @@ namespace CloudSync
 
         private static string GetPinsFile(Context context)
         {
-            if (PinsFile == null)
-                PinsFile = context.SecureStorage.Values.Get("pins", "");
-            return PinsFile;
+            context.Session.TryGetValue("pins", out object pins);
+            if (pins == null)
+            {
+                pins = context.SecureStorage.Values.Get("pins", "");
+                context.Session["pins"] = pins;
+            }
+            return (string)pins;
         }
-        private static string PinsFile;
 
         /// <summary>
         /// Add a one-time pin to log in a client. The pin is valid only once.
@@ -86,9 +89,10 @@ namespace CloudSync
         /// <param name="expiresHours">Expires in hours</param>
         public static void AddPin(Context context, string pin, int expiresHours)
         {
-            PinsFile = GetPinsFile(context);
-            PinsFile += pin + "\t" + DateTime.UtcNow.AddHours(expiresHours).ToFileTime() + "\n";
-            context.SecureStorage.Values.Set("pins", PinsFile);
+            var pins = GetPinsFile(context);
+            pins += pin + "\t" + DateTime.UtcNow.AddHours(expiresHours).ToFileTime() + "\n";
+            context.Session["pins"] = pins;
+            context.SecureStorage.Values.Set("pins", pins);
         }
         /// <summary>
         /// The list of currently active pins with the expiration date
@@ -97,31 +101,31 @@ namespace CloudSync
         /// <returns>list of active pins with their expiration</returns>
         public static List<Tuple<string, DateTime>> GetPins(Context context)
         {
-            var pins = new List<Tuple<string, DateTime>>();
+            var pinsList = new List<Tuple<string, DateTime>>();
             var pin = GetPin(context);
-            pins.Add(new Tuple<string, DateTime>(pin, DateTime.MaxValue));
-            string newPinsFile = "";
-            var pinsFile = GetPinsFile(context);
-            if (!string.IsNullOrEmpty(pinsFile))
+            pinsList.Add(new Tuple<string, DateTime>(pin, DateTime.MaxValue));
+            string newPins = "";
+            var pins = GetPinsFile(context);
+            if (!string.IsNullOrEmpty(pins))
             {
-                foreach (var pinParts in pinsFile.Split('\n'))
+                foreach (var pinParts in pins.Split('\n'))
                 {
                     if (string.IsNullOrEmpty(pinParts)) continue;
                     var parts = pinParts.Split('\t');
                     var expires = DateTime.FromFileTime(long.Parse(parts[1]));
                     if (expires >= DateTime.UtcNow)
                     {
-                        newPinsFile += pinParts + '\n';
-                        pins.Add(new Tuple<string, DateTime>(parts[0], expires));
+                        newPins += pinParts + '\n';
+                        pinsList.Add(new Tuple<string, DateTime>(parts[0], expires));
                     }
                 }
             }
-            if (pinsFile != newPinsFile)
+            if (pins != newPins)
             {
-                PinsFile = newPinsFile;
-                context.SecureStorage.Values.Set("pins", PinsFile);
+                context.Session["pins"] = newPins;
+                context.SecureStorage.Values.Set("pins", newPins);
             }
-            return pins;
+            return pinsList;
         }
         /// <summary>
         /// Remove a disposable pin
@@ -131,11 +135,11 @@ namespace CloudSync
         public static bool RemoveFromPins(Context context, string pin)
         {
             bool found = false;
-            string newPinsFile = "";
-            var pinsFile = GetPinsFile(context);
-            if (!string.IsNullOrEmpty(pinsFile))
+            string newPins = "";
+            var pins = GetPinsFile(context);
+            if (!string.IsNullOrEmpty(pins))
             {
-                foreach (var pinParts in pinsFile.Split('\n'))
+                foreach (var pinParts in pins.Split('\n'))
                 {
                     if (string.IsNullOrEmpty(pinParts)) continue;
                     if (pinParts.StartsWith(pin + '\t'))
@@ -143,22 +147,25 @@ namespace CloudSync
                         found = true;
                         continue;
                     }
-                    newPinsFile += pinParts + '\n';
+                    newPins += pinParts + '\n';
                 }
             }
-            if (pinsFile != newPinsFile)
+            if (pins != newPins)
             {
-                PinsFile = newPinsFile;
-                context.SecureStorage.Values.Set("pins", PinsFile);
+                context.Session["pins"] = newPins;
+                context.SecureStorage.Values.Set("pins", newPins);
             }
             return found;
         }
-        private static string _Pin;
         public static string GetPin(Context context)
         {
-            if (_Pin == null)
-                _Pin = context.SecureStorage.Values.Get("pin", null);
-            return _Pin;
+            context.Session.TryGetValue("pin", out object pin);
+            if (pin == null)
+            {
+                pin = context.SecureStorage.Values.Get("pin", null);
+                context.Session["pin"] = pin;
+            }
+            return (string)pin;
         }
 
         /// <summary>
@@ -187,7 +194,7 @@ namespace CloudSync
         {
             if (int.TryParse(newPin, out var _) && newPin.Length <= 8)
             {
-                _Pin = newPin;
+                context.Session["pin"] = newPin;
                 context.SecureStorage.Values.Set("pin", newPin);
                 return true;
             }
