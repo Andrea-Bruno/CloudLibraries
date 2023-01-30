@@ -225,6 +225,15 @@ namespace CloudSync
             return dateTime;
         }
 
+        public static string ClaudRelativeUnixFullName(this FileSystemInfo fileSystemInfo, Sync cloudSync)
+        {
+            var name = fileSystemInfo.FullName.Substring(cloudSync.CloudRoot.Length);
+            name = name.Replace('\\', '/');
+            if (name.Length != 0 && name[0] == '/')
+                name = name.Substring(1);
+            return name;
+        }
+
         /// <summary>
         /// the first 32 bits from the right are the unicode timestamp, the rest the hash on the full file name
         /// </summary>
@@ -234,15 +243,6 @@ namespace CloudSync
         {
             var relativeName = ClaudRelativeUnixFullName(fileSystemInfo, cloudSync);
             return HashFileName(relativeName, fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory));
-        }
-
-        public static string ClaudRelativeUnixFullName(this FileSystemInfo fileSystemInfo, Sync cloudSync)
-        {
-            var name = fileSystemInfo.FullName.Substring(cloudSync.CloudRoot.Length);
-            name = name.Replace('\\', '/');
-            if (name.Length != 0 && name[0] == '/')
-                name = name.Substring(1);
-            return name;
         }
 
         /// <summary>
@@ -408,31 +408,29 @@ namespace CloudSync
             if (Environment.OSVersion.Platform == PlatformID.Win32NT)
             {
                 var iniPath = Path.Combine(pathDirectory, "desktop.ini");
-                if (File.Exists(iniPath))
-                {
-                    //remove hidden and system attributes to make ini file writable
-                    File.SetAttributes(
-                       iniPath,
-                       File.GetAttributes(iniPath) &
-                       ~(FileAttributes.Hidden | FileAttributes.System));
-                }
-                //create new ini file with the required contents
                 var iniContents = new StringBuilder()
                     .AppendLine("[.ShellClassInfo]")
                     .AppendLine($"IconResource={iconFilePath},0")
                     .AppendLine($"IconFile={iconFilePath}")
                     .AppendLine("IconIndex=0")
                     .ToString();
-                File.WriteAllText(iniPath, iniContents);
 
-                //hide the ini file and set it as system
-                File.SetAttributes(
-                   iniPath,
-                   File.GetAttributes(iniPath) | FileAttributes.Hidden | FileAttributes.System);
+                var iniNow = File.Exists(iniPath) ? File.ReadAllText(iniPath) : string.Empty;
+                if (iniContents != iniNow)
+                {
+                    if (File.Exists(iniPath))
+                    {
+                            //remove hidden and system attributes to make ini file writable
+                            File.SetAttributes(iniPath, File.GetAttributes(iniPath) & ~(FileAttributes.Hidden | FileAttributes.System));
+                    }
+                    //create new ini file with the required contents
+                    File.WriteAllText(iniPath, iniContents);
+
+                    //hide the ini file and set it as system
+                    File.SetAttributes(iniPath, File.GetAttributes(iniPath) | FileAttributes.Hidden | FileAttributes.System);
+                }
                 //set the folder as system
-                File.SetAttributes(
-                    pathDirectory,
-                    File.GetAttributes(pathDirectory) | FileAttributes.System);
+                File.SetAttributes(pathDirectory, File.GetAttributes(pathDirectory) | FileAttributes.System);
             }
         }
         public static void AddDesktopShorcut(string fullName, Icos ico = Icos.Cloud)
