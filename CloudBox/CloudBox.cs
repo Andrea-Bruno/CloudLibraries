@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net.NetworkInformation;
 using System.Text;
 using CloudSync;
 using EncryptedMessaging;
@@ -32,21 +33,22 @@ namespace CloudBox
         /// Cloud Server will communicate to clients for making operations on cloud storage.
         /// </summary>
         /// <param name="cloudPath">Directoty position of the cloud (a null value will be considered the default path)</param>
-        /// <param name="routerEntryPoint">The entry point of the router/server, to connect the cloud to the network</param>
         /// <param name="isServer">True if this instance is a server cloud</param>
         /// <param name="id">Used to create multiple instances</param>
         /// <param name="licenseOEM">The OEM private key for activating licenses.</param>
         /// <param name="name">A label name to assign to this instance (this does not affect how the cloud works)</param>
         /// <param name="doNotCreateSpecialFolders">If instantiated as a server it will automatically create specific subdirectories for documents, photos, etc., unless this parameter is specified</param>
-        public CloudBox(string routerEntryPoint, string cloudPath = null, bool isServer = false, ulong? id = null, string licenseOEM = null, string name = null, bool doNotCreateSpecialFolders = false)
+        public CloudBox(string cloudPath = null, bool isServer = false, ulong? id = null, string licenseOEM = null, string name = null, bool doNotCreateSpecialFolders = false)
         {
             DoNotCreateSpecialFolders = doNotCreateSpecialFolders; ;
             _Name = name;
-            if (string.IsNullOrEmpty(routerEntryPoint))
-            {
-                throw new Exception("Missing entryPoint");
-            }
-            RouterEntryPoint = routerEntryPoint;
+            //if (string.IsNullOrEmpty(routerEntryPoint))
+            //{
+            //    throw new Exception("Missing entryPoint");
+            //}
+            // RouterEntryPoint = routerEntryPoint;
+
+
             if (string.IsNullOrEmpty(licenseOEM))
                 licenseOEM = TestNetDefaultlicenseOEM;
             LicenseOEM = licenseOEM;
@@ -55,15 +57,14 @@ namespace CloudBox
             if (!string.IsNullOrEmpty(cloudPath) && cloudPath != GetCloudPath(null, isServer))
                 _cloudPath = cloudPath;
             Communication = new Communication(CloudPath);
-            if (!isServer)
-            {
-                CreateContext(OnRouterConnectionChange);
-            }
         }
         private void OnRouterConnectionChange(bool connectivity)
         {
-            if (connectivity)
-                ConnectToRouter();
+            if (Sync == null)
+                if (connectivity)
+                {
+                    ConnectToServer();
+                }
         }
 
         private static void UnhandledExceptionEventHandler(object sender, UnhandledExceptionEventArgs e)
@@ -137,33 +138,40 @@ namespace CloudBox
         }
 
         /// <summary>
-        /// Start the connection with the router
+        /// Connect to server and start sync
         /// </summary>
-        /// <param name="pin">If the client is running, this is the Pin on the server that is required to log in and then connect the client to the server</param>       
         /// <param name="serverPublicKey">It is the server to which this client must connect (the public key of the server)</param>
+        /// <param name="pin">If the client is running, this is the Pin on the server that is required to log in and then connect the client to the server</param>       
         /// <returns>Successful</returns>        
-        public bool ConnectToRouter(string pin = null, string serverPublicKey = null)
+        public void ConnectToServer(string serverPublicKey = null, string pin = null)
         {
             if (!IsServer)
             {
                 if (pin == null)
                     pin = Context.SecureStorage.Values.Get("pin", null);
                 if (pin == null)
-                    return false;
+                    return;
                 Context.SecureStorage.Values.Set("pin", pin);
+                if (serverPublicKey == null)
+                    serverPublicKey = Context.SecureStorage.Values.Get("ServerPublicKey", null);
                 SetServerCloudContact(serverPublicKey);
             }
             var credential = IsServer ? null : new LoginCredential { Pin = pin, PublicKey = Context.My.GetPublicKeyBinary() };
             StartSync(credential);
-            return true;
+            return;
         }
 
         /// <summary>
         /// Generate the context, i.e. initialize the environment for encrypted socket communication between devices
         /// </summary>
+        /// <param name="routerEntryPoint">IP or domain name of the router used for the connection</param>
         /// <param name="onRouterConnectionChange">Function that acts as an event and will be called when the connection was successful and the client is logged into the router (return true), or when the connection with the router is lost (return false). You can set this action as an event.</param>
-        public void CreateContext(Action<bool> onRouterConnectionChange = null)
+        public void CreateContext(string routerEntryPoint, Action<bool> onRouterConnectionChange = null)
         {
+            if (Context != null)
+                Debugger.Break();
+            if (onRouterConnectionChange == null)
+                onRouterConnectionChange = OnRouterConnectionChange;
             string passphrase = null;
 #if DEBUG || DEBUG_AND
             if (Instances.Count == 0)
@@ -171,7 +179,7 @@ namespace CloudBox
 #endif
             // Creates a license activator if an OEM license is set during initialization
             var signLicense = string.IsNullOrEmpty(LicenseOEM) ? null : new OEM(LicenseOEM);
-            Context = new Context(RouterEntryPoint, NetworkName, modality: Modality.Server, privateKeyOrPassphrase: passphrase, licenseActivator: signLicense, instanceId: ID.ToString())
+            Context = new Context(routerEntryPoint, NetworkName, modality: Modality.Server, privateKeyOrPassphrase: passphrase, licenseActivator: signLicense, instanceId: ID.ToString())
             {
                 OnRouterConnectionChange = onRouterConnectionChange,
                 OnCommunicationErrorEvent = OnCommunicationError
@@ -211,21 +219,25 @@ namespace CloudBox
 #pragma warning restore            
         }
 
-        /// <summary>
-        /// Entry point to connetction to router
-        /// </summary>
-        public string RouterEntryPoint { get; private set; }
+        ///// <summary>
+        ///// The entry point of the router/server, to connect the cloud server or client to the network
+        ///// </summary>
+        //public string RouterEntryPoint { get; private set; }
 
         /// <summary>
         /// Login the Client to the Cloud Server by entry QrCode and Pin of server
         /// </summary>
-        /// <param name="qrCode"></param>
-        /// <param name="pin"></param>
+        /// <param name="qrCode">QR code generated by server cloud, in text format</param>
+        /// <param name="pin">Pin</param>
+        /// <param name="entryPoint">Router entry point, optional parameter for QR codes that do not contain the entry point</param>
         /// <returns>Successful</returns>        
-        public bool Login(string qrCode, string pin)
+        public void Login(string qrCode, string pin, string entryPoint = null)
         {
             if (IsServer)
-                Debugger.Break(); // non sense for server
+                Debugger.Break(); // non sense for server                     
+            Logout();
+            string ServerPublicKey = null; // used for Login (in QR code)
+
             var qr = qrCode.Base64ToBytes();
             var type = qr[0];
             var offset = 1;
@@ -238,16 +250,55 @@ namespace CloudBox
             }
             if (type == 1 || type == 2)
             {
-                var serverPublicKey = qr.Skyp(offset).Take(33).ToBase64();
+                ServerPublicKey = qr.Skyp(offset).Take(33).ToBase64();
                 offset += 33;
-                RouterEntryPoint = qr.Skip(offset).ToASCII();
-                return ConnectToRouter(pin, serverPublicKey);
+                var ep = entryPoint = qr.Skip(offset).ToASCII();
+                if (!string.IsNullOrEmpty(ep))
+                    entryPoint = ep;
+                else
+                {
+#if RELEASE
+                    ShowEntryPoint = false;
+#endif
+                }
             }
+            CreateContext(entryPoint);
+            Context.SecureStorage.Values.Set("pin", pin);
+            Context.SecureStorage.Values.Set("ServerPublicKey", ServerPublicKey);
+            File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LastEntryPoint"), entryPoint);
+        }
 
+        /// <summary>
+        /// Close socket connection to the router and stop syncing, stops transmitting with the cloud server, but the connection with the router remains active
+        /// </summary>
+        /// <returns>False if already logged out, true otherwise</returns>
+        public bool Logout()
+        {
+            if (Sync != null)
+                StopSync();
+            if (Context != null)
+            {
+                Context.SecureStorage.Values.Set("pin", null);
+                Context.SecureStorage.Values.Set("ServerPublicKey", null);
+                Context.Dispose();
+                Context = null;
+                return true;
+            }
             return false;
         }
+
+        /// <summary>
+        /// True if logged
+        /// </summary>
+        public bool IsLogged => Sync != null;
+
         private readonly bool DoNotCreateSpecialFolders;
-        private void StartSync(LoginCredential isClient = null)
+
+        /// <summary>
+        /// Start sync (connection must be started first)
+        /// </summary>
+        /// <param name="isClient">If it is the client, it must provide authentication credentials</param>
+        public void StartSync(LoginCredential isClient = null)
         {
             Sync = new Sync(SendCommand, out OnCommand, Context, CloudPath, isClient, DoNotCreateSpecialFolders);
             Sync.OnNotification += (fromUserId, notice) => { OnNotificationAction?.Invoke(fromUserId, notice); };
@@ -255,6 +306,19 @@ namespace CloudBox
             Sync.OnFileTransfer += fileTransfer => TransferredFiles.UpdateList(fileTransfer);
             Sync.OnCommandEvent += (command, userId, isOutput) => OnCommands.AddOnCommand(command, userId, isOutput);
         }
+
+        /// <summary>
+        /// Stops transmitting with the cloud server, but the connection with the router remains active
+        /// </summary>
+        private void StopSync()
+        {
+            if (Sync != null)
+            {
+                Sync.Dispose();
+                Sync = null;
+            }
+        }
+
         public readonly FileTransferList TransferredFiles = new FileTransferList();
         public readonly OnCommandList OnCommands = new OnCommandList();
         public Sync.OnNotificationEvent OnNotificationAction;
@@ -302,7 +366,8 @@ namespace CloudBox
                 //addTx("Pubblic IP", Util.PublicIpAddressInfo());
                 if (Context != null)
                 {
-                    AddTx("Entry point (router address)", Context.EntryPoint.ToString());
+                    if (ShowEntryPoint)
+                        AddTx("Entry point (router address)", Context.EntryPoint.ToString());
                     AddTx("Connected to the router", Context.IsConnected);
                     AddTx("PubKey", Context.My.GetPublicKey());
                     AddTx("UserId", Context.My.Id);
@@ -331,7 +396,7 @@ namespace CloudBox
                 return sb.ToString();
             }
         }
-
+        private bool ShowEntryPoint = true;
         public readonly bool IsServer;
         public Contact ServerCloud;
         public static CloudBox LastInstance

@@ -7,7 +7,7 @@ using static CloudSync.Util;
 
 namespace CloudSync
 {
-    public partial class Sync
+    public partial class Sync 
     {
         public enum Commands : ushort
         {

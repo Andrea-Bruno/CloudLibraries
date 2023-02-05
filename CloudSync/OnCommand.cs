@@ -205,7 +205,7 @@ namespace CloudSync
                             if (!(File.Exists(tmpFile)))
                                 return;
                         }
-                        CrcTable[crcId] = FastHash(CrcTable[crcId], data);
+                        CrcTable[crcId] = ULongHash(CrcTable[crcId], data);
                         using (var fs = File.OpenWrite(tmpFile))
                         {
                             var expectedPart = fs.Length / DefaultChunkSize + 1;

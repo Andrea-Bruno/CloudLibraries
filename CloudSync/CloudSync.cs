@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Timers;
 using EncryptedMessaging;
+using Microsoft.Win32.SafeHandles;
 using static CloudSync.Util;
 
 using HashFileTable = System.Collections.Generic.Dictionary<ulong, System.IO.FileSystemInfo>;
@@ -13,7 +15,7 @@ namespace CloudSync
     /// <summary>
     /// Sync Agent: Offers all the low-level functions to sync the cloud in an encrypted and secure way
     /// </summary>
-    public partial class Sync
+    public partial class Sync : IDisposable
     {
         public Sync(SendCommand sendCommand, out SendCommand onCommand, Context context, string cloudRoot, LoginCredential isClient = null, bool doNotCreateSpecialFolders = false)
         {
@@ -31,7 +33,6 @@ namespace CloudSync
             SetSpecialDirectory(cloudRoot, Icos.Settings, createIfNotExists: createIfNotExists && IsServer);
             if (createIfNotExists)
                 AddDesktopShorcut(cloudRoot);
-
 
             Execute = sendCommand;
             onCommand = OnCommand;
@@ -58,6 +59,25 @@ namespace CloudSync
             WatchCloudRoot(cloudRoot);
             HashFileTable(); // set cache initial state to check if file is deleted
         }
+
+        public void Dispose()
+        {
+            if (SyncTimeBuffer != null)
+            {
+                SyncTimeBuffer.Stop();
+                SyncTimeBuffer.Dispose();
+                SyncTimeBuffer = null;
+            }
+            if (pathWatcher!= null)
+            {
+                pathWatcher.EnableRaisingEvents= false;
+                pathWatcher.Dispose();
+                pathWatcher = null;
+            }
+            ReceptionInProgress.Dispose();
+            SendingInProgress.Dispose();
+        }
+
         private FileSystemWatcher pathWatcher;
         private void WatchCloudRoot(string path)
         {

@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 
 namespace CloudSync
 {
-    public class ProgressFileTransfer
+    public class ProgressFileTransfer : IDisposable
     {
         public ProgressFileTransfer(Sync context)
         {
@@ -35,8 +36,13 @@ namespace CloudSync
             var timeout = Util.DataTransferTimeOut(chunkLength);
             lock (TimeoutChunkFileToTransfer)
                 TimeoutChunkFileToTransfer[hashFileName] = DateTime.UtcNow.Add(timeout);
-            new Timer(obj => RemoveOverTimeout(), null, (int)timeout.TotalMilliseconds + 1000, Timeout.Infinite);
+            var TimerReference = new TimerReference();
+            var timer = new Timer(obj => { Timers.Remove(((TimerReference)obj).Timer); RemoveOverTimeout(); }, TimerReference, (int)timeout.TotalMilliseconds + 1000, Timeout.Infinite);
+            TimerReference.Timer = timer;
+            Timers.Add(timer);
         }
+        private readonly List<Timer> Timers = new List<Timer>();
+        private class TimerReference { public Timer Timer; }
 
         /// <summary>
         /// Returns a descriptive information that specifies how long it is to timeout for operations in progress
@@ -49,7 +55,7 @@ namespace CloudSync
             lock (TimeoutChunkFileToTransfer)
                 foreach (var expire in TimeoutChunkFileToTransfer.Values)
                 {
-                    result = Convert.ToInt32((expire - DateTime.UtcNow).TotalSeconds) + "sec. ";
+                    result = Convert.ToInt32((expire - DateTime.UtcNow).TotalSeconds) + " sec.";
                 }
             return result ?? "No transfer in progress";
         }
@@ -67,6 +73,11 @@ namespace CloudSync
                 }
             foreach (var key in expired)
                 Completed(key, executeNext: key == expired[expired.Count - 1]);
+        }
+
+        public void Dispose()
+        {
+            Timers.ToList().ForEach(timer => { timer.Change(Timeout.Infinite, Timeout.Infinite); timer.Dispose(); });
         }
     }
 }

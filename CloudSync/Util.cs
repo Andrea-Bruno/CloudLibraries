@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -265,21 +266,28 @@ namespace CloudSync
         {
             var bytes = relativeName.GetBytes();
             var startValue = isDirectory ? 5120927932783021125ul : 2993167789729610286ul;
-            return FastHash(startValue, bytes);
+            return ULongHash(startValue, bytes);
         }
 
-        public static ulong FastHash(ulong startValue, byte[] bytes)
+        public static ulong ULongHash(ulong startValue, byte[] bytes)
         {
-            var bl = (ulong)bytes.Length;
-            Array.Resize(ref bytes, (int)Math.Ceiling(bytes.Length / 8d) * 8);
-            startValue += bl;
-            for (var i = 0; i < bytes.Length; i += 8)
-            {
-                var v = BitConverter.ToUInt64(bytes, i);
-                startValue += v; // prevents zero value of startValue
-                startValue *= (v + (ulong)i);
-            }
-            return startValue;
+            var add = BitConverter.GetBytes((ulong)bytes.Length ^ startValue);
+            var concat = new byte[add.Length + bytes.Length];
+            Buffer.BlockCopy(bytes, 0, concat, 0, bytes.Length);
+            Buffer.BlockCopy(add, 0, concat, bytes.Length, add.Length);
+            //var hash = Sha256Hash.ComputeHash(concat);
+            var hash = SHA256.Create().ComputeHash(concat);
+            return BitConverter.ToUInt64(hash, 0);
+            //var bl = (ulong)bytes.Length;
+            //Array.Resize(ref bytes, (int)Math.Ceiling(bytes.Length / 8d) * 8);
+            //startValue += bl;
+            //for (var i = 0; i < bytes.Length; i += 8)
+            //{
+            //    var v = BitConverter.ToUInt64(bytes, i);
+            //    startValue += v; // prevents zero value of startValue
+            //    startValue *= (v + (ulong)i);
+            //}
+            //return startValue;
         }
 
         public static byte[] GetBytes(this string text)
@@ -352,7 +360,7 @@ namespace CloudSync
                     if (toTake > chunkSize)
                         toTake = chunkSize;
                     chunk = reader.ReadBytes((int)toTake);
-                    crc = FastHash(crc, chunk);
+                    crc = ULongHash(crc, chunk);
                 }
             }
             return chunk;
@@ -420,8 +428,8 @@ namespace CloudSync
                 {
                     if (File.Exists(iniPath))
                     {
-                            //remove hidden and system attributes to make ini file writable
-                            File.SetAttributes(iniPath, File.GetAttributes(iniPath) & ~(FileAttributes.Hidden | FileAttributes.System));
+                        //remove hidden and system attributes to make ini file writable
+                        File.SetAttributes(iniPath, File.GetAttributes(iniPath) & ~(FileAttributes.Hidden | FileAttributes.System));
                     }
                     //create new ini file with the required contents
                     File.WriteAllText(iniPath, iniContents);
@@ -445,13 +453,22 @@ namespace CloudSync
             var fileName = new FileInfo(source).Name;
             if (Environment.OSVersion.Platform == PlatformID.Win32NT)
             {
-                var htmlName = HttpUtility.HtmlEncode(source);
-                using (var writer = new StreamWriter(Path.Combine(target, "cloud info.html")))
+                using (var writer = new StreamWriter(target + "\\" + fileName + ".url"))
                 {
-                    writer.WriteLine("<head><link rel='icon' href='file:///" + icoFullName + "'/></head>");
-                    writer.WriteLine("<body>Your cloud folder is here:");
-                    writer.WriteLine("<a href='file:///" + htmlName + "'>" + htmlName + "</a></body>");
+                    writer.WriteLine("[InternetShortcut]");
+                    writer.WriteLine("URL=file:///" + source);
+                    writer.WriteLine("IconIndex=0");
+                    var icon = icoFullName.Replace('\\', '/');
+                    writer.WriteLine("IconFile=" + icon);
                 }
+
+                //var htmlName = HttpUtility.HtmlEncode(source);
+                //using (var writer = new StreamWriter(Path.Combine(target, "cloud info.html")))
+                //{
+                //    writer.WriteLine("<head><link rel='icon' href='file:///" + icoFullName + "'/></head>");
+                //    writer.WriteLine("<body>Your cloud folder is here:");
+                //    writer.WriteLine("<a href='file:///" + htmlName + "'>" + htmlName + "</a></body>");
+                //}
             }
             else if (Environment.OSVersion.Platform == PlatformID.Unix)
             {
