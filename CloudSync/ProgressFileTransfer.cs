@@ -33,7 +33,7 @@ namespace CloudSync
         }
         public void SetTimeout(ulong hashFileName, int chunkLength = Util.DefaultChunkSize)
         {
-            var timeout = Util.DataTransferTimeOut(chunkLength);
+            var timeout = Util.DataTransferTimeOut(chunkLength).Add(TimeSpan.FromMilliseconds(Context.HashFileTableElapsedMs));
             lock (TimeoutChunkFileToTransfer)
                 TimeoutChunkFileToTransfer[hashFileName] = DateTime.UtcNow.Add(timeout);
             var TimerReference = new TimerReference();

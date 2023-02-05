@@ -57,6 +57,8 @@ namespace CloudBox
             if (!string.IsNullOrEmpty(cloudPath) && cloudPath != GetCloudPath(null, isServer))
                 _cloudPath = cloudPath;
             Communication = new Communication(CloudPath);
+            lock (Instances)
+                Instances.Add(this);
         }
         private void OnRouterConnectionChange(bool connectivity)
         {
@@ -188,8 +190,6 @@ namespace CloudBox
             {
                 Name = _Name;
             }
-            lock (Instances)
-                Instances.Add(Context.My.Id, this);
             Context.OnContactEvent += OnContactEvent;
         }
 
@@ -405,21 +405,21 @@ namespace CloudBox
             {
                 lock (Instances)
                 {
-                    return (Instances.Count == 0 ? null : Instances.Values.Last());
+                    return (Instances.Count == 0 ? null : Instances.Last());
                 }
             }
         }
         /// <summary>
         /// Lista di tutte le istanze attualmente attive
         /// </summary>
-        public static readonly Dictionary<ulong, CloudBox> Instances = new Dictionary<ulong, CloudBox>();
+        public static readonly List<CloudBox> Instances = new List<CloudBox>();
 
         /// <summary>
         /// Unmount corrent instance
         /// </summary>
         public void Remove()
         {
-            Instances.Remove(Context.My.Id);
+            Instances.Remove(this);
             Context.Dispose();
         }
 
@@ -535,7 +535,7 @@ namespace CloudBox
                 var text = "";
                 lock (Instances)
                 {
-                    foreach (var cloudBox in Instances.Values)
+                    foreach (var cloudBox in Instances)
                     {
                         text += cloudBox.Status + Environment.NewLine;
                     }

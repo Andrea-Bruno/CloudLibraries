@@ -68,9 +68,9 @@ namespace CloudSync
                 SyncTimeBuffer.Dispose();
                 SyncTimeBuffer = null;
             }
-            if (pathWatcher!= null)
+            if (pathWatcher != null)
             {
-                pathWatcher.EnableRaisingEvents= false;
+                pathWatcher.EnableRaisingEvents = false;
                 pathWatcher.Dispose();
                 pathWatcher = null;
             }
@@ -232,7 +232,7 @@ namespace CloudSync
         /// <summary>
         /// timeout for the cache of HashFileTable, after the timeout the table will be regenerated
         /// </summary>
-        private const int HashFileTableExpireCache = 10000;
+        private int HashFileTableExpireCache => 10000 + HashFileTableElapsedMs;
         public HashFileTable HashFileTable(bool noCache = false, BlockRange delimitsRange = null)
         {
             void StartAnalyzeDirectory(string directoryName, out HashFileTable hashDirTable)
@@ -264,34 +264,40 @@ namespace CloudSync
 
             if (CacheHashFileTable == null || noCache || DateTime.UtcNow > CacheHashFileTableExpire)
             {
-                StartAnalyzeDirectory(CloudRoot, out var newHashFileTable);
-                if (CacheHashFileTable != null)
+                lock (this)
                 {
-                    // check if any files have been deleted
-                    foreach (var item in CacheHashFileTable)
+                    var watch = Stopwatch.StartNew();
+                    StartAnalyzeDirectory(CloudRoot, out var newHashFileTable);
+                    if (CacheHashFileTable != null)
                     {
-                        if (!newHashFileTable.ContainsKey(item.Key))
+                        // check if any files have been deleted
+                        foreach (var item in CacheHashFileTable)
                         {
-                            if (item.Value.Attributes.HasFlag(FileAttributes.Directory))
+                            if (!newHashFileTable.ContainsKey(item.Key))
                             {
-                                if (IsServer)
-                                    RoleManager.ClientsConnected().ForEach(client => DeleteDirectory(client.Id, item.Value));
+                                if (item.Value.Attributes.HasFlag(FileAttributes.Directory))
+                                {
+                                    if (IsServer)
+                                        RoleManager.ClientsConnected().ForEach(client => DeleteDirectory(client.Id, item.Value));
+                                    else
+                                        DeleteDirectory(null, item.Value);
+                                }
                                 else
-                                    DeleteDirectory(null, item.Value);
-                            }
-                            else
-                            {
-                                if (IsServer)
-                                    RoleManager.ClientsConnected().ForEach(client => DeleteFile(client.Id, item.Key, item.Value.UnixLastWriteTimestamp()));
-                                else
-                                    DeleteFile(null, item.Key, item.Value.UnixLastWriteTimestamp());
+                                {
+                                    if (IsServer)
+                                        RoleManager.ClientsConnected().ForEach(client => DeleteFile(client.Id, item.Key, item.Value.UnixLastWriteTimestamp()));
+                                    else
+                                        DeleteFile(null, item.Key, item.Value.UnixLastWriteTimestamp());
+                                }
                             }
                         }
                     }
+                    OldHashFileTable = CacheHashFileTable ?? newHashFileTable;
+                    CacheHashFileTable = newHashFileTable;
+                    CacheHashFileTableExpire = DateTime.UtcNow.AddMilliseconds(HashFileTableExpireCache);
+                    watch.Stop();
+                    HashFileTableElapsedMs = (int)(watch.ElapsedMilliseconds);
                 }
-                OldHashFileTable = CacheHashFileTable ?? newHashFileTable;
-                CacheHashFileTable = newHashFileTable;
-                CacheHashFileTableExpire = DateTime.UtcNow.AddMilliseconds(HashFileTableExpireCache);
             }
             if (delimitsRange != null)
             {
@@ -299,5 +305,9 @@ namespace CloudSync
             }
             return CacheHashFileTable;
         }
+        /// <summary>
+        /// The time taken to compute the cloud path file table hash
+        /// </summary>
+        public int HashFileTableElapsedMs { get; internal set; }
     }
 }

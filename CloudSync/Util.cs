@@ -27,7 +27,8 @@ namespace CloudSync
         private static readonly SHA256 Sha256Hash;
         public static byte[] Hash256(byte[] data)
         {
-            return Sha256Hash.ComputeHash(data);
+            lock (Sha256Hash)
+                return Sha256Hash.ComputeHash(data);
         }
 
         public static bool CheckConnection(Uri uri)
