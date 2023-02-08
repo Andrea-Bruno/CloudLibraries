@@ -3,20 +3,20 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Web;
 using EncryptedMessaging;
 using HashFileTable = System.Collections.Generic.Dictionary<ulong, System.IO.FileSystemInfo>;
 
 namespace CloudSync
 {
-
-
     public static class Util
     {
         static Util()
@@ -69,7 +69,7 @@ namespace CloudSync
 
         public static TimeSpan DataTransferTimeOut(int dataSize)
         {
-            var timeOutMs = dataSize / 10 + 20000;
+            var timeOutMs = (dataSize / 10) * Spooler.MaxConcurrentOperations + 20000;
             return new TimeSpan(timeOutMs * TimeSpan.TicksPerMillisecond);
         }
 
@@ -338,7 +338,7 @@ namespace CloudSync
         {
             return Path.Combine(Path.GetTempPath(), ((ulong)userId).ToString("X") + hashFileName.ToString("X") + sync.InstanceId);
         }
-        public const int DefaultChunkSize = 1024 * 1000;
+        public const int DefaultChunkSize = 1024 * 1000; // 1 mb
         public const ulong startCrc = 2993167723948948793u;
         public static byte[] GetChunk(uint chunkPart, string fullFileName, out uint parts, out long fileLength, ref ulong crc, int chunkSize = DefaultChunkSize)
         {
@@ -651,7 +651,6 @@ namespace CloudSync
             HashBlockComparer(reverseRemote, reverseLocal, out var lastHashReverse, out var indexReverse);
             return new BlockRange(lastHashStraight, indexStraight, lastHashReverse, indexReverse);
         }
-
         private static void HashBlockComparer(byte[] hashBlocksRemote, byte[] hashBlocksLocal, out ulong? lastHashMatch, out int index)
         {
             lastHashMatch = null;
@@ -672,6 +671,162 @@ namespace CloudSync
                     break;
                 }
             }
+        }
+
+        /// <summary>
+        /// Write binary data in append to a file, retrying if the file is busy with other processes.
+        /// </summary>
+        /// <param name="fileName">File name</param>
+        /// <param name="data">Binary data to write</param>
+        /// <param name="attempts">number of attemps</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt</param>
+        /// <param name="chunkSize">Set a value different of 0 to check a file size if is consistent with the chunk size size</param>
+        /// <param name="chunkNumber">Chunk number (base 1) if chunk size is different of 0</param>
+        /// <returns>True for successful</returns>
+        public static bool FileAppend(string fileName, byte[] data, int attempts = 10, int pauseBetweenAttempts = 50, int chunkSize = 0, uint chunkNumber = 0)
+        {
+            for (int numTries = 0; numTries < attempts; numTries++)
+            {
+                try
+                {
+                    using (var fs = File.OpenWrite(fileName))
+                    {
+                        if (chunkNumber == 1)
+                        {
+                            fs.SetLength(0);
+                            fs.Position = 0;
+                        }
+                        if (chunkSize > 0)
+                        {
+                            var expectedPart = fs.Length / DefaultChunkSize + 1;
+                            if (expectedPart != chunkNumber)
+                                return false;
+                        }
+                        fs.Position = fs.Length; // append
+                        fs.Write(data, 0, data.Length);
+                        fs.Flush();
+                        return true;
+                    }
+                }
+                catch (IOException)
+                {
+                    Thread.Sleep(pauseBetweenAttempts);
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Delete a file and retrying if the file is busy with other processes.
+        /// </summary>
+        /// <param name="fileName"></param>
+        /// <param name="attempts">number of attemps</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt</param>
+        /// <returns>True for successful</returns>
+        public static bool FileDelete(string fileName, int attempts = 10, int pauseBetweenAttempts = 50)
+        {
+            var fileInfo = new FileInfo(fileName); 
+            if (fileInfo.Exists)
+            {
+                for (int numTries = 0; numTries < attempts; numTries++)
+                {
+                    try
+                    {
+                        fileInfo.Delete();
+                        fileInfo.Refresh();
+                        while (fileInfo.Exists)
+                        {
+                            Thread.Sleep(100);
+                            fileInfo.Refresh();
+                        }
+                        return true;
+                    }
+                    catch (IOException)
+                    {
+                        Thread.Sleep(pauseBetweenAttempts);
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Delete a directory and retrying if any error occur.
+        /// </summary>
+        /// <param name="directoryName"></param>
+        /// <param name="attempts">number of attemps</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt</param>
+        /// <returns>True for successful</returns>
+        public static bool DirectoryDelete(string directoryName, int attempts = 10, int pauseBetweenAttempts = 50)
+        {
+            for (int numTries = 0; numTries < attempts; numTries++)
+            {
+                try
+                {
+                    var directory = new DirectoryInfo(directoryName);
+                    if (directory.Exists)
+                        directory.Delete(true);
+                    return true;
+                }
+                catch (IOException)
+                {
+                    Thread.Sleep(pauseBetweenAttempts);
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Create a directory and retrying if any error occur.
+        /// </summary>
+        /// <param name="directoryName"></param>
+        /// <param name="attempts">number of attemps</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt</param>
+        /// <returns>True for successful</returns>
+        public static bool DirectoryCreate(string directoryName, int attempts = 10, int pauseBetweenAttempts = 50)
+        {
+            for (int numTries = 0; numTries < attempts; numTries++)
+            {
+                try
+                {
+                    var directory = new DirectoryInfo(directoryName);
+                    directory.Create();
+                    return true;
+                }
+                catch (IOException)
+                {
+                    Thread.Sleep(pauseBetweenAttempts);
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Move a file (copy from source to target and delete source) and retrying if any error occur.
+        /// </summary>
+        /// <param name="source">Source file name</param>
+        /// <param name="target">Target file name</param>
+        /// <param name="attempts">number of attemps</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt</param>
+        /// <returns>True for successful</returns>
+        public static bool FileMove(string source, string target, int attempts = 10, int pauseBetweenAttempts = 50)
+        {
+            if (File.Exists(source))
+            {
+                for (int numTries = 0; numTries < attempts; numTries++)
+                {
+                    try
+                    {
+                        File.Move(source, target);
+                        return true;
+                    }
+                    catch (IOException)
+                    {
+                        Thread.Sleep(pauseBetweenAttempts);
+                    }
+                }
+            }
+            return false;
         }
     }
 }

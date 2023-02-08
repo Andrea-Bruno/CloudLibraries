@@ -107,14 +107,24 @@ namespace CloudSync
             ExecuteCommand(toUserId, Commands.SendHashRoot, new[] { GetHasRoot(true) });
         }
 
-        private void RequestChunkFile(ulong? toUserId, ulong hash, uint chunkPart)
+        private void SendHashRoot(byte[] hashRoot, ulong? toUserId = null)
         {
-            ReceptionInProgress.SetTimeout(hash);
+            ExecuteCommand(toUserId, Commands.SendHashRoot, hashRoot);
+        }
+
+
+        private void RequestChunkFile(ulong? toUserId, ulong hash, uint chunkPart, bool isReceptFileCompleted = false)
+        {
+            if (isReceptFileCompleted)
+                ReceptionInProgress.Completed(hash, (ulong)toUserId);
+            else
+                ReceptionInProgress.SetTimeout(hash);
             ExecuteCommand(toUserId, Commands.RequestChunkFile, new[] { BitConverter.GetBytes(hash), chunkPart.GetBytes() });
         }
+
         private void ReportReceiptFileCompleted(ulong? toUserId, ulong hash, uint totalParts)
         {
-            RequestChunkFile(toUserId, hash, totalParts + 1);
+            RequestChunkFile(toUserId, hash, totalParts + 1, true);
         }
 
         public void RequestFile(ulong? toUserId, ulong hash) => RequestChunkFile(toUserId, hash, 1);
@@ -151,11 +161,20 @@ namespace CloudSync
                     //parts = parts == 0 ? 1 : parts;
 
                     var chunk = GetChunk(chunkPart, tmpFile, out var parts, out var fileLength, ref crc);
+#if DEBUG                
+                    //if (chunkPart ==  parts && chunk != null)
+                    //    Debugger.Break();
+                    //if (chunk == null && chunkPart != parts)
+                    //    Debugger.Break();
+                    if (chunk == null && chunkPart != parts + 1)
+                        Debugger.Break();
+#endif
+
                     if (chunk == null)
                     {
                         //File send completed;
                         TmpCrc.Remove(hashFileName);
-                        File.Delete(tmpFile);
+                        FileDelete(tmpFile);
                         TotalFilesSent++;
                         TotalBytesSent += (uint)fileLength;
                         SendingInProgress.Completed(hashFileName, (ulong)toUserId);

@@ -1,8 +1,11 @@
-﻿using System;
+﻿using NBitcoin;
+using NBitcoin.Protocol;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading;
 using static CloudSync.Util;
 
 namespace CloudSync
@@ -78,7 +81,8 @@ namespace CloudSync
                         }
                         if (notice == Notice.Synchronized)
                             RaiseOnStatusChangesEvent(SynchronizationStatus.Synchronized);
-                        OnNotification?.Invoke(fromUserId, notice);
+                        if (OnNotification != null)
+                            new Thread(() => OnNotification?.Invoke(fromUserId, notice)).Start();
                     }
                     else if (command == Commands.SendHashStructure)
                     {
@@ -194,26 +198,25 @@ namespace CloudSync
                         var tmpFile = GetTmpFile(this, fromUserId, hashFileName);
                         var crcId = (ulong)fromUserId ^ hashFileName;
                         Debug.WriteLine("IN #" + part + "/" + total);
-                        if (part == 1)
+
+                        lock (CrcTable)
                         {
-                            if (File.Exists(tmpFile))
-                                File.Delete(tmpFile);
-                            CrcTable[crcId] = startCrc;
+                            if (part == 1)
+                            {
+                                FileDelete(tmpFile);
+                                CrcTable[crcId] = startCrc;
+                            }
+                            else
+                            {
+                                if (!(File.Exists(tmpFile)))
+                                    return;
+                            }
+                            if (!CrcTable.ContainsKey(crcId))
+                                Debugger.Break();
+                            CrcTable[crcId] = ULongHash(CrcTable[crcId], data);
                         }
-                        else
-                        {
-                            if (!(File.Exists(tmpFile)))
-                                return;
-                        }
-                        CrcTable[crcId] = ULongHash(CrcTable[crcId], data);
-                        using (var fs = File.OpenWrite(tmpFile))
-                        {
-                            var expectedPart = fs.Length / DefaultChunkSize + 1;
-                            if (expectedPart != part)
-                                return;
-                            fs.Position = fs.Length; // append
-                            fs.Write(data, 0, data.Length);
-                        }
+                        if (!FileAppend(tmpFile, data, 10, 50, DefaultChunkSize, part))
+                            return;
 
                         if (part == total)
                         {
@@ -229,25 +232,25 @@ namespace CloudSync
                                 {
                                     if (new FileInfo(target).UnixLastWriteTimestamp() > unixTimestamp)
                                         return;
-                                    File.Delete(target);
+                                    FileDelete(target);
                                 }
                                 else
                                 {
                                     var targetDirectory = new FileInfo(target).Directory;
-                                    targetDirectory.Create();
+                                    DirectoryCreate(targetDirectory.FullName);
                                 }
-                                File.Move(tmpFile, target);
+                                FileMove(tmpFile, target);
                                 var fileInfo = new FileInfo(target);
                                 fileInfo.LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp);
                                 RaiseOnFileTransfer(false, hashFileName, part, total, target, (int)length);
                             }
                             else
                             {
-                                File.Delete(tmpFile);
+                                Debugger.Break();
+                                FileDelete(tmpFile);
                             }
                             CrcTable.Remove(crcId);
                             ReportReceiptFileCompleted(fromUserId, hashFileName, total);
-                            ReceptionInProgress.Completed(hashFileName, (ulong)fromUserId);
                         }
                         else
                         {
@@ -264,18 +267,7 @@ namespace CloudSync
                         {
                             if (fileInfo.UnixLastWriteTimestamp() == timestamp)
                             {
-                                try
-                                {
-                                    if (File.Exists(fileInfo.FullName))
-                                    {
-                                        File.Delete(fileInfo.FullName);
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    Debug.WriteLine(ex.Message);
-                                    Debugger.Break();
-                                }
+                                FileDelete(fileInfo.FullName);
                                 hashDirTable.Remove(hash);
                             }
                         }
@@ -283,15 +275,12 @@ namespace CloudSync
                     else if (command == Commands.CreateDirectory)
                     {
                         var fullDirectoryName = FullName(values[0]);
-                        var directory = new DirectoryInfo(fullDirectoryName);
-                        directory.Create();
+                        DirectoryCreate(fullDirectoryName);
                     }
                     else if (command == Commands.DeleteDirectory)
                     {
                         var fullDirectoryName = FullName(values[0]);
-                        var directory = new DirectoryInfo(fullDirectoryName);
-                        if (directory.Exists)
-                            directory.Delete(true);
+                        DirectoryDelete(fullDirectoryName);
                     }
                     else if (command == Commands.StatusNotification)
                     {

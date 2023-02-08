@@ -148,7 +148,8 @@ namespace CloudSync
             {
                 if (IsServer)
                 {
-                    RoleManager.ClientsConnected().ForEach(client => SendHashRoot(client.Id));
+                    var hashRoot = GetHasRoot(true);
+                    RoleManager.ClientsConnected().ForEach(client => SendHashRoot(hashRoot, client.Id));
                 }
                 else
                 {
@@ -170,8 +171,8 @@ namespace CloudSync
         private static int InstanceCounter;
         public readonly bool IsServer;
         public readonly string CloudRoot;
-
-        public bool IsTransferring() { return SendingInProgress.TransferInProgress() > 0 || ReceptionInProgress.TransferInProgress() > 0; }
+        public int ConcurrentOperations() { return SendingInProgress.TransferInProgress() + ReceptionInProgress.TransferInProgress(); }
+        public bool IsTransferring() { return ConcurrentOperations() > 0; }
         public static readonly ushort AppId = BitConverter.ToUInt16(Encoding.ASCII.GetBytes("sync"), 0);
         public delegate void SendCommand(ulong? contactId, ushort command, params byte[][] values);
         private void ExecuteCommand(ulong? contactId, Commands command, params byte[][] values)

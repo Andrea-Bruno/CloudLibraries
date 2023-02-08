@@ -1,4 +1,6 @@
-﻿namespace CloudSync
+﻿using System.Threading;
+
+namespace CloudSync
 {
     public partial class Sync
     {
@@ -33,7 +35,8 @@
             if (PendingFiles > 0)
                 syncStatus = SynchronizationStatus.Pending;
             if (lastSyncStatus != SyncStatus)
-                OnSyncStatusChanges?.Invoke(SyncStatus, PendingFiles);
+                if (OnSyncStatusChanges != null)
+                    new Thread(() => OnSyncStatusChanges?.Invoke(SyncStatus, PendingFiles)).Start();            
         }
 
         // ===============================================================================
@@ -46,7 +49,8 @@
         public event FileTransferEventHandler OnFileTransfer;
         internal void RaiseOnFileTransfer(bool isUpload, ulong hash, uint part, uint total, string name = null, long? length = null )
         {
-            OnFileTransfer?.Invoke(new FileTransfer { IsUpload = isUpload, Hash = hash, Part = part, Total = total, Name = name, Length = length });
+            if (OnFileTransfer != null)
+                new Thread(() => OnFileTransfer?.Invoke(new FileTransfer { IsUpload = isUpload, Hash = hash, Part = part, Total = total, Name = name, Length = length })).Start();          
         }
 
         public class FileTransfer
@@ -70,7 +74,8 @@
 
         internal void RaiseOnCommandEvent(Commands command, ulong? userId, bool IsOutput = false)
         {
-            OnCommandEvent?.Invoke(command, userId, IsOutput);
+            if (OnCommandEvent != null)
+                new Thread(() => OnCommandEvent?.Invoke(command, userId, IsOutput)).Start();           
         }
     }
 }

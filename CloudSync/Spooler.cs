@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 
 namespace CloudSync
 {
@@ -60,9 +61,12 @@ namespace CloudSync
                 Context.StatusNotification(notifyToUserId, false);
             }
         }
-        public void ExecuteNext(ulong? userId = null)
+        public static int MaxConcurrentOperations = 3;
+
+        public void ExecuteNext(ulong? userId = null, bool callFromFileTransferCompleted = false)
         {
-            if (!Context.IsTransferring())
+            // if (Context.IsTransferring())
+            if (Context.ConcurrentOperations() < MaxConcurrentOperations)
             {
                 lock (ToDoOperations)
                 {

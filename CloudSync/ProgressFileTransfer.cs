@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 
@@ -28,8 +29,13 @@ namespace CloudSync
                 {
                     TimeoutChunkFileToTransfer.Remove(hashFileName);
                 }
+                else
+                {
+                    if (!Context.IsServer)
+                        Debugger.Break();
+                }
             if (executeNext)
-                Context.Spooler.ExecuteNext(userId);
+                Context.Spooler.ExecuteNext(userId, true);
         }
         public void SetTimeout(ulong hashFileName, int chunkLength = Util.DefaultChunkSize)
         {
