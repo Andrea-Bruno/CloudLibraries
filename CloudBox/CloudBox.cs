@@ -236,6 +236,8 @@ namespace CloudBox
             if (IsServer)
                 Debugger.Break(); // non sense for server                     
             Logout();
+            if (string.IsNullOrEmpty(qrCode) || string.IsNullOrEmpty(pin))
+                return false;
             string ServerPublicKey = null; // used for Login (in QR code)
 
             var qr = qrCode.Base64ToBytes();
@@ -280,6 +282,20 @@ namespace CloudBox
             return true;
         }
 
+        /// <summary>
+        /// Last client entry. If the application was used as a client and the client was logged in, this function returns the last entry point used. Null if the application was not logged in as a client.
+        /// </summary>
+        /// <returns>Entry point (Url or IP), or null</returns>
+        public static string LastEntryPoint()
+        {
+            var fileLastEntryPoint = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LastEntryPoint");
+            if (File.Exists(fileLastEntryPoint))
+            {
+                var lastEntryPoint = File.ReadAllText(fileLastEntryPoint);
+                return lastEntryPoint;
+            }
+            return null;
+        }
 
         /// <summary>
         /// Close socket connection to the router and stop syncing, stops transmitting with the cloud server, but the connection with the router remains active
