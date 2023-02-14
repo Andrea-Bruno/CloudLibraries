@@ -4,10 +4,15 @@
 		<TargetFramework>netstandard2.0</TargetFramework>
 		<Configurations>Debug;Release;DEBUG_AND</Configurations>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
+		<ApplicationManifest>app.manifest</ApplicationManifest>
 	</PropertyGroup>
 
 	<ItemGroup>
 	  <Compile Remove="ApiCommands.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="System.Text.Json" Version="7.0.1" />
 	</ItemGroup>
 
 	<ItemGroup>

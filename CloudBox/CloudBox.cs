@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.NetworkInformation;
+using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using CloudSync;
 using EncryptedMessaging;
@@ -60,6 +61,23 @@ namespace CloudBox
             lock (Instances)
                 Instances.Add(this);
         }
+
+        /// <summary>
+        /// Digitally sign a document
+        /// </summary>
+        /// <param name="scopeOfSignature"></param>
+        /// <param name="signatureFileName"></param>
+        /// <param name="fileName"></param>
+        /// <param name="document"></param>
+        /// <returns>Digital signature in json format</returns>
+        public string SignDocument(DigitalSignature.Scope scopeOfSignature, out string signatureFileName, string fileName = null, byte[] document = null)
+        {
+            var sign = new DigitalSignature(Context.My.GetPrivateKeyBinary(), DigitalSignature.Scope.Accept , fileName, document);
+            var json = sign.Save();
+            signatureFileName = fileName + sign.FileExtension();
+            return json;
+        }
+
         private void OnRouterConnectionChange(bool connectivity)
         {
             if (Sync == null)
