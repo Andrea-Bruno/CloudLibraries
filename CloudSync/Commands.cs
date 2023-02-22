@@ -7,7 +7,7 @@ using static CloudSync.Util;
 
 namespace CloudSync
 {
-    public partial class Sync 
+    public partial class Sync
     {
         public enum Commands : ushort
         {
@@ -26,7 +26,7 @@ namespace CloudSync
             SendHashRoot,
             RequestChunkFile,
             SendChunkFile,
-            DeleteFIle,
+            DeleteFile,
             CreateDirectory,
             DeleteDirectory,
             /// <summary>
@@ -54,7 +54,7 @@ namespace CloudSync
         /// <summary>
         /// Command used by the client to request connection to the cloud server
         /// </summary>
-        /// <param name="toUserId"></param>
+        /// <param name="toUserId">Target user ID</param>
         /// <param name="credential"></param>
         /// <param name="host"></param>
         /// <param name="userAgent"></param>
@@ -70,7 +70,7 @@ namespace CloudSync
         /// <summary>
         /// Command used by the Server to send a cryptographic authentication request to the client, which authenticates it with a hash as proof of knowing the PIN
         /// </summary>
-        /// <param name="toUserId"></param>
+        /// <param name="toUserId">Target user ID</param>
         /// <param name="randomDataForAuthentication"></param>
         private void Authentication(ulong? toUserId, byte[] randomDataForAuthentication)
         {
@@ -213,7 +213,7 @@ namespace CloudSync
 
         private void DeleteFile(ulong? toUserId, ulong hash, uint timestamp)
         {
-            ExecuteCommand(toUserId, Commands.DeleteFIle, new[] { hash.GetBytes(), timestamp.GetBytes() });
+            ExecuteCommand(toUserId, Commands.DeleteFile, new[] { hash.GetBytes(), timestamp.GetBytes() });
         }
 
         private void CreateDirectory(ulong? toUserId, FileSystemInfo fileSystemInfo)
@@ -229,11 +229,11 @@ namespace CloudSync
         /// <summary>
         /// The slave machine sends a message to indicate if it is ready to receive new commands or if it is busy
         /// </summary>
-        /// <param name="toUserId"></param>
-        /// <param name="busy"></param>
+        /// <param name="toUserId">Target user ID</param>
+        /// <param name="busy">True for busy otherwise false</param>
         internal void StatusNotification(ulong? toUserId, bool busy)
         {
-            ExecuteCommand(toUserId, Commands.StatusNotification, new[] { busy ? (byte)0 : (byte)1 });
+            ExecuteCommand(toUserId, Commands.StatusNotification, new[] { busy ? (byte)1 : (byte)0 });
         }
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.NetworkInformation;
+using static CloudSync.Util;
 
 namespace CloudSync
 {
@@ -49,7 +50,7 @@ namespace CloudSync
                 return;
             var randomBitesForAuthenticationProof = new byte[32];
             new Random().NextBytes(randomBitesForAuthenticationProof);
-            var authenticationProof = CryptographicProofOfPinKnowledge(randomBitesForAuthenticationProof, pins.Select(x => x.Item1));
+            var authenticationProof = CryptographicProofOfPinKnowledge(randomBitesForAuthenticationProof, pins);
             if (TryToGetCient((ulong)id, out var client, out var isTemp))
             {
                 if (!isTemp)
@@ -76,7 +77,7 @@ namespace CloudSync
             sendRequestOfValidationToClient(client, randomBitesForAuthenticationProof);
         }
 
-        internal static ProofOfPin CryptographicProofOfPinKnowledge(byte[] randomBitesForAuthenticationProof, IEnumerable<string> pins)
+        internal static ProofOfPin CryptographicProofOfPinKnowledge(byte[] randomBitesForAuthenticationProof, IEnumerable<OneTimeAccess> pins)
         {
             return new ProofOfPin()
             {
@@ -88,19 +89,21 @@ namespace CloudSync
         public class ProofOfPin
         {
             internal byte[] RandomBitesForAuthenticationProof;
-            internal IEnumerable<string> Pins;
-            public bool Validate(uint ProofOfPinKnowledge, out string pin)
+            internal IEnumerable<OneTimeAccess> Pins;
+            public bool Validate(uint ProofOfPinKnowledge, out string pin, out string label)
             {
                 foreach (var p in Pins)
                 {
-                    var Proof = CryptographicProofOfPinKnowledge(RandomBitesForAuthenticationProof, p);
+                    var Proof = CryptographicProofOfPinKnowledge(RandomBitesForAuthenticationProof, p.Pin);
                     if (Proof == ProofOfPinKnowledge)
                     {
-                        pin = p;
+                        pin = p.Pin;
+                        label = p.Label;
                         return true;
                     }
                 }
                 pin = null;
+                label = null;
                 return false;
             }
         }

@@ -77,7 +77,10 @@ namespace CloudSync
                         if (!IsServer)
                         {
                             if (notice == Notice.LoginSuccessful)
+                            {
+                                Context.SecureStorage.Values.Set("Logged", true);
                                 StartSyncClient();
+                            }
                         }
                         if (notice == Notice.Synchronized)
                             RaiseOnStatusChangesEvent(SynchronizationStatus.Synchronized);
@@ -258,7 +261,7 @@ namespace CloudSync
                             RequestChunkFile(fromUserId, hashFileName, part + 1);
                         }
                     }
-                    else if (command == Commands.DeleteFIle)
+                    else if (command == Commands.DeleteFile)
                     {
                         var hash = values[0].ToUint64();
                         var timestamp = values[1].ToUint32();
@@ -276,6 +279,8 @@ namespace CloudSync
                     {
                         var fullDirectoryName = FullName(values[0]);
                         DirectoryCreate(fullDirectoryName);
+                        var hash = HashFileName(values[0].ToText(), true);
+                        ReceptionInProgress.Completed(hash);
                     }
                     else if (command == Commands.DeleteDirectory)
                     {
@@ -284,7 +289,7 @@ namespace CloudSync
                     }
                     else if (command == Commands.StatusNotification)
                     {
-                        var busy = values[0][0] != 0;
+                        var busy = values[0][0] == 1;
                         if (!IsServer && busy == false)
                         {
                             StartSynchronization(null, null);

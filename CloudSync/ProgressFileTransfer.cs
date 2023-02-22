@@ -6,6 +6,9 @@ using System.Threading;
 
 namespace CloudSync
 {
+    /// <summary>
+    /// Class that controls file transfer in progress and timeout of the operation
+    /// </summary>
     public class ProgressFileTransfer : IDisposable
     {
         public ProgressFileTransfer(Sync context)
@@ -14,14 +17,28 @@ namespace CloudSync
         }
         private readonly Sync Context;
         private readonly Dictionary<ulong, DateTime> TimeoutChunkFileToTransfer = new Dictionary<ulong, DateTime>();
-        public int TransferInProgress()
+        /// <summary>
+        /// Property indicating the number of file transfers currently in progress
+        /// </summary>
+        public int TransferInProgress
         {
-            RemoveOverTimeout();
-            return TimeoutChunkFileToTransfer.Count;
+            get
+            {
+                RemoveOverTimeout();
+                return TimeoutChunkFileToTransfer.Count;
+            }
         }
-
+        /// <summary>
+        /// Counter that indicates how many transfers have failed (timeout failure could indicate an unsuitable data line or no connection)
+        /// </summary>
         public int FailedByTimeout { get; private set; }
 
+        /// <summary>
+        /// Method that is called when the file transfer has completed
+        /// </summary>
+        /// <param name="hashFileName">Hash file</param>
+        /// <param name="userId">Target user ID</param>
+        /// <param name="executeNext">If true, then execute the next operation in spooler</param>
         public void Completed(ulong hashFileName, ulong? userId = null, bool executeNext = true)
         {
             lock (TimeoutChunkFileToTransfer)
@@ -35,8 +52,13 @@ namespace CloudSync
                         Debugger.Break();
                 }
             if (executeNext)
-                Context.Spooler.ExecuteNext(userId, true);
+                Context.Spooler.ExecuteNext(userId);
         }
+        /// <summary>
+        /// When file transfer starts, this method sets the timeout. When the timeout expires, the transfer will be considered failed.
+        /// </summary>
+        /// <param name="hashFileName">Hasfile</param>
+        /// <param name="chunkLength">Length of data to send</param>
         public void SetTimeout(ulong hashFileName, int chunkLength = Util.DefaultChunkSize)
         {
             var timeout = Util.DataTransferTimeOut(chunkLength).Add(TimeSpan.FromMilliseconds(Context.HashFileTableElapsedMs));
@@ -81,6 +103,9 @@ namespace CloudSync
                 Completed(key, executeNext: key == expired[expired.Count - 1]);
         }
 
+        /// <summary>
+        /// Dispose the instance of the object
+        /// </summary>
         public void Dispose()
         {
             Timers.ToList().ForEach(timer => { timer.Change(Timeout.Infinite, Timeout.Infinite); timer.Dispose(); });

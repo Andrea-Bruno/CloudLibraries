@@ -53,8 +53,10 @@ namespace CloudSync
             }
             else
             {
-                RequestOfAuthentication(null, isClient, PublicIpAddressInfo(), Environment.MachineName);
-
+                if (Context.SecureStorage.Values.Get("Logged", false))
+                    StartSyncClient(); // It's already logged in, so start syncing immediately
+                else
+                    RequestOfAuthentication(null, isClient, PublicIpAddressInfo(), Environment.MachineName); // Start the login process
             }
             WatchCloudRoot(cloudRoot);
             HashFileTable(); // set cache initial state to check if file is deleted
@@ -171,7 +173,7 @@ namespace CloudSync
         private static int InstanceCounter;
         public readonly bool IsServer;
         public readonly string CloudRoot;
-        public int ConcurrentOperations() { return SendingInProgress.TransferInProgress() + ReceptionInProgress.TransferInProgress(); }
+        public int ConcurrentOperations() { return SendingInProgress.TransferInProgress + ReceptionInProgress.TransferInProgress; }
         public bool IsTransferring() { return ConcurrentOperations() > 0; }
         public static readonly ushort AppId = BitConverter.ToUInt16(Encoding.ASCII.GetBytes("sync"), 0);
         public delegate void SendCommand(ulong? contactId, ushort command, params byte[][] values);

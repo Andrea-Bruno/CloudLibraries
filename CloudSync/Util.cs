@@ -89,23 +89,25 @@ namespace CloudSync
         /// </summary>
         /// <param name="pin">Pins to add</param>
         /// <param name="expiresHours">Expires in hours</param>
-        public static void AddPin(Context context, string pin, int expiresHours)
+        /// <param name="label">A tag name indicating who the pin was assigned to (as an optional reminder)</param>
+        public static void AddPin(Context context, string pin, int expiresHours, string label = null)
         {
             var pins = GetPinsFile(context);
-            pins += pin + "\t" + DateTime.UtcNow.AddHours(expiresHours).ToFileTime() + "\n";
+            pins += pin + "\t" + DateTime.UtcNow.AddHours(expiresHours).ToFileTime() + "\t" + label + "\n";
             context.Session["pins"] = pins;
             context.SecureStorage.Values.Set("pins", pins);
         }
+
         /// <summary>
         /// The list of currently active pins with the expiration date
         /// </summary>
         /// <param name="context">Context object</param>
         /// <returns>list of active pins with their expiration</returns>
-        public static List<Tuple<string, DateTime>> GetPins(Context context)
+        public static List<OneTimeAccess> GetPins(Context context)
         {
-            var pinsList = new List<Tuple<string, DateTime>>();
+            var pinsList = new List<OneTimeAccess>();
             var pin = GetPin(context);
-            pinsList.Add(new Tuple<string, DateTime>(pin, DateTime.MaxValue));
+            pinsList.Add(new OneTimeAccess(pin, DateTime.MaxValue, "master"));
             string newPins = "";
             var pins = GetPinsFile(context);
             if (!string.IsNullOrEmpty(pins))
@@ -118,7 +120,7 @@ namespace CloudSync
                     if (expires >= DateTime.UtcNow)
                     {
                         newPins += pinParts + '\n';
-                        pinsList.Add(new Tuple<string, DateTime>(parts[0], expires));
+                        pinsList.Add(new OneTimeAccess(parts[0], expires, parts[2]));
                     }
                 }
             }
@@ -129,6 +131,31 @@ namespace CloudSync
             }
             return pinsList;
         }
+
+        /// <summary>
+        /// Class with properties related to the temporary pin
+        /// </summary>
+        public class OneTimeAccess{
+           public OneTimeAccess(string pin, DateTime expires, string label)
+            {
+                Pin=pin;
+                Expires=expires;
+                Label=label;
+            }
+            /// <summary>
+            /// Pin
+            /// </summary>
+          public  string Pin;
+            /// <summary>
+            /// Class with properties related to the disposable pin
+            /// </summary>
+          public  DateTime Expires;
+            /// <summary>
+            /// Label describing who was assigned the pin (optional reminder)
+            /// </summary>
+            public string Label;
+        }
+
         /// <summary>
         /// Remove a disposable pin
         /// </summary>
@@ -159,6 +186,12 @@ namespace CloudSync
             }
             return found;
         }
+
+        /// <summary>
+        /// Get the master pin (the pin that doesn't expire)
+        /// </summary>
+        /// <param name="context">Context</param>
+        /// <returns>Pin in text format</returns>
         public static string GetPin(Context context)
         {
             context.Session.TryGetValue("pin", out object pin);
@@ -171,7 +204,7 @@ namespace CloudSync
         }
 
         /// <summary>
-        /// Set a 1 to 8 digit pin (this pin will replace the current one)
+        /// Set a 1 to 8 digit pin (this pin will replace the current master pin)
         /// </summary>
         /// <param name="context">Context</param>
         /// <param name="oldPin">Old pin (for control check)</param>
@@ -206,6 +239,11 @@ namespace CloudSync
         private static readonly List<string> ExcludeFile = new List<string> { "desktop.ini" };
         private static readonly List<string> ExcludeExtension = new List<string> { ".desktop" };
 
+        /// <summary>
+        /// Return true if it is a hidden file or not subject to synchronization between cloud client and server
+        /// </summary>
+        /// <param name="fileSystemInfo">System info object of file</param>
+        /// <returns>A Boolean value indicating whether the file is subject to synchronization or not</returns>
         public static bool CanBeSeen(FileSystemInfo fileSystemInfo)
         {
             var name = fileSystemInfo.Name.ToLower();
@@ -214,11 +252,21 @@ namespace CloudSync
             return !fileSystemInfo.Attributes.HasFlag(FileAttributes.Hidden) && !fileSystemInfo.Name.StartsWith("_") && fileSystemInfo.Exists && !excludeFile && !excludeExtension;
         }
 
+        /// <summary>
+        /// Convert a date to unix timestamp format
+        /// </summary>
+        /// <param name="dateTime">Date and time value to convert</param>
+        /// <returns>Integer value indicating date and time in unix format</returns>
         public static uint ToUnixTimestamp(DateTime dateTime)
         {
             return (uint)(dateTime - new DateTime(1970, 1, 1)).TotalSeconds;
         }
 
+        /// <summary>
+        /// Convert unix timestamp to date and time format
+        /// </summary>
+        /// <param name="unixTimeStamp">Unix timestamp</param>
+        /// <returns></returns>
         public static DateTime UnixTimestampToDateTime(uint unixTimeStamp)
         {
             // Unix timestamp is seconds past epoch

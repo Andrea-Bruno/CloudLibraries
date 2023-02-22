@@ -72,7 +72,7 @@ namespace CloudBox
         /// <returns>Digital signature in json format</returns>
         public string SignDocument(DigitalSignature.Scope scopeOfSignature, out string signatureFileName, string fileName = null, byte[] document = null)
         {
-            var sign = new DigitalSignature(Context.My.GetPrivateKeyBinary(), DigitalSignature.Scope.Accept , fileName, document);
+            var sign = new DigitalSignature(Context.My.GetPrivateKeyBinary(), DigitalSignature.Scope.Accept, fileName, document);
             var json = sign.Save();
             signatureFileName = fileName + sign.FileExtension();
             return json;
@@ -169,9 +169,8 @@ namespace CloudBox
             {
                 if (pin == null)
                     pin = Context.SecureStorage.Values.Get("pin", null);
-                if (pin == null)
-                    return;
-                Context.SecureStorage.Values.Set("pin", pin);
+                if (!string.IsNullOrEmpty(pin))
+                    Context.SecureStorage.Values.Set("pin", pin);
                 if (serverPublicKey == null)
                     serverPublicKey = Context.SecureStorage.Values.Get("ServerPublicKey", null);
                 SetServerCloudContact(serverPublicKey);
@@ -184,15 +183,25 @@ namespace CloudBox
         /// <summary>
         /// Generate the context, i.e. initialize the environment for encrypted socket communication between devices
         /// </summary>
-        /// <param name="routerEntryPoint">IP or domain name of the router used for the connection</param>
+        /// <param name="routerEntryPoint">IP or domain name or QR code of the router used for the connection</param>
         /// <param name="onRouterConnectionChange">Function that acts as an event and will be called when the connection was successful and the client is logged into the router (return true), or when the connection with the router is lost (return false). You can set this action as an event.</param>
-        public void CreateContext(string routerEntryPoint, Action<bool> onRouterConnectionChange = null)
+        /// <param name="passphrase">If you want to recover the account, you can specify the passphrase</param>
+        /// <returns>True for Successful, or false if something went wrong</returns>  
+        public bool CreateContext(string routerEntryPoint, Action<bool> onRouterConnectionChange = null, string passphrase = null)
         {
+            var isQRcode = !routerEntryPoint.Contains('.');
+            string serverPublicKey = null;
+            if (isQRcode)
+            {
+                var qrCode = routerEntryPoint;
+                if (SolveQRCode(qrCode, out routerEntryPoint, out serverPublicKey) == false)
+                    return false;
+            }
+
             if (Context != null)
                 Debugger.Break();
             if (onRouterConnectionChange == null)
                 onRouterConnectionChange = OnRouterConnectionChange;
-            string passphrase = null;
 #if DEBUG || DEBUG_AND
             if (Instances.Count == 0)
                 passphrase = IsServer ? TestServerPassphrase : TestClientPassphrase;
@@ -204,11 +213,14 @@ namespace CloudBox
                 OnRouterConnectionChange = onRouterConnectionChange,
                 OnCommunicationErrorEvent = OnCommunicationError
             };
+            if (serverPublicKey != null)
+                Context.SecureStorage.Values.Set("ServerPublicKey", serverPublicKey);
             if (!string.IsNullOrEmpty(_Name))
             {
                 Name = _Name;
             }
             Context.OnContactEvent += OnContactEvent;
+            return true;
         }
 
         private void SetServerCloudContact(string serverPublicKey)
@@ -254,9 +266,23 @@ namespace CloudBox
             if (IsServer)
                 Debugger.Break(); // non sense for server                     
             Logout();
-            if (string.IsNullOrEmpty(qrCode) || string.IsNullOrEmpty(pin))
+            if (string.IsNullOrEmpty(pin))
                 return false;
-            string ServerPublicKey = null; // used for Login (in QR code)
+            if (SolveQRCode(qrCode, out string entry, out string serverPublicKey) == false) return false;
+            if (entry != null)
+                entryPoint = entry;
+            CreateContext(entryPoint);
+            Context.SecureStorage.Values.Set("pin", pin);
+            Context.SecureStorage.Values.Set("ServerPublicKey", serverPublicKey);
+            return true;
+        }
+
+        private static bool SolveQRCode(string qrCode, out string entryPoint, out string serverPublicKey)
+        {
+            entryPoint = null;
+            serverPublicKey = null;
+            if (string.IsNullOrEmpty(qrCode))
+                return false;
 
             var qr = qrCode.Base64ToBytes();
             var type = qr[0];
@@ -272,8 +298,8 @@ namespace CloudBox
                 return false;
             try
             {
-                ServerPublicKey = qr.Skyp(offset).Take(33).ToBase64();
-                var key = new PubKey(Convert.FromBase64String(ServerPublicKey)); // pub key validator (throw error if is wrong)
+                serverPublicKey = qr.Skyp(offset).Take(33).ToBase64();
+                var key = new PubKey(Convert.FromBase64String(serverPublicKey)); // pub key validator (throw error if is wrong)
                 offset += 33;
                 var ep = qr.Skip(offset).ToASCII();
                 if (!string.IsNullOrEmpty(ep))
@@ -293,9 +319,6 @@ namespace CloudBox
             {
                 return false;
             }
-            CreateContext(entryPoint);
-            Context.SecureStorage.Values.Set("pin", pin);
-            Context.SecureStorage.Values.Set("ServerPublicKey", ServerPublicKey);
             File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LastEntryPoint"), entryPoint);
             return true;
         }
@@ -429,21 +452,21 @@ namespace CloudBox
                     // Sending
                     AddTx("Total files sent", Sync.TotalFilesSent);
                     AddTx("Total bytes sent", Sync.TotalBytesSent);
-                    AddTx("Sending file in Progress", Sync.SendingInProgress.TransferInProgress());
+                    AddTx("Sending file in Progress", Sync.SendingInProgress.TransferInProgress);
                     AddTx("Sending timeout", Sync.SendingInProgress.TimeOutInfo());
                     AddTx("Total sent failed by timeout", Sync.SendingInProgress.FailedByTimeout);
 
                     // Reception
                     AddTx("Total files received", Sync.TotalFilesReceived);
                     AddTx("Total bytes received", Sync.TotalBytesReceived);
-                    AddTx("Reception file in Progress", Sync.ReceptionInProgress.TransferInProgress());
+                    AddTx("Reception file in Progress", Sync.ReceptionInProgress.TransferInProgress);
                     AddTx("Reception timeout", Sync.ReceptionInProgress.TimeOutInfo());
                     AddTx("Total received failed by timeout", Sync.ReceptionInProgress.FailedByTimeout);
                 }
                 return sb.ToString();
             }
         }
-        private bool ShowEntryPoint = true;
+        private static bool ShowEntryPoint = true;
         public readonly bool IsServer;
         public Contact ServerCloud;
         public static CloudBox LastInstance
@@ -534,6 +557,10 @@ namespace CloudBox
         }
 
         private readonly string NetworkName = "mainnet";
+
+        /// <summary>
+        /// Reference to the underlying encrypted communication system between devices (the low-level communication protocol)
+        /// </summary>
         public Context Context { get; private set; }
 
         private void OnContactEvent(Message message)

@@ -63,20 +63,13 @@ namespace CloudSync
         }
         public static int MaxConcurrentOperations = 3;
 
-        public void ExecuteNext(ulong? userId = null, bool callFromFileTransferCompleted = false)
+        public void ExecuteNext(ulong? userId = null)
         {
-            // if (Context.IsTransferring())
             if (Context.ConcurrentOperations() < MaxConcurrentOperations)
             {
                 lock (ToDoOperations)
                 {
-                    if (ToDoOperations.Count == 0)
-                    {
-                        if (userId != null)
-                            CheckOperationsInPending((ulong)userId);
-                        //Context.ClientFileMonitoring?.Start();
-                    }
-                    else
+                    if (ToDoOperations.Count > 0)
                     {
                         var toDo = ToDoOperations[0];
                         ToDoOperations.Remove(toDo);
@@ -95,6 +88,11 @@ namespace CloudSync
                             Context.RequestFile(toDo.UserId, toDo.HashFile);
                         }
                     }
+                    //else
+                    //{
+                    //        if (userId != null)
+                    //            CheckOperationsInPending((ulong)userId);
+                    //}
                 }
             }
         }
