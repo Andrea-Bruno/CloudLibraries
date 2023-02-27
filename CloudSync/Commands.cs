@@ -79,8 +79,7 @@ namespace CloudSync
 
         private void SendHashStructure(ulong? toUserId, BlockRange delimitsRange = null)
         {
-            var structure = GetLocalHashStrucrure(delimitsRange);
-            if (structure != null)
+            if (GetLocalHashStrucrure(out var structure, delimitsRange))
             {
                 if (delimitsRange == null)
                     ExecuteCommand(toUserId, Commands.SendHashStructure, new[] { structure });
@@ -99,12 +98,18 @@ namespace CloudSync
 
         private void SendHashBlocks(ulong? toUserId)
         {
-            ExecuteCommand(toUserId, Commands.SendHashBlocks, new[] { GetHasBlock() });
+            if (GetHasBlock(out var hashBlock))
+            {
+                ExecuteCommand(toUserId, Commands.SendHashBlocks, new[] { hashBlock });
+            }
         }
 
         private void SendHashRoot(ulong? toUserId = null)
         {
-            ExecuteCommand(toUserId, Commands.SendHashRoot, new[] { GetHasRoot(true) });
+            if (GetHasRoot(out var hashRoot, true))
+            {
+                ExecuteCommand(toUserId, Commands.SendHashRoot, new[] { hashRoot });
+            }
         }
 
         private void SendHashRoot(byte[] hashRoot, ulong? toUserId = null)

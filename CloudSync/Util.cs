@@ -249,7 +249,7 @@ namespace CloudSync
             var name = fileSystemInfo.Name.ToLower();
             var excludeExtension = ExcludeExtension.Find(x => name.EndsWith(x)) != null;
             var excludeFile = ExcludeFile.Contains(name);
-            return !fileSystemInfo.Attributes.HasFlag(FileAttributes.Hidden) && !fileSystemInfo.Name.StartsWith("_") && fileSystemInfo.Exists && !excludeFile && !excludeExtension;
+            return !fileSystemInfo.Attributes.HasFlag(FileAttributes.Hidden) && !fileSystemInfo.Name.StartsWith("_") && !fileSystemInfo.Name.StartsWith(".") && fileSystemInfo.Exists && !excludeFile && !excludeExtension;
         }
 
         /// <summary>

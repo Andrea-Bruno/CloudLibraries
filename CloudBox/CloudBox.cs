@@ -323,16 +323,17 @@ namespace CloudBox
             return true;
         }
 
+        private static readonly string FileLastEntryPoint = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LastEntryPoint");
+
         /// <summary>
         /// Last client entry. If the application was used as a client and the client was logged in, this function returns the last entry point used. Null if the application was not logged in as a client.
         /// </summary>
         /// <returns>Entry point (Url or IP), or null</returns>
         public static string LastEntryPoint()
         {
-            var fileLastEntryPoint = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LastEntryPoint");
-            if (File.Exists(fileLastEntryPoint))
+            if (File.Exists(FileLastEntryPoint))
             {
-                var lastEntryPoint = File.ReadAllText(fileLastEntryPoint);
+                var lastEntryPoint = File.ReadAllText(FileLastEntryPoint);
                 return lastEntryPoint;
             }
             return null;
@@ -344,6 +345,8 @@ namespace CloudBox
         /// <returns>False if already logged out, true otherwise</returns>
         public bool Logout()
         {
+            if (File.Exists(FileLastEntryPoint))
+                File.Delete(FileLastEntryPoint);
             if (Sync != null)
                 StopSync();
             if (Context != null)

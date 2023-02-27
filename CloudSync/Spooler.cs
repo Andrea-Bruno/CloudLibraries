@@ -76,12 +76,14 @@ namespace CloudSync
                         Context.RaiseOnStatusChangesEvent();
                         if (toDo.Type == OperationType.Send)
                         {
-                            var localHashes = Context.HashFileTable();
-                            if (localHashes.TryGetValue(toDo.HashFile, out var fileSystemInfo))
+                            if (Context.HashFileTable(out var localHashes))
                             {
-                                Context.SendFile(toDo.UserId, fileSystemInfo);
+                                if (localHashes.TryGetValue(toDo.HashFile, out var fileSystemInfo))
+                                {
+                                    Context.SendFile(toDo.UserId, fileSystemInfo);
+                                }
+                                // the file has been modified or no longer exists
                             }
-                            // the file has been modified or no longer exists
                         }
                         else
                         {

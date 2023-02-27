@@ -100,44 +100,46 @@ namespace CloudSync
                             remoteHashes.Add(BitConverter.ToUInt64(hash8, 0), BitConverter.ToUInt32(timestamp4, 0));
                         }
                         var delimitsRange = values.Length == 1 ? null : new BlockRange(values[1], values[2], values[3], values[4]);
-                        var localHashes = HashFileTable(delimitsRange: delimitsRange);
-                        if (localHashes != null)
+                        if (HashFileTable(out var localHashes, delimitsRange: delimitsRange))
                         {
-                            //Update file
-                            foreach (var hash in remoteHashes.Keys)
+                            if (localHashes != null)
                             {
-                                if (localHashes.TryGetValue(hash, out var dateTime))
+                                //Update file
+                                foreach (var hash in remoteHashes.Keys)
                                 {
-                                    var remoteDate = remoteHashes[hash];
-                                    var localDate = dateTime.UnixLastWriteTimestamp();
-                                    if (remoteDate > localDate)
+                                    if (localHashes.TryGetValue(hash, out var dateTime))
                                     {
-                                        Spooler.AddOperation(Spooler.OperationType.Request, fromUserId, hash);
-                                        //RequestFile(fromUserId, hash);
+                                        var remoteDate = remoteHashes[hash];
+                                        var localDate = dateTime.UnixLastWriteTimestamp();
+                                        if (remoteDate > localDate)
+                                        {
+                                            Spooler.AddOperation(Spooler.OperationType.Request, fromUserId, hash);
+                                            //RequestFile(fromUserId, hash);
+                                        }
+                                        else if (remoteDate < localDate)
+                                        {
+                                            Spooler.AddOperation(Spooler.OperationType.Send, fromUserId, hash);
+                                            //SendFile(fromUserId, localHashes[hash]);
+                                        }
                                     }
-                                    else if (remoteDate < localDate)
+                                }
+                                // Send missing files to the remote (or delete local if is removed)
+                                foreach (var hash in localHashes.Keys)
+                                {
+                                    if (!remoteHashes.ContainsKey(hash))
                                     {
                                         Spooler.AddOperation(Spooler.OperationType.Send, fromUserId, hash);
-                                        //SendFile(fromUserId, localHashes[hash]);
                                     }
                                 }
-                            }
-                            // Send missing files to the remote (or delete local if is removed)
-                            foreach (var hash in localHashes.Keys)
-                            {
-                                if (!remoteHashes.ContainsKey(hash))
-                                {
-                                    Spooler.AddOperation(Spooler.OperationType.Send, fromUserId, hash);
-                                }
-                            }
 
-                            // Request missing files locally
-                            foreach (var hash in remoteHashes.Keys)
-                            {
-                                var wasDeleted = Existed(hash);
-                                if (!localHashes.ContainsKey(hash) && !Existed(hash))
+                                // Request missing files locally
+                                foreach (var hash in remoteHashes.Keys)
                                 {
-                                    Spooler.AddOperation(Spooler.OperationType.Request, fromUserId, hash);
+                                    var wasDeleted = Existed(hash);
+                                    if (!localHashes.ContainsKey(hash) && !Existed(hash))
+                                    {
+                                        Spooler.AddOperation(Spooler.OperationType.Request, fromUserId, hash);
+                                    }
                                 }
                             }
                         }
@@ -150,46 +152,53 @@ namespace CloudSync
                     else if (command == Commands.SendHashBlocks)
                     {
                         var remoteHash = values[0];
-                        var localHash = GetHasBlock();
-                        if (!remoteHash.SequenceEqual(localHash))
+                        if (GetHasBlock(out var localHash))
                         {
-                            RaiseOnStatusChangesEvent(SynchronizationStatus.Pending);
-                            var range = HashBlocksToBlockRange(remoteHash, localHash);
-                            if (IsServer)
-                                SendHashStructure(fromUserId, range);
+                            if (!remoteHash.SequenceEqual(localHash))
+                            {
+                                RaiseOnStatusChangesEvent(SynchronizationStatus.Pending);
+                                var range = HashBlocksToBlockRange(remoteHash, localHash);
+                                if (IsServer)
+                                    SendHashStructure(fromUserId, range);
+                                else
+                                    RequestHashStructure(fromUserId, range);
+                            }
                             else
-                                RequestHashStructure(fromUserId, range);
-                        }
-                        else
-                        {
-                            RaiseOnStatusChangesEvent(SynchronizationStatus.Synchronized);
-                            Notification(fromUserId, Notice.Synchronized);
+                            {
+                                RaiseOnStatusChangesEvent(SynchronizationStatus.Synchronized);
+                                Notification(fromUserId, Notice.Synchronized);
+                            }
                         }
                     }
                     else if (command == Commands.SendHashRoot)
                     {
-                        var localHash = BitConverter.ToUInt64(GetHasRoot(), 0);
-                        var remoteHash = BitConverter.ToUInt64(values[0], 0);
-                        if (localHash != remoteHash)
+                        if (GetHasRoot(out var hashRoot))
                         {
-                            RaiseOnStatusChangesEvent(SynchronizationStatus.Pending);
-                            SendHashBlocks(fromUserId);
-                            //SendHashStructure(fromUserId);
-                        }
-                        else
-                        {
-                            RaiseOnStatusChangesEvent(SynchronizationStatus.Synchronized);
-                            Notification(fromUserId, Notice.Synchronized);
+                            var localHash = BitConverter.ToUInt64(hashRoot, 0);
+                            var remoteHash = BitConverter.ToUInt64(values[0], 0);
+                            if (localHash != remoteHash)
+                            {
+                                RaiseOnStatusChangesEvent(SynchronizationStatus.Pending);
+                                SendHashBlocks(fromUserId);
+                                //SendHashStructure(fromUserId);
+                            }
+                            else
+                            {
+                                RaiseOnStatusChangesEvent(SynchronizationStatus.Synchronized);
+                                Notification(fromUserId, Notice.Synchronized);
+                            }
                         }
                     }
                     else if (command == Commands.RequestChunkFile)
                     {
-                        var hashDirTable = HashFileTable();
-                        var hash = BitConverter.ToUInt64(values[0], 0);
-                        if (hashDirTable.TryGetValue(hash, out var fileSystemInfo))
+                        if (HashFileTable(out var hashDirTable))
                         {
-                            var chunkPart = BitConverter.ToUInt32(values[1], 0);
-                            SendChunkFile(fromUserId, fileSystemInfo, chunkPart);
+                            var hash = BitConverter.ToUInt64(values[0], 0);
+                            if (hashDirTable.TryGetValue(hash, out var fileSystemInfo))
+                            {
+                                var chunkPart = BitConverter.ToUInt32(values[1], 0);
+                                SendChunkFile(fromUserId, fileSystemInfo, chunkPart);
+                            }
                         }
                     }
                     else if (command == Commands.SendChunkFile)
@@ -265,13 +274,14 @@ namespace CloudSync
                     {
                         var hash = values[0].ToUint64();
                         var timestamp = values[1].ToUint32();
-                        var hashDirTable = HashFileTable();
-                        if (hashDirTable.TryGetValue(hash, out var fileInfo))
-                        {
-                            if (fileInfo.UnixLastWriteTimestamp() == timestamp)
+                        if (HashFileTable(out var hashDirTable)){
+                            if (hashDirTable.TryGetValue(hash, out var fileInfo))
                             {
-                                FileDelete(fileInfo.FullName);
-                                hashDirTable.Remove(hash);
+                                if (fileInfo.UnixLastWriteTimestamp() == timestamp)
+                                {
+                                    FileDelete(fileInfo.FullName);
+                                    hashDirTable.Remove(hash);
+                                }
                             }
                         }
                     }

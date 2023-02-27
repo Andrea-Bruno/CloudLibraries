@@ -172,14 +172,35 @@ namespace CloudSync
             }
             Sync.Context.SecureStorage.ObjectStorage.SaveObject(this, Id.ToString());
         }
+
+        /// <summary>
+        /// Delete a client (this client will no longer be able to access the cloud server)
+        /// </summary>
+        public void Remove()
+        {
+            if (Sync.RoleManager.Clients.ContainsKey(Id))
+                Sync.RoleManager.Clients.Remove(Id);
+            Sync.Context.SecureStorage.ObjectStorage.DeleteObject(typeof(Client), Id.ToString());
+        }
+
+        /// <summary>
+        /// Delete an ephemeral client (ephemeral client is a client that hasn't completed the authentication process yet)
+        /// </summary>
         public void RemoveTemp()
         {
             if (Sync.RoleManager.TmpClients.ContainsKey(Id))
                 Sync.RoleManager.TmpClients.Remove(Id);
         }
+
+        /// <summary>
+        /// Aes encryption key used by this client to communicate with the server
+        /// </summary>
         [XmlIgnore]
         public Aes Aes { get; private set; }
 
+        /// <summary>
+        /// Log of accesses made by this client
+        /// </summary>
         public LogAccess[] Accesses = { };
 
         public void AddNewAccess(string host, string userAgent = null)
@@ -191,6 +212,10 @@ namespace CloudSync
             if (Accesses.Length > 1)
                 Save();
         }
+
+        /// <summary>
+        /// Current status of the client
+        /// </summary>
         public Status CurrentStatus;
         public class LogAccess
         {
@@ -207,8 +232,15 @@ namespace CloudSync
             /// </summary>
             public string UserAgent;
         }
+
+        /// <summary>
+        /// The last time the client interacted with the server
+        /// </summary>
         internal DateTime LastInteraction;
 
+        /// <summary>
+        /// Status types for the client
+        /// </summary>
         [Flags]
         public enum Status
         {
