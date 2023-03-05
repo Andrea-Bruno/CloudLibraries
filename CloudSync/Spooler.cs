@@ -65,10 +65,12 @@ namespace CloudSync
 
         public void ExecuteNext(ulong? userId = null)
         {
-            if (Context.ConcurrentOperations() < MaxConcurrentOperations)
+            lock (ToDoOperations)
             {
-                lock (ToDoOperations)
+                for (int i = Context.ConcurrentOperations(); i < MaxConcurrentOperations; i++)
                 {
+                    //if (Context.ConcurrentOperations() < MaxConcurrentOperations)
+                    //{
                     if (ToDoOperations.Count > 0)
                     {
                         var toDo = ToDoOperations[0];
@@ -94,6 +96,7 @@ namespace CloudSync
                     //{
                     //        if (userId != null)
                     //            CheckOperationsInPending((ulong)userId);
+                    //}
                     //}
                 }
             }

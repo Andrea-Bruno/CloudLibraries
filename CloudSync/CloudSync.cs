@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Tasks;
 using System.Timers;
 using EncryptedMessaging;
 using Microsoft.Win32.SafeHandles;
@@ -40,30 +41,34 @@ namespace CloudSync
             ReceptionInProgress = new ProgressFileTransfer(this);
             SendingInProgress = new ProgressFileTransfer(this);
             RoleManager = new RoleManager(this);
-            if (IsServer)
-            {
-                var pin = GetPin(context);
-                if (pin == null)
+            var task = new Task(() => {
+                HashFileTable(out _); // set cache initial state to check if file is deleted
+                if (IsServer)
                 {
-                    pin = BitConverter.ToUInt64(Hash256(Context.My.GetPrivateKeyBinary()), 0).ToString().Substring(0, 6); // the default pin is the first 6 digits of the private key hash
+                    var pin = GetPin(context);
+                    if (pin == null)
+                    {
+                        pin = BitConverter.ToUInt64(Hash256(Context.My.GetPrivateKeyBinary()), 0).ToString().Substring(0, 6); // the default pin is the first 6 digits of the private key hash
 
-                    SetPin(context, null, pin);
+                        SetPin(context, null, pin);
+                    }
+                    SetSyncTimeBuffer();
                 }
-                SetSyncTimeBuffer();
-            }
-            else
-            {
-                if (Context.SecureStorage.Values.Get("Logged", false))
-                    StartSyncClient(); // It's already logged in, so start syncing immediately
                 else
-                    RequestOfAuthentication(null, isClient, PublicIpAddressInfo(), Environment.MachineName); // Start the login process
-            }
-            WatchCloudRoot(cloudRoot);
-            HashFileTable(out _); // set cache initial state to check if file is deleted
+                {
+                    if (Context.SecureStorage.Values.Get("Logged", false))
+                        StartSyncClient(); // It's already logged in, so start syncing immediately
+                    else
+                        RequestOfAuthentication(null, isClient, PublicIpAddressInfo(), Environment.MachineName); // Start the login process
+                }
+                WatchCloudRoot(cloudRoot);
+            });
+            task.Start();
         }
 
         public void Dispose()
         {
+            Context.SecureStorage.Values.Delete("Logged", typeof(bool));
             if (SyncTimeBuffer != null)
             {
                 SyncTimeBuffer.Stop();
@@ -129,8 +134,14 @@ namespace CloudSync
         }
         public void RequestSynchronization()
         {
-            SyncTimeBuffer?.Stop();
-            SyncTimeBuffer?.Start();
+            try
+            {
+                SyncTimeBuffer?.Stop();
+                SyncTimeBuffer?.Start();
+            }
+            catch
+            { // is disposed
+            }
         }
 
         private void StartSyncClient()
@@ -142,6 +153,7 @@ namespace CloudSync
             CheckSync.Elapsed += (s, e) => RequestSynchronization();
             SetSyncTimeBuffer();
             StartSynchronization(null, null);
+            //SyncTimeBuffer.Start();
         }
 
         public void StartSynchronization(object sender, ElapsedEventArgs e)

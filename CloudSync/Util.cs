@@ -135,21 +135,22 @@ namespace CloudSync
         /// <summary>
         /// Class with properties related to the temporary pin
         /// </summary>
-        public class OneTimeAccess{
-           public OneTimeAccess(string pin, DateTime expires, string label)
+        public class OneTimeAccess
+        {
+            public OneTimeAccess(string pin, DateTime expires, string label)
             {
-                Pin=pin;
-                Expires=expires;
-                Label=label;
+                Pin = pin;
+                Expires = expires;
+                Label = label;
             }
             /// <summary>
             /// Pin
             /// </summary>
-          public  string Pin;
+            public string Pin;
             /// <summary>
             /// Class with properties related to the disposable pin
             /// </summary>
-          public  DateTime Expires;
+            public DateTime Expires;
             /// <summary>
             /// Label describing who was assigned the pin (optional reminder)
             /// </summary>
@@ -726,13 +727,15 @@ namespace CloudSync
         /// </summary>
         /// <param name="fileName">File name</param>
         /// <param name="data">Binary data to write</param>
+        /// <param name="exception">Returns any errors encountered in performing the operation</param>
         /// <param name="attempts">number of attemps</param>
         /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt</param>
         /// <param name="chunkSize">Set a value different of 0 to check a file size if is consistent with the chunk size size</param>
         /// <param name="chunkNumber">Chunk number (base 1) if chunk size is different of 0</param>
         /// <returns>True for successful</returns>
-        public static bool FileAppend(string fileName, byte[] data, int attempts = 10, int pauseBetweenAttempts = 50, int chunkSize = 0, uint chunkNumber = 0)
+        public static bool FileAppend(string fileName, byte[] data, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50, int chunkSize = 0, uint chunkNumber = 0)
         {
+            exception = null;
             for (int numTries = 0; numTries < attempts; numTries++)
             {
                 try
@@ -756,8 +759,9 @@ namespace CloudSync
                         return true;
                     }
                 }
-                catch (IOException)
+                catch (IOException ex)
                 {
+                    exception = ex;
                     Thread.Sleep(pauseBetweenAttempts);
                 }
             }
@@ -768,12 +772,14 @@ namespace CloudSync
         /// Delete a file and retrying if the file is busy with other processes.
         /// </summary>
         /// <param name="fileName"></param>
+        /// <param name="exception">Returns any errors encountered in performing the operation</param>
         /// <param name="attempts">number of attemps</param>
-        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in millisenconds)</param>
         /// <returns>True for successful</returns>
-        public static bool FileDelete(string fileName, int attempts = 10, int pauseBetweenAttempts = 50)
+        public static bool FileDelete(string fileName, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
         {
-            var fileInfo = new FileInfo(fileName); 
+            exception = null;
+            var fileInfo = new FileInfo(fileName);
             if (fileInfo.Exists)
             {
                 for (int numTries = 0; numTries < attempts; numTries++)
@@ -789,8 +795,9 @@ namespace CloudSync
                         }
                         return true;
                     }
-                    catch (IOException)
+                    catch (IOException ex)
                     {
+                        exception = ex;
                         Thread.Sleep(pauseBetweenAttempts);
                     }
                 }
@@ -802,22 +809,23 @@ namespace CloudSync
         /// Delete a directory and retrying if any error occur.
         /// </summary>
         /// <param name="directoryName"></param>
+        /// <param name="exception">Returns any errors encountered in performing the operation</param>
         /// <param name="attempts">number of attemps</param>
-        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in millisenconds)</param>
         /// <returns>True for successful</returns>
-        public static bool DirectoryDelete(string directoryName, int attempts = 10, int pauseBetweenAttempts = 50)
+        public static bool DirectoryDelete(string directoryName, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
         {
+            exception = null;
             for (int numTries = 0; numTries < attempts; numTries++)
             {
                 try
                 {
-                    var directory = new DirectoryInfo(directoryName);
-                    if (directory.Exists)
-                        directory.Delete(true);
+                    ForceDeleteDirectory(directoryName);
                     return true;
                 }
-                catch (IOException)
+                catch (IOException ex)
                 {
+                    exception = ex;
                     Thread.Sleep(pauseBetweenAttempts);
                 }
             }
@@ -825,14 +833,33 @@ namespace CloudSync
         }
 
         /// <summary>
+        /// https://stackoverflow.com/questions/611921/how-do-i-delete-a-directory-with-read-only-files-in-c
+        /// </summary>
+        /// <param name="path"></param>
+        private static void ForceDeleteDirectory(string path)
+        {
+            var directory = new DirectoryInfo(path);
+            if (directory.Exists)
+            {
+                directory.Attributes = FileAttributes.Normal;
+                foreach (var info in directory.GetFileSystemInfos("*", SearchOption.AllDirectories))
+                    info.Attributes = FileAttributes.Normal;
+                directory.Delete(true);
+            }
+        }
+
+
+        /// <summary>
         /// Create a directory and retrying if any error occur.
         /// </summary>
         /// <param name="directoryName"></param>
+        /// <param name="exception">Returns any errors encountered in performing the operation</param>
         /// <param name="attempts">number of attemps</param>
-        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in millisenconds)</param>
         /// <returns>True for successful</returns>
-        public static bool DirectoryCreate(string directoryName, int attempts = 10, int pauseBetweenAttempts = 50)
+        public static bool DirectoryCreate(string directoryName, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
         {
+            exception = null;
             for (int numTries = 0; numTries < attempts; numTries++)
             {
                 try
@@ -841,8 +868,9 @@ namespace CloudSync
                     directory.Create();
                     return true;
                 }
-                catch (IOException)
+                catch (IOException ex)
                 {
+                    exception = ex;
                     Thread.Sleep(pauseBetweenAttempts);
                 }
             }
@@ -854,11 +882,13 @@ namespace CloudSync
         /// </summary>
         /// <param name="source">Source file name</param>
         /// <param name="target">Target file name</param>
+        /// <param name="exception">Returns any errors encountered in performing the operation</param>
         /// <param name="attempts">number of attemps</param>
-        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in millisenconds)</param>
         /// <returns>True for successful</returns>
-        public static bool FileMove(string source, string target, int attempts = 10, int pauseBetweenAttempts = 50)
+        public static bool FileMove(string source, string target, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
         {
+            exception = null;
             if (File.Exists(source))
             {
                 for (int numTries = 0; numTries < attempts; numTries++)
@@ -868,13 +898,57 @@ namespace CloudSync
                         File.Move(source, target);
                         return true;
                     }
-                    catch (IOException)
+                    catch (IOException ex)
                     {
+                        exception = ex;
                         Thread.Sleep(pauseBetweenAttempts);
                     }
                 }
             }
             return false;
+        }
+
+        /// <summary>
+        /// Copy a file (copy from source to target) and retrying if any error occur.
+        /// </summary>
+        /// <param name="source">Source file name</param>
+        /// <param name="target">Target file name</param>
+        /// <param name="exception">Returns any errors encountered in performing the operation</param>
+        /// <param name="attempts">number of attemps</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in millisenconds)</param>
+        /// <returns>True for successful</returns>
+        public static bool FileCopy(string source, string target, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
+        {
+            exception = null;
+            if (File.Exists(source))
+            {
+                for (int numTries = 0; numTries < attempts; numTries++)
+                {
+                    try
+                    {
+                        FileCopy(source, target);
+                        return true;
+                    }
+                    catch (Exception ex)
+                    {
+                        exception = ex;
+                        Thread.Sleep(pauseBetweenAttempts);
+                    }
+                }
+            }
+            return false;
+        }
+        private static void FileCopy(string source, string target)
+        {
+            if (File.Exists(target))
+                File.Delete(target);
+            using (var outputStream = File.OpenWrite(target))
+            {
+                using (var inputStream = File.OpenRead(source))
+                {
+                    inputStream.CopyTo(outputStream);
+                }
+            }
         }
     }
 }

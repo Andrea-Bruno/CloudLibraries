@@ -154,7 +154,9 @@ namespace CloudSync
                     ulong crc = default;
                     if (chunkPart == 1)
                     {
-                        File.Copy(fileSystemInfo.FullName, tmpFile, true);
+                        FileCopy(fileSystemInfo.FullName, tmpFile, out Exception exception);
+                        if (exception != null)
+                            RaiseOnFileError(exception, fileSystemInfo.FullName);
                         TmpCrc.Remove(hashFileName);
                     }
                     else
@@ -179,7 +181,9 @@ namespace CloudSync
                     {
                         //File send completed;
                         TmpCrc.Remove(hashFileName);
-                        FileDelete(tmpFile);
+                        FileDelete(tmpFile, out Exception exception);
+                        if (exception != null)
+                            RaiseOnFileError(exception, fileSystemInfo.FullName);
                         TotalFilesSent++;
                         TotalBytesSent += (uint)fileLength;
                         SendingInProgress.Completed(hashFileName, (ulong)toUserId);
@@ -204,8 +208,9 @@ namespace CloudSync
             }
             catch (Exception ex)
             {
+                //if (ex.HResult == -2147024671) // Operation did not complete successfully because the file contains a virus or potentially unwanted software.
+                RaiseOnFileError(ex, fileSystemInfo.FullName);
                 Debug.WriteLine(ex.Message);
-                Debugger.Break();
             }
         }
         public uint TotalFilesSent;
@@ -235,7 +240,7 @@ namespace CloudSync
         /// The slave machine sends a message to indicate if it is ready to receive new commands or if it is busy
         /// </summary>
         /// <param name="toUserId">Target user ID</param>
-        /// <param name="busy">True for busy otherwise false</param>
+        /// <param name="busy">True for busy otherwise false to request to proceed with the synchronization</param>
         internal void StatusNotification(ulong? toUserId, bool busy)
         {
             ExecuteCommand(toUserId, Commands.StatusNotification, new[] { busy ? (byte)1 : (byte)0 });

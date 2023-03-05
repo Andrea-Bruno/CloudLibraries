@@ -115,6 +115,11 @@ namespace CloudBox
         /// </summary>
         public ulong ID { get; private set; }
 
+        /// <summary>
+        /// Returns the next Id that can be used to create a new cloud instance
+        /// </summary>
+        /// <param name="cloudPath"></param>
+        /// <returns></returns>
         public static ulong NextIdAvailable(string cloudPath)
         {
             ulong id;
@@ -131,7 +136,11 @@ namespace CloudBox
                 id = 0;
             return id;
         }
-
+        /// <summary>
+        /// Returns the list of all cloud IDs mounted under a given path
+        /// </summary>
+        /// <param name="cloudPath"></param>
+        /// <returns></returns>
         public static List<ulong> GetCloudsIDs(string cloudPath)
         {
             var result = new List<ulong>();
@@ -197,7 +206,7 @@ namespace CloudBox
                 if (SolveQRCode(qrCode, out routerEntryPoint, out serverPublicKey) == false)
                     return false;
             }
-
+            File.WriteAllText(FileLastEntryPoint, routerEntryPoint);
             if (Context != null)
                 Debugger.Break();
             if (onRouterConnectionChange == null)
@@ -319,7 +328,6 @@ namespace CloudBox
             {
                 return false;
             }
-            File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LastEntryPoint"), entryPoint);
             return true;
         }
 
@@ -331,12 +339,7 @@ namespace CloudBox
         /// <returns>Entry point (Url or IP), or null</returns>
         public static string LastEntryPoint()
         {
-            if (File.Exists(FileLastEntryPoint))
-            {
-                var lastEntryPoint = File.ReadAllText(FileLastEntryPoint);
-                return lastEntryPoint;
-            }
-            return null;
+            return File.Exists(FileLastEntryPoint) ? File.ReadAllText(FileLastEntryPoint) : null;
         }
 
         /// <summary>
@@ -378,7 +381,57 @@ namespace CloudBox
             Sync.OnSyncStatusChanges += (syncStatus, pendingFiles) => OnSyncStatusChangesAction?.Invoke(syncStatus, pendingFiles);
             Sync.OnFileTransfer += fileTransfer => TransferredFiles.UpdateList(fileTransfer);
             Sync.OnCommandEvent += (command, userId, isOutput) => OnCommands.AddOnCommand(command, userId, isOutput);
+            Sync.OnFileError += (error, fileName) => AddFileError(error.Message, fileName);
+            Sync.OnAntivirus += (message, fileName) => AddAntivirusWarning(message, fileName);
         }
+
+        private void AddFileError(string error, string fileName)
+        {
+            FileErrors.Insert(0, new FileError() { Time = DateTime.UtcNow, Error = error, FileName = fileName });
+            if (FileErrors.Count > 100)
+                FileErrors.RemoveAt(FileErrors.Count - 1);
+        }
+
+        /// <summary>
+        /// Log of errors occurred on files
+        /// It could be that the antivirus is blocking file operations, or some application is keeping the files open.
+        /// </summary>
+        public readonly List<FileError> FileErrors = new List<FileError>();
+
+        private void AddAntivirusWarning(string message, string fileName)
+        {
+            AntivirusWarnings.Insert(0, new FileError() { Time = DateTime.UtcNow, Error = message, FileName = fileName });
+            if (AntivirusWarnings.Count > 100)
+                AntivirusWarnings.RemoveAt(AntivirusWarnings.Count - 1);
+        }
+
+        /// <summary>
+        /// Log of Antivirus warning occurred
+        /// It could be that the antivirus is blocking file operations, or some application is keeping the files open.
+        /// </summary>
+        public readonly List<FileError> AntivirusWarnings = new List<FileError>();
+
+
+        /// <summary>
+        /// Class to describe file errors
+        /// </summary>
+        public class FileError
+        {
+            /// <summary>
+            /// Time of error
+            /// </summary>
+            public DateTime Time { get; set; }
+            /// <summary>
+            /// Error description
+            /// </summary>
+            public string Error { get; set; }
+            /// <summary>
+            /// Full path and file name
+            /// </summary>
+            public string FileName { get; set; }
+
+        }
+
 
         /// <summary>
         /// Stops transmitting with the cloud server, but the connection with the router remains active
@@ -434,18 +487,19 @@ namespace CloudBox
                     AddTx("WARNING!", "compiled in debug mode");
 #endif
                 }
-                AddTx("OEM Id", OEM.GetIdOEM(LicenseOEM));
-                AddTx("Cloud path", CloudPath);
-                //addTx("Pubblic IP", Util.PublicIpAddressInfo());
                 if (Context != null)
                 {
+                    AddTx("User Id", Context?.My.Id);
+                    AddTx("Pubblic Key", Context?.My.GetPublicKey());
                     if (ShowEntryPoint)
                         AddTx("Entry point (router address)", Context?.EntryPoint.ToString());
                     AddTx("Connected to the router", Context?.IsConnected);
-                    AddTx("PubKey", Context?.My.GetPublicKey());
-                    AddTx("UserId", Context?.My.Id);
                     AddTx("Keep Alive Failures", Context?.KeepAliveFailures);
                 }
+                AddTx("OEM Id", OEM.GetIdOEM(LicenseOEM));
+                AddTx("Cloud path", CloudPath);
+                //addTx("Pubblic IP", Util.PublicIpAddressInfo());
+
 
                 if (Sync != null)
                 {
@@ -470,7 +524,13 @@ namespace CloudBox
             }
         }
         private static bool ShowEntryPoint = true;
+        /// <summary>
+        /// True if the current instance is a cloud server, otherwise false if it is a cloud client
+        /// </summary>
         public readonly bool IsServer;
+        /// <summary>
+        /// For the cloud instance this contact represents the cloud server and every sync protocol communication is done by communicating to this contact
+        /// </summary>
         public Contact ServerCloud;
         public static CloudBox LastInstance
         {
@@ -548,7 +608,7 @@ namespace CloudBox
             var sendToContact = ServerCloud;
             if (sendToContact == null && toContactId != null)
                 CloudSyncUsers.TryGetValue((ulong)toContactId, out sendToContact);
-            if (sendToContact != null)
+            if (sendToContact != null && Sync != null)
             {
                 //if (IsServer)OnCommand
                 //{

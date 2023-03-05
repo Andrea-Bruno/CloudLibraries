@@ -77,6 +77,41 @@ namespace CloudSync
             if (OnCommandEvent != null)
                 new Thread(() => OnCommandEvent?.Invoke(command, userId, IsOutput)).Start();           
         }
+
+
+        // ===============================================================================
+        // ==================== Events about File Error ==================================
+        // ===============================================================================
+
+
+        public delegate void OnFileErrorHandler(System.Exception error, string fileName);
+        public event OnFileErrorHandler OnFileError;
+
+        internal void RaiseOnFileError(System.Exception error, string fileName)
+        {
+            if (error.HResult == -2147024671)
+            {
+                RaiseOnAntivirus(error.Message, fileName);
+                return;
+            }
+            if (OnFileError != null)
+                new Thread(() => OnFileError?.Invoke(error, fileName)).Start();
+        }
+
+        // ===============================================================================
+        // ==================== Events about Antivirus warnings ==========================
+        // ===============================================================================
+
+
+        public delegate void OnAntivirusHandler(string warning, string fileName);
+        public event OnAntivirusHandler OnAntivirus;
+
+        internal void RaiseOnAntivirus(string warning, string fileName)
+        {
+            if (OnFileError != null)
+                new Thread(() => OnAntivirus?.Invoke(warning, fileName)).Start();
+        }
+
     }
 }
 

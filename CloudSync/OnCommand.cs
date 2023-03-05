@@ -215,7 +215,9 @@ namespace CloudSync
                         {
                             if (part == 1)
                             {
-                                FileDelete(tmpFile);
+                                FileDelete(tmpFile, out Exception ex);
+                                if (ex != null)
+                                    RaiseOnFileError(ex, tmpFile);
                                 CrcTable[crcId] = startCrc;
                             }
                             else
@@ -227,8 +229,12 @@ namespace CloudSync
                                 Debugger.Break();
                             CrcTable[crcId] = ULongHash(CrcTable[crcId], data);
                         }
-                        if (!FileAppend(tmpFile, data, 10, 50, DefaultChunkSize, part))
+                        if (!FileAppend(tmpFile, data, out Exception exception, 10, 50, DefaultChunkSize, part))
+                        {
+                            if (exception != null)
+                                RaiseOnFileError(exception, tmpFile);
                             return;
+                        }
 
                         if (part == total)
                         {
@@ -244,22 +250,30 @@ namespace CloudSync
                                 {
                                     if (new FileInfo(target).UnixLastWriteTimestamp() > unixTimestamp)
                                         return;
-                                    FileDelete(target);
+                                    FileDelete(target, out Exception exception1);
+                                    if (exception1 != null)
+                                        RaiseOnFileError(exception1, target);
                                 }
                                 else
                                 {
                                     var targetDirectory = new FileInfo(target).Directory;
-                                    DirectoryCreate(targetDirectory.FullName);
+                                    DirectoryCreate(targetDirectory.FullName, out Exception exception1);
+                                    if (exception1 != null)
+                                        RaiseOnFileError(exception1, targetDirectory.FullName);
                                 }
-                                FileMove(tmpFile, target);
+                                FileMove(tmpFile, target, out Exception exception2);
+                                if (exception2 != null)
+                                    RaiseOnFileError(exception2, target);
                                 var fileInfo = new FileInfo(target);
                                 fileInfo.LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp);
                                 RaiseOnFileTransfer(false, hashFileName, part, total, target, (int)length);
                             }
                             else
                             {
-                                Debugger.Break();
-                                FileDelete(tmpFile);
+                                // Debugger.Break();
+                                FileDelete(tmpFile, out Exception exception1);
+                                if (exception1 != null)
+                                    RaiseOnFileError(exception1, tmpFile);
                             }
                             CrcTable.Remove(crcId);
                             ReportReceiptFileCompleted(fromUserId, hashFileName, total);
@@ -274,12 +288,15 @@ namespace CloudSync
                     {
                         var hash = values[0].ToUint64();
                         var timestamp = values[1].ToUint32();
-                        if (HashFileTable(out var hashDirTable)){
+                        if (HashFileTable(out var hashDirTable))
+                        {
                             if (hashDirTable.TryGetValue(hash, out var fileInfo))
                             {
                                 if (fileInfo.UnixLastWriteTimestamp() == timestamp)
                                 {
-                                    FileDelete(fileInfo.FullName);
+                                    FileDelete(fileInfo.FullName, out Exception exception);
+                                    if (exception != null)
+                                        RaiseOnFileError(exception, fileInfo.FullName);
                                     hashDirTable.Remove(hash);
                                 }
                             }
@@ -288,21 +305,27 @@ namespace CloudSync
                     else if (command == Commands.CreateDirectory)
                     {
                         var fullDirectoryName = FullName(values[0]);
-                        DirectoryCreate(fullDirectoryName);
+                        DirectoryCreate(fullDirectoryName, out Exception exception);
+                        if (exception != null)
+                            RaiseOnFileError(exception, fullDirectoryName);
                         var hash = HashFileName(values[0].ToText(), true);
                         ReceptionInProgress.Completed(hash);
+                        StatusNotification(fromUserId, false);
                     }
                     else if (command == Commands.DeleteDirectory)
                     {
                         var fullDirectoryName = FullName(values[0]);
-                        DirectoryDelete(fullDirectoryName);
+                        DirectoryDelete(fullDirectoryName, out Exception exception);
+                        if (exception != null)
+                            RaiseOnFileError(exception, fullDirectoryName);
                     }
                     else if (command == Commands.StatusNotification)
                     {
                         var busy = values[0][0] == 1;
                         if (!IsServer && busy == false)
                         {
-                            StartSynchronization(null, null);
+                            Spooler.ExecuteNext(fromUserId);
+                            //StartSynchronization(null, null);
                         }
                     }
                 }
