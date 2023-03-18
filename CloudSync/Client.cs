@@ -25,7 +25,7 @@ namespace CloudSync
             AddNewAccess(host, userAgent);
             AuthenticationProof = authenticationProof;
             PublicKey = clientKey; ;
-            Id = RoleManager.PublicKeyToUserId(clientKey);
+            Id = PublicKeyToUserId(clientKey);
             if (generateAesKey)
                 Aes = Aes.Create();
             Sync.RoleManager.TmpClients[Id] = this;

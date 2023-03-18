@@ -45,7 +45,7 @@ namespace CloudSync
             if (clientPubKey != null && id == null)
                 id = PublicKeyToUserId(clientPubKey);
 
-            var pins = Util.GetPins(Sync.Context);
+            var pins = GetPins(Sync.Context);
             if (pins == null || pins.Count == 0)
                 return;
             var randomBitesForAuthenticationProof = new byte[32];
@@ -111,13 +111,13 @@ namespace CloudSync
         internal static uint CryptographicProofOfPinKnowledge(byte[] randomBitesForAuthenticationProof, string pin)
         {
             var baseHash = randomBitesForAuthenticationProof.Combine(BitConverter.GetBytes(int.Parse(pin)));
-            var hash = Util.Hash256(baseHash);
+            var hash = Hash256(baseHash);
             return BitConverter.ToUInt32(hash, 0);
         }
 
         internal static ulong PublicKeyToUserId(byte[] publicKey)
         {
-            var clientId = Util.Hash256(publicKey).Take(8);
+            var clientId = Hash256(publicKey).Take(8);
             return BitConverter.ToUInt64(clientId, 0);
         }
 
