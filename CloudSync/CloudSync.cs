@@ -5,7 +5,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Timers;
-using EncryptedMessaging;
 using Microsoft.Win32.SafeHandles;
 using static CloudSync.Util;
 
@@ -18,9 +17,9 @@ namespace CloudSync
     /// </summary>
     public partial class Sync : IDisposable
     {
-        public Sync(SendCommand sendCommand, out SendCommand onCommand, Context context, string cloudRoot, LoginCredential isClient = null, bool doNotCreateSpecialFolders = false)
+        public Sync(SendCommand sendCommand, out SendCommand onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential isClient = null, bool doNotCreateSpecialFolders = false)
         {
-            Context = context;
+            SecureStorage = secureStorage;
             InstanceId = InstanceCounter;
             InstanceCounter++;
             IsServer = isClient == null;
@@ -35,28 +34,35 @@ namespace CloudSync
             if (createIfNotExists)
                 AddDesktopShorcut(cloudRoot);
 
+            var rootInfo = new DirectoryInfo(cloudRoot);
+            if (rootInfo.Exists)
+                rootInfo.Attributes &= FileAttributes.Encrypted;
+
             Execute = sendCommand;
             onCommand = OnCommand;
             Spooler = new Spooler(this);
             ReceptionInProgress = new ProgressFileTransfer(this);
             SendingInProgress = new ProgressFileTransfer(this);
             RoleManager = new RoleManager(this);
-            var task = new Task(() => {
+            var task = new Task(() =>
+            {
                 HashFileTable(out _); // set cache initial state to check if file is deleted
                 if (IsServer)
                 {
-                    var pin = GetPin(context);
+                    var pin = GetPin(secureStorage);
                     if (pin == null)
                     {
-                        pin = BitConverter.ToUInt64(Hash256(Context.My.GetPrivateKeyBinary()), 0).ToString().Substring(0, 6); // the default pin is the first 6 digits of the private key hash
 
-                        SetPin(context, null, pin);
+                        Random rnd = new Random();
+                        int pinInt = rnd.Next(100000, 1000000);
+                        pin = pinInt.ToString(); // the default pin is the 6 random digits
+                        SetPin(secureStorage, null, pin);
                     }
                     SetSyncTimeBuffer();
                 }
                 else
                 {
-                    if (Context.SecureStorage.Values.Get("Logged", false))
+                    if (SecureStorage.Values.Get("Logged", false))
                         StartSyncClient(); // It's already logged in, so start syncing immediately
                     else
                         RequestOfAuthentication(null, isClient, PublicIpAddressInfo(), Environment.MachineName); // Start the login process
@@ -68,7 +74,7 @@ namespace CloudSync
 
         public void Dispose()
         {
-            Context.SecureStorage.Values.Delete("Logged", typeof(bool));
+            SecureStorage.Values.Delete("Logged", typeof(bool));
             if (SyncTimeBuffer != null)
             {
                 SyncTimeBuffer.Stop();
@@ -178,7 +184,9 @@ namespace CloudSync
 
         public event OnNotificationEvent OnNotification;
 
-        internal readonly Context Context;
+        internal readonly SecureStorage.Storage SecureStorage;
+
+        //internal readonly Context Context;
 
         public readonly RoleManager RoleManager;
         internal readonly Spooler Spooler;

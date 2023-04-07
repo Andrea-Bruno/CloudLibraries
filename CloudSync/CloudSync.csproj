@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\EncryptedMessaging\EncryptedMessaging\EncryptedMessaging.csproj" />
+    <ProjectReference Include="..\..\..\..\SecureStorage\SecureStorage.csproj" />
   </ItemGroup>
 
   <ItemGroup>

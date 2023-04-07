@@ -16,6 +16,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <ProjectReference Include="..\..\..\..\EncryptedMessaging\EncryptedMessaging\EncryptedMessaging.csproj" />
 	  <ProjectReference Include="..\CloudSync\CloudSync.csproj" />
 	</ItemGroup>
 

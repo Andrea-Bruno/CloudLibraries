@@ -1,5 +1,4 @@
-﻿using EncryptedMessaging;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
@@ -96,7 +95,7 @@ namespace CloudSync
             if (passed)
             {
                 Label = label;
-                Util.RemoveFromPins(Sync.Context, pin);
+                Util.RemoveFromPins(Sync.SecureStorage, pin);
                 Save();
             }
             AuthenticationProof = null;
@@ -170,7 +169,7 @@ namespace CloudSync
             {
                 roleManager.TmpClients.Remove(Id);
             }
-            Sync.Context.SecureStorage.ObjectStorage.SaveObject(this, Id.ToString());
+            Sync.SecureStorage.ObjectStorage.SaveObject(this, Id.ToString());
         }
 
         /// <summary>
@@ -180,7 +179,7 @@ namespace CloudSync
         {
             if (Sync.RoleManager.Clients.ContainsKey(Id))
                 Sync.RoleManager.Clients.Remove(Id);
-            Sync.Context.SecureStorage.ObjectStorage.DeleteObject(typeof(Client), Id.ToString());
+            Sync.SecureStorage.ObjectStorage.DeleteObject(typeof(Client), Id.ToString());
         }
 
         /// <summary>

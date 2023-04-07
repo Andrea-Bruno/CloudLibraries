@@ -78,7 +78,7 @@ namespace CloudSync
                         {
                             if (notice == Notice.LoginSuccessful)
                             {
-                                Context.SecureStorage.Values.Set("Logged", true);
+                                SecureStorage.Values.Set("Logged", true);
                                 StartSyncClient();
                             }
                         }

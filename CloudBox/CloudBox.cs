@@ -350,8 +350,7 @@ namespace CloudBox
         {
             if (File.Exists(FileLastEntryPoint))
                 File.Delete(FileLastEntryPoint);
-            if (Sync != null)
-                StopSync();
+            StopSync();
             if (Context != null)
             {
                 Context.SecureStorage.Values.Set("pin", null);
@@ -376,8 +375,8 @@ namespace CloudBox
         /// <param name="isClient">If it is the client, it must provide authentication credentials</param>
         public void StartSync(LoginCredential isClient = null)
         {
-            Sync = new Sync(SendCommand, out OnCommand, Context, CloudPath, isClient, DoNotCreateSpecialFolders);
-            Sync.OnNotification += (fromUserId, notice) => { OnNotificationAction?.Invoke(fromUserId, notice); };
+            Sync = new Sync(SendCommand, out OnCommand, Context.SecureStorage, CloudPath, isClient, DoNotCreateSpecialFolders);
+            Sync.OnNotification += (fromUserId, notice) => OnNotificationAction?.Invoke(fromUserId, notice);
             Sync.OnSyncStatusChanges += (syncStatus, pendingFiles) => OnSyncStatusChangesAction?.Invoke(syncStatus, pendingFiles);
             Sync.OnFileTransfer += fileTransfer => TransferredFiles.UpdateList(fileTransfer);
             Sync.OnCommandEvent += (command, userId, isOutput) => OnCommands.AddOnCommand(command, userId, isOutput);
@@ -450,6 +449,7 @@ namespace CloudBox
         {
             if (Sync != null)
             {
+                OnCommand = null;                
                 Sync.Dispose();
                 Sync = null;
             }

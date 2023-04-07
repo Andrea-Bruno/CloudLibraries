@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Net.NetworkInformation;
 using static CloudSync.Util;
 
 namespace CloudSync
@@ -45,7 +44,7 @@ namespace CloudSync
             if (clientPubKey != null && id == null)
                 id = PublicKeyToUserId(clientPubKey);
 
-            var pins = GetPins(Sync.Context);
+            var pins = GetPins(Sync.SecureStorage);
             if (pins == null || pins.Count == 0)
                 return;
             var randomBitesForAuthenticationProof = new byte[32];
@@ -110,14 +109,18 @@ namespace CloudSync
 
         internal static uint CryptographicProofOfPinKnowledge(byte[] randomBitesForAuthenticationProof, string pin)
         {
-            var baseHash = randomBitesForAuthenticationProof.Combine(BitConverter.GetBytes(int.Parse(pin)));
+            var pinBytes = BitConverter.GetBytes(int.Parse(pin));
+            var baseHash = new byte[randomBitesForAuthenticationProof.Length + pinBytes.Length];
+            randomBitesForAuthenticationProof.CopyTo(baseHash, 0);
+            pinBytes.CopyTo(baseHash, randomBitesForAuthenticationProof.Length);
+            //var baseHash = randomBitesForAuthenticationProof.Combine(BitConverter.GetBytes(int.Parse(pin)));
             var hash = Hash256(baseHash);
             return BitConverter.ToUInt32(hash, 0);
         }
 
         internal static ulong PublicKeyToUserId(byte[] publicKey)
         {
-            var clientId = Hash256(publicKey).Take(8);
+            var clientId = Hash256(publicKey).Take(8).ToArray();
             return BitConverter.ToUInt64(clientId, 0);
         }
 
@@ -142,7 +145,7 @@ namespace CloudSync
 
         public void LoadAll()
         {
-            var objs = Sync.Context.SecureStorage.ObjectStorage.GetAllObjects(typeof(Client));
+            var objs = Sync.SecureStorage.ObjectStorage.GetAllObjects(typeof(Client));
             foreach (var obj in objs)
             {
                 var client = obj as Client;

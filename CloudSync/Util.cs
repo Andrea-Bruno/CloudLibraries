@@ -12,7 +12,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Web;
-using EncryptedMessaging;
 using HashFileTable = System.Collections.Generic.Dictionary<ulong, System.IO.FileSystemInfo>;
 
 namespace CloudSync
@@ -73,15 +72,10 @@ namespace CloudSync
             return new TimeSpan(timeOutMs * TimeSpan.TicksPerMillisecond);
         }
 
-        private static string GetPinsFile(Context context)
+        private static string GetPinsFile(SecureStorage.Storage secureStorage)
         {
-            context.Session.TryGetValue("pins", out object pins);
-            if (pins == null)
-            {
-                pins = context.SecureStorage.Values.Get("pins", "");
-                context.Session["pins"] = pins;
-            }
-            return (string)pins;
+            var pins = secureStorage.Values.Get("pins", "");
+            return pins;
         }
 
         /// <summary>
@@ -90,12 +84,11 @@ namespace CloudSync
         /// <param name="pin">Pins to add</param>
         /// <param name="expiresHours">Expires in hours</param>
         /// <param name="label">A tag name indicating who the pin was assigned to (as an optional reminder)</param>
-        public static void AddPin(Context context, string pin, int expiresHours, string label = null)
+        public static void AddPin(SecureStorage.Storage secureStorage, string pin, int expiresHours, string label = null)
         {
-            var pins = GetPinsFile(context);
+            var pins = GetPinsFile(secureStorage);
             pins += pin + "\t" + DateTime.UtcNow.AddHours(expiresHours).ToFileTime() + "\t" + label + "\n";
-            context.Session["pins"] = pins;
-            context.SecureStorage.Values.Set("pins", pins);
+            secureStorage.Values.Set("pins", pins);
         }
 
         /// <summary>
@@ -103,13 +96,13 @@ namespace CloudSync
         /// </summary>
         /// <param name="context">Context object</param>
         /// <returns>list of active pins with their expiration</returns>
-        public static List<OneTimeAccess> GetPins(Context context)
+        public static List<OneTimeAccess> GetPins(SecureStorage.Storage secureStorage)
         {
             var pinsList = new List<OneTimeAccess>();
-            var pin = GetPin(context);
+            var pin = GetPin(secureStorage);
             pinsList.Add(new OneTimeAccess(pin, DateTime.MaxValue, "master"));
             string newPins = "";
-            var pins = GetPinsFile(context);
+            var pins = GetPinsFile(secureStorage);
             if (!string.IsNullOrEmpty(pins))
             {
                 foreach (var pinParts in pins.Split('\n'))
@@ -126,8 +119,7 @@ namespace CloudSync
             }
             if (pins != newPins)
             {
-                context.Session["pins"] = newPins;
-                context.SecureStorage.Values.Set("pins", newPins);
+                secureStorage.Values.Set("pins", newPins);
             }
             return pinsList;
         }
@@ -162,11 +154,11 @@ namespace CloudSync
         /// </summary>
         /// <param name="context">Context object</param>
         /// <param name="pin"></param>
-        public static bool RemoveFromPins(Context context, string pin)
+        public static bool RemoveFromPins(SecureStorage.Storage secureStorage, string pin)
         {
             bool found = false;
             string newPins = "";
-            var pins = GetPinsFile(context);
+            var pins = GetPinsFile(secureStorage);
             if (!string.IsNullOrEmpty(pins))
             {
                 foreach (var pinParts in pins.Split('\n'))
@@ -182,8 +174,7 @@ namespace CloudSync
             }
             if (pins != newPins)
             {
-                context.Session["pins"] = newPins;
-                context.SecureStorage.Values.Set("pins", newPins);
+                secureStorage.Values.Set("pins", newPins);
             }
             return found;
         }
@@ -193,29 +184,23 @@ namespace CloudSync
         /// </summary>
         /// <param name="context">Context</param>
         /// <returns>Pin in text format</returns>
-        public static string GetPin(Context context)
+        public static string GetPin(SecureStorage.Storage secureStorage)
         {
-            context.Session.TryGetValue("pin", out object pin);
-            if (pin == null)
-            {
-                pin = context.SecureStorage.Values.Get("pin", null);
-                context.Session["pin"] = pin;
-            }
-            return (string)pin;
+            return secureStorage.Values.Get("pin", null);            
         }
 
         /// <summary>
         /// Set a 1 to 8 digit pin (this pin will replace the current master pin)
         /// </summary>
-        /// <param name="context">Context</param>
+        /// <param name="secureStorage">Storage</param>
         /// <param name="oldPin">Old pin (for control check)</param>
         /// <param name="newPin">New pin</param>
         /// <returns></returns>
-        public static bool SetPin(Context context, string oldPin, string newPin)
+        public static bool SetPin(SecureStorage.Storage secureStorage, string oldPin, string newPin)
         {
-            if (oldPin == GetPin(context))
+            if (oldPin == GetPin(secureStorage))
             {
-                SetPin(context, newPin);
+                SetPin(secureStorage, newPin);
             }
             return false;
         }
@@ -223,15 +208,14 @@ namespace CloudSync
         /// <summary>
         /// Set a 1 to 8 digit pin (this pin will replace the current one)
         /// </summary>
-        /// <param name="context">Context</param>
+        /// <param name="secureStorage">Storage</param>
         /// <param name="newPin">New pin</param>
         /// <returns>True if the pin is accepted</returns>
-        public static bool SetPin(Context context, string newPin)
+        public static bool SetPin(SecureStorage.Storage secureStorage, string newPin)
         {
             if (int.TryParse(newPin, out var _) && newPin.Length <= 8)
             {
-                context.Session["pin"] = newPin;
-                context.SecureStorage.Values.Set("pin", newPin);
+                secureStorage.Values.Set("pin", newPin);
                 return true;
             }
             return false;
