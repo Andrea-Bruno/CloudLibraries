@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Timers;
-using Microsoft.Win32.SafeHandles;
 using static CloudSync.Util;
 
 using HashFileTable = System.Collections.Generic.Dictionary<ulong, System.IO.FileSystemInfo>;
@@ -62,7 +60,7 @@ namespace CloudSync
                 }
                 else
                 {
-                    if (SecureStorage.Values.Get("Logged", false))
+                    if (IsLogged)
                         StartSyncClient(); // It's already logged in, so start syncing immediately
                     else
                         RequestOfAuthentication(null, isClient, PublicIpAddressInfo(), Environment.MachineName); // Start the login process
@@ -90,6 +88,10 @@ namespace CloudSync
             ReceptionInProgress.Dispose();
             SendingInProgress.Dispose();
         }
+        /// <summary>
+        /// Indicates if the client is connected. Persistent value upon restart from client application.
+        /// </summary>
+        private bool IsLogged { get { return SecureStorage.Values.Get("Logged", false); } set { SecureStorage.Values.Set("Logged", value); } }
 
         private FileSystemWatcher pathWatcher;
         private void WatchCloudRoot(string path)
@@ -116,6 +118,10 @@ namespace CloudSync
         /// After how much idle time, a check on the synchronization status is required
         /// </summary>
         public const int CheckEveryMinutes = 60;
+        /// <summary>
+        /// If the sync fails, a timer retries the sync. Usually the connection fails due to connection errors.
+        /// </summary>
+        public const int RetrySyncFailedAfterMinutes = 5;
 
         /// <summary>
         /// CheckSync timer trigger. Each time called it resets the timer time.
@@ -152,10 +158,7 @@ namespace CloudSync
 
         private void StartSyncClient()
         {
-            CheckSync = new Timer(CheckEveryMinutes * 60 * 1000)
-            {
-                AutoReset = false,
-            };
+            CheckSync = new Timer(CheckEveryMinutes * 60 * 1000);
             CheckSync.Elapsed += (s, e) => RequestSynchronization();
             SetSyncTimeBuffer();
             StartSynchronization(null, null);

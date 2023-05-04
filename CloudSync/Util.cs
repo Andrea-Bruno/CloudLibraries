@@ -8,6 +8,7 @@ using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -367,9 +368,28 @@ namespace CloudSync
             return BitConverter.ToUInt64(array, 0);
         }
 
+        /// <summary>
+        /// Get a path suitable for large temporary files. The result can differ from Path.GetTempPath() because on linux the latter could return a path allocated in the ram, not suitable for large files that could run out of memory.
+        /// </summary>
+        /// <returns>Temporary path folder</returns>
+        public static string GetTempPath()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return Path.GetTempPath();
+            var path = @"/var/tmp/";
+            return Directory.Exists(path) ? path : Path.GetTempPath();
+        }
+
+        /// <summary>
+        /// Gets a file name to be able to park a file during transfer from client to server or vice versa.
+        /// </summary>
+        /// <param name="sync">Instance of the sync object</param>
+        /// <param name="userId">User id requesting the temporary file</param>
+        /// <param name="hashFileName">The hash of the file to be momentarily parked during the transfer.</param>
+        /// <returns></returns>
         public static string GetTmpFile(Sync sync, ulong? userId, ulong hashFileName)
         {
-            return Path.Combine(Path.GetTempPath(), ((ulong)userId).ToString("X") + hashFileName.ToString("X") + sync.InstanceId);
+            return Path.Combine(GetTempPath(), ((ulong)userId).ToString("X") + hashFileName.ToString("X") + sync.InstanceId);
         }
         public const int DefaultChunkSize = 1024 * 1000; // 1 mb
         public const ulong startCrc = 2993167723948948793u;

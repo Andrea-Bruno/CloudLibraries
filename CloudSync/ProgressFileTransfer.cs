@@ -83,7 +83,9 @@ namespace CloudSync
             lock (TimeoutChunkFileToTransfer)
                 foreach (var expire in TimeoutChunkFileToTransfer.Values)
                 {
-                    result = Convert.ToInt32((expire - DateTime.UtcNow).TotalSeconds) + " sec.";
+                    if (result != null)
+                        result += ", ";
+                    result += Convert.ToInt32((expire - DateTime.UtcNow).TotalSeconds) + " sec.";
                 }
             return result ?? "No transfer in progress";
         }

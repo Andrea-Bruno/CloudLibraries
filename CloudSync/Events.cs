@@ -35,8 +35,17 @@ namespace CloudSync
             if (PendingFiles > 0)
                 syncStatus = SynchronizationStatus.Pending;
             if (lastSyncStatus != SyncStatus)
+            {
                 if (OnSyncStatusChanges != null)
-                    new Thread(() => OnSyncStatusChanges?.Invoke(SyncStatus, PendingFiles)).Start();            
+                    new Thread(() => OnSyncStatusChanges?.Invoke(SyncStatus, PendingFiles)).Start();
+                if (CheckSync != null)
+                {
+                    var CheckSyncEnabled = CheckSync.Enabled;
+                    CheckSync.Interval = (SyncStatus == SynchronizationStatus.Synchronized ? Sync.CheckEveryMinutes : Sync.RetrySyncFailedAfterMinutes) * 60 * 1000;
+                    CheckSync.Stop();
+                    CheckSync.Enabled = CheckSyncEnabled;
+                }
+            }
         }
 
         // ===============================================================================

@@ -253,7 +253,7 @@ namespace CloudBox
             // ReSharper disable once ConditionIsAlwaysTrueOrFalse
             if (serverPublicKey != null)
             {
-                ServerCloud = Context.Contacts.AddContact(serverPublicKey, "Server cloud", Modality.Server);
+                ServerCloud = Context.Contacts.AddContact(serverPublicKey, "Server cloud", Modality.Server, Contacts.SendMyContact.None);
             }
 #pragma warning restore            
         }
@@ -377,7 +377,12 @@ namespace CloudBox
         {
             Sync = new Sync(SendCommand, out OnCommand, Context.SecureStorage, CloudPath, isClient, DoNotCreateSpecialFolders);
             Sync.OnNotification += (fromUserId, notice) => OnNotificationAction?.Invoke(fromUserId, notice);
-            Sync.OnSyncStatusChanges += (syncStatus, pendingFiles) => OnSyncStatusChangesAction?.Invoke(syncStatus, pendingFiles);
+            Sync.OnSyncStatusChanges += (syncStatus, pendingFiles) =>
+            {
+                SyncStatus = syncStatus;
+                PendingFiles = pendingFiles;
+                OnSyncStatusChangesAction?.Invoke(syncStatus, pendingFiles);
+            };
             Sync.OnFileTransfer += fileTransfer => TransferredFiles.UpdateList(fileTransfer);
             Sync.OnCommandEvent += (command, userId, isOutput) => OnCommands.AddOnCommand(command, userId, isOutput);
             Sync.OnFileError += (error, fileName) => AddFileError(error.Message, fileName);
@@ -458,8 +463,23 @@ namespace CloudBox
         public readonly FileTransferList TransferredFiles = new FileTransferList();
         public readonly OnCommandList OnCommands = new OnCommandList();
         public Sync.OnNotificationEvent OnNotificationAction;
+        /// <summary>
+        /// Event that fires when the sync status changes
+        /// </summary>
         public Sync.StatusEventHandler OnSyncStatusChangesAction;
+        /// <summary>
+        /// Event that tracks communication errors that occur with the remote device
+        /// </summary>
         public OnErrorEvent OnCommunicationErrorEvent;
+        /// <summary>
+        /// Current status of the sync process. We recommend using the OnSyncStatusChangesAction event to update these values in the UI
+        /// </summary>
+        public Sync.SynchronizationStatus SyncStatus { get; private set; }
+        /// <summary>
+        /// Number of files that are waiting to be synced. We recommend using the OnSyncStatusChangesAction event to update these values in the UI
+        /// </summary>
+        public int    PendingFiles { get; private set; }
+
         public readonly List<Tuple<ErrorType, string>> CommunicationErrorLog = new List<Tuple<ErrorType, string>>();
 
         private void OnCommunicationError(ErrorType errorId, string description)

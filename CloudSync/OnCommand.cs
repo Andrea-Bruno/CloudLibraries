@@ -1,6 +1,4 @@
-﻿using NBitcoin;
-using NBitcoin.Protocol;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -78,7 +76,7 @@ namespace CloudSync
                         {
                             if (notice == Notice.LoginSuccessful)
                             {
-                                SecureStorage.Values.Set("Logged", true);
+                                IsLogged = true;
                                 StartSyncClient();
                             }
                         }
@@ -170,8 +168,8 @@ namespace CloudSync
                             }
                         }
                     }
-                    else if (command == Commands.SendHashRoot)
-                    {
+                    else if (command == Commands.SendHashRoot) // NOTE: if command does not arrive check that the cloud is mounted!
+                    {                       
                         if (GetHasRoot(out var hashRoot))
                         {
                             var localHash = BitConverter.ToUInt64(hashRoot, 0);
