@@ -15,6 +15,15 @@ namespace CloudSync
     /// </summary>
     public partial class Sync : IDisposable
     {
+        /// <summary>
+        /// Instance initializer. Once initialized, this object will manage the synchronization protocol between client and server. It is a polyvalent object, it must be instantiated both on the client and on the server to manage the communication between the machines.
+        /// </summary>
+        /// <param name="sendCommand">The command of the underlying library that takes care of sending the commands to the remote machine, in the form of a data packet. The concept is to keep this library free from worrying about data transmission, leaving the pure task of managing the synchronization protocol to a higher layer.</param>
+        /// <param name="onCommand">The command of the underlying library that takes care of sending the commands to the remote machine, in the form of a data packet. The concept is to keep this library free from worrying about data transmission, leaving the pure task of managing the synchronization protocol to a higher layer.</param>
+        /// <param name="secureStorage">Library reference for saving local data in an encrypted way (to increase security)</param>
+        /// <param name="cloudRoot">The path to the cloud root directory</param>
+        /// <param name="isClient">Initialize this instance with this value set to true if the client machine is the master, if instead it is the server set this value to false to activate slave mode.</param>
+        /// <param name="doNotCreateSpecialFolders">Set to true if you want to automatically create sub-folders in the cloud area to save images, photos, documents, etc..</param>
         public Sync(SendCommand sendCommand, out SendCommand onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential isClient = null, bool doNotCreateSpecialFolders = false)
         {
             SecureStorage = secureStorage;
@@ -121,8 +130,11 @@ namespace CloudSync
         /// <summary>
         /// If the sync fails, a timer retries the sync. Usually the connection fails due to connection errors.
         /// </summary>
+#if DEBUG
+        public const int RetrySyncFailedAfterMinutes = 1;
+#else
         public const int RetrySyncFailedAfterMinutes = 5;
-
+#endif
         /// <summary>
         /// CheckSync timer trigger. Each time called it resets the timer time.
         /// </summary>
@@ -144,6 +156,11 @@ namespace CloudSync
             };
             SyncTimeBuffer.Elapsed += StartSynchronization;
         }
+
+        /// <summary>
+        /// This function starts the synchronization request, called this function a timer will shortly launch the synchronization.
+        /// Synchronization requests are called whenever the system detects a file change, at regular times very far from a timer(the first method is assumed to be sufficient and this is just a check to make sure everything is in sync), or if the previous sync failed the timer with more frequent intervals will try to start the sync periodically.
+        /// </summary>
         public void RequestSynchronization()
         {
             try
@@ -165,7 +182,12 @@ namespace CloudSync
             //SyncTimeBuffer.Start();
         }
 
-        public void StartSynchronization(object sender, ElapsedEventArgs e)
+        /// <summary>
+        /// Start file synchronization between client and server, it is recommended not to use this command directly since starting synchronization via call RequestSynchronization()
+        /// </summary>
+        /// <param name="sender">senter</param>
+        /// <param name="e">Elapsed event args</param>
+        private void StartSynchronization(object sender, ElapsedEventArgs e)
         {
             if (!IsTransferring())
             {

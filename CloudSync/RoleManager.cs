@@ -109,7 +109,7 @@ namespace CloudSync
 
         internal static uint CryptographicProofOfPinKnowledge(byte[] randomBitesForAuthenticationProof, string pin)
         {
-            var pinBytes = BitConverter.GetBytes(int.Parse(pin));
+            byte[] pinBytes = int.TryParse(pin, out int pinInt) ? BitConverter.GetBytes(pinInt) : (new byte[0]);
             var baseHash = new byte[randomBitesForAuthenticationProof.Length + pinBytes.Length];
             randomBitesForAuthenticationProof.CopyTo(baseHash, 0);
             pinBytes.CopyTo(baseHash, randomBitesForAuthenticationProof.Length);

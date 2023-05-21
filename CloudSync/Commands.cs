@@ -43,6 +43,7 @@ namespace CloudSync
             /// </summary>
             LoginError,
             Synchronized,
+
         }
 
         private void Notification(ulong? toUserId, Notice notice)
