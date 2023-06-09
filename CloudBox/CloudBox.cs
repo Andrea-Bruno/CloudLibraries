@@ -3,8 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net.NetworkInformation;
-using System.Runtime.InteropServices.ComTypes;
+using System.Reflection;
 using System.Text;
 using CloudSync;
 using EncryptedMessaging;
@@ -57,7 +56,7 @@ namespace CloudBox
             ID = id == null ? BitConverter.ToUInt64(Util.Hash256(cloudPath.GetBytes()), 0) : id.Value;
             if (!string.IsNullOrEmpty(cloudPath) && cloudPath != GetCloudPath(null, isServer))
                 _cloudPath = cloudPath;
-            Communication = new Communication(CloudPath);
+            Communication = new Communication(this);
             lock (Instances)
                 Instances.Add(this);
         }
@@ -65,14 +64,14 @@ namespace CloudBox
         /// <summary>
         /// Digitally sign a document
         /// </summary>
-        /// <param name="scopeOfSignature"></param>
-        /// <param name="signatureFileName"></param>
-        /// <param name="fileName"></param>
-        /// <param name="document"></param>
+        /// <param name="scopeOfSignature">Indicates the intention of the signer (the purpose for which the signature is placed on the document)</param>
+        /// <param name="signatureFileName">Returns the name of the file containing the digital signature</param>
+        /// <param name="fileName">The name of the file being signed</param>
+        /// <param name="document">The file you are signing (in the form of binary data)</param>
         /// <returns>Digital signature in json format</returns>
         public string SignDocument(DigitalSignature.Scope scopeOfSignature, out string signatureFileName, string fileName = null, byte[] document = null)
         {
-            var sign = new DigitalSignature(Context.My.GetPrivateKeyBinary(), DigitalSignature.Scope.Accept, fileName, document);
+            var sign = new DigitalSignature(Context.My.GetPrivateKeyBinary(), scopeOfSignature, fileName, document);
             var json = sign.Save();
             signatureFileName = fileName + sign.FileExtension();
             return json;
@@ -176,6 +175,12 @@ namespace CloudBox
         {
             if (!IsServer)
             {
+                if (EncryptedQR != null)
+                {
+                    // If the login was partially done with an encrypted QR code, once the connection with the router has been established, it asks the cloud for the QR code in order to log in definitively
+                    Communication.SendCommand(EncryptedQR.Item1, Communication.Command.GetEncryptedQR, null);
+                    return;
+                }
                 if (pin == null)
                     pin = Context.SecureStorage.Values.Get("pin", null);
                 if (!string.IsNullOrEmpty(pin))
@@ -203,7 +208,7 @@ namespace CloudBox
             if (isQRcode)
             {
                 var qrCode = routerEntryPoint;
-                if (SolveQRCode(qrCode, out routerEntryPoint, out serverPublicKey) == false)
+                if (SolveQRCode(qrCode, out routerEntryPoint, out serverPublicKey, out EncryptedQR) == false)
                     return false;
             }
             File.WriteAllText(FileLastEntryPoint, routerEntryPoint);
@@ -277,7 +282,7 @@ namespace CloudBox
             Logout();
             if (string.IsNullOrEmpty(pin))
                 return LoginResult.WrongPassword;
-            if (SolveQRCode(qrCode, out string entry, out string serverPublicKey) == false) return LoginResult.WrongQR;
+            if (SolveQRCode(qrCode, out string entry, out string serverPublicKey, out EncryptedQR) == false) return LoginResult.WrongQR;
             if (entry != null)
                 entryPoint = entry;
             CreateContext(entryPoint);
@@ -285,6 +290,10 @@ namespace CloudBox
             Context.SecureStorage.Values.Set("ServerPublicKey", serverPublicKey);
             return LoginResult.Validated;
         }
+        /// <summary>
+        /// The encryption key of the QR code and for the client also the ID of the server useful for communicating with it
+        /// </summary>
+        public Tuple<ulong, byte[]> EncryptedQR;
 
 #pragma warning disable CS1591
 
@@ -298,43 +307,70 @@ namespace CloudBox
             WrongQR
         }
 #pragma warning restore CS1591
-
-        private static bool SolveQRCode(string qrCode, out string entryPoint, out string serverPublicKey)
+        /// <summary>
+        /// It receives the data of a QR code as input, validates it and if recognized returns true
+        /// </summary>
+        /// <param name="qrCode"></param>
+        /// <param name="entryPoint">Returns the entry point of the router, to establish the connection</param>
+        /// <param name="serverPublicKey">For type 1 and 2 QR codes, the server's public key is returned</param>
+        /// <param name="EncryptedQR">For type 2 QR codes (the encrypted one), it returns the encryption code and the server ID so that it can be queried and given the public key when the connection to the router is established</param>
+        /// <returns></returns>
+        internal static bool SolveQRCode(string qrCode, out string entryPoint, out string serverPublicKey, out Tuple<ulong, byte[]> EncryptedQR)
         {
             entryPoint = null;
             serverPublicKey = null;
+            EncryptedQR = null;
             if (string.IsNullOrEmpty(qrCode))
-                return false;
-
-            var qr = qrCode.Base64ToBytes();
-            var type = qr[0];
-            var offset = 1;
-            if (type == 1)
-            {
-                // var modulus = qr.Skyp(offset).Take(256);
-                offset += 256;
-                // var exponent = qr.Skyp(offset).Take(3);
-                offset += 3;
-            }
-            if (type > 2)
                 return false;
             try
             {
-                serverPublicKey = qr.Skyp(offset).Take(33).ToBase64();
-                var key = new PubKey(Convert.FromBase64String(serverPublicKey)); // pub key validator (throw error if is wrong)
-                offset += 33;
+                var qr = qrCode.Base64ToBytes();
+                var type = qr[0];
+                var offset = 1;
+                if (type == 1)
+                {
+                    // var modulus = qr.Skyp(offset).Take(256);
+                    offset += 256;
+                    // var exponent = qr.Skyp(offset).Take(3);
+                    offset += 3;
+                }
+                else if (type == 2)
+                {
+                    var QRkey = qr.Skyp(offset).Take(24);
+                    offset += 24;
+                    var serverId = BitConverter.ToUInt64(qr.Skyp(offset).Take(8), 0);
+                    offset += 8;
+                    EncryptedQR = new Tuple<ulong, byte[]>(serverId, QRkey);
+                }
+                else if (type > 2)
+                    return false;
+                if (type == 0 || type == 1)
+                {
+                    serverPublicKey = qr.Skyp(offset).Take(33).ToBase64();
+                    var key = new PubKey(Convert.FromBase64String(serverPublicKey)); // pub key validator (throw error if is wrong)
+                    offset += 33;
+                }
                 var ep = qr.Skip(offset).ToASCII();
+                if (string.IsNullOrEmpty(ep))
+                {
+#if RELEASE
+
+                    ShowEntryPoint = false;
+                    ep = "server.cloudservices.agency";
+#elif DEBUG
+                    ep = "test.cloudservices.agency";
+#endif
+                }
+                else if (!ep.Contains("."))
+                {
+                    ep += ".cloudservices.agency";
+                }
+
                 if (!string.IsNullOrEmpty(ep))
                 {
                     if (!Uri.TryCreate(ep, UriKind.RelativeOrAbsolute, out Uri myUri))
                         return false; // url not valid
                     entryPoint = ep;
-                }
-                else
-                {
-#if RELEASE
-                    ShowEntryPoint = false;
-#endif
                 }
             }
             catch (Exception)
@@ -467,7 +503,7 @@ namespace CloudBox
         {
             if (Sync != null)
             {
-                OnCommand = null;                
+                OnCommand = null;
                 Sync.Dispose();
                 Sync = null;
             }
@@ -491,7 +527,7 @@ namespace CloudBox
         /// <summary>
         /// Number of files that are waiting to be synced. We recommend using the OnSyncStatusChangesAction event to update these values in the UI
         /// </summary>
-        public int    PendingFiles { get; private set; }
+        public int PendingFiles { get; private set; }
 
         public readonly List<Tuple<ErrorType, string>> CommunicationErrorLog = new List<Tuple<ErrorType, string>>();
 
@@ -520,6 +556,9 @@ namespace CloudBox
                     AddTx("Paired to server", (ServerCloud == null ? "None" : ServerCloud.UserId + " UserId"));
                     AddTx("Logged with server", (Sync != null));
                 }
+                var version = Assembly.GetEntryAssembly().GetName().Version.ToString();
+                if (version != "1.0.0.0")
+                    AddTx("Version", version);
                 if (LicenseOEM == TestNetDefaultlicenseOEM)
                 {
                     if (string.IsNullOrEmpty(LicenseOEM))
@@ -532,6 +571,8 @@ namespace CloudBox
                 }
                 if (Context != null)
                 {
+                    if (Context.InstancedTimeUtc != default)
+                        AddTx("Started at", Context.InstancedTimeUtc + " UTC");
                     AddTx("User Id", Context?.My.Id);
                     AddTx("Pubblic Key", Context?.My.GetPublicKey());
                     if (ShowEntryPoint)
@@ -566,6 +607,7 @@ namespace CloudBox
                 return sb.ToString();
             }
         }
+
         private static bool ShowEntryPoint = true;
         /// <summary>
         /// True if the current instance is a cloud server, otherwise false if it is a cloud client
@@ -575,6 +617,9 @@ namespace CloudBox
         /// For the cloud instance this contact represents the cloud server and every sync protocol communication is done by communicating to this contact
         /// </summary>
         public Contact ServerCloud;
+        /// <summary>
+        /// Securely get the latest instance of the created cloudbox object
+        /// </summary>
         public static CloudBox LastInstance
         {
             get
@@ -669,6 +714,10 @@ namespace CloudBox
         /// </summary>
         public Context Context { get; private set; }
 
+        /// <summary>
+        /// When the remote device (also known by the term contact), sends data to this device, this function is called as if it were an event, and the received data is then passed to the appropriate part of the software for processing
+        /// </summary>
+        /// <param name="message">The data package received</param>
         private void OnContactEvent(Message message)
         {
             if (message.Type == MessageFormat.MessageType.SubApplicationCommandWithParameters || message.Type == MessageFormat.MessageType.SubApplicationCommandWithData)
@@ -688,7 +737,7 @@ namespace CloudBox
                 if (appId == CloudAppId) // The server application that communicates with smartphones
                 {
                     var answareToCommand = (Communication.Command)command;
-                    Communication.OnCommand(message.Contact, answareToCommand, parameters);
+                    Communication.OnCommand(message.AuthorId, answareToCommand, parameters);
                 }
                 else if (appId == Sync.AppId) // The client application that runs on desktop computers
                 {

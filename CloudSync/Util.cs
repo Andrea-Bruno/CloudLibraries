@@ -8,6 +8,7 @@ using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -187,7 +188,7 @@ namespace CloudSync
         /// <returns>Pin in text format</returns>
         public static string GetPin(SecureStorage.Storage secureStorage)
         {
-            return secureStorage.Values.Get("pin", null);            
+            return secureStorage.Values.Get("pin", null);
         }
 
         /// <summary>
@@ -611,8 +612,7 @@ namespace CloudSync
                 var total = hashTable.Count();
                 foreach (var item in hashTable)
                 {
-                    if (toAdd != null)
-                        toAdd.Add(item.Key, item.Value);
+                    toAdd?.Add(item.Key, item.Value);
                     hash1 ^= item.Key;
                     hash2 ^= item.Value.UnixLastWriteTimestamp();
                     if (1 % BlockFileSize == 0 || n == total)
@@ -709,10 +709,27 @@ namespace CloudSync
             lastHashMatch = null;
             index = -1;
             var p = 0;
+            ulong h1, h2;
             while (p < hashBlocksRemote.Length && p < hashBlocksLocal.Length)
             {
-                var h1 = BitConverter.ToUInt64(hashBlocksRemote, p);
-                var h2 = BitConverter.ToUInt64(hashBlocksLocal, p);
+                try
+                {
+                    h1 = BitConverter.ToUInt64(hashBlocksRemote, p);
+                }
+                catch (Exception ex)
+                {
+                    throw new Exception("Wrong hashBlocksRemote: Length=" + hashBlocksRemote.Length + " p=" + p, ex);                   
+                }
+
+                try
+                {
+                    h2 = BitConverter.ToUInt64(hashBlocksLocal, p);
+                }
+                catch (Exception ex)
+                {
+                    throw new Exception("Wrong hashBlocksLocal: Length=" + hashBlocksLocal.Length + " p=" + p, ex);
+                }
+
                 if (h1 == h2)
                 {
                     lastHashMatch = h1;
@@ -790,13 +807,7 @@ namespace CloudSync
                 {
                     try
                     {
-                        fileInfo.Delete();
-                        fileInfo.Refresh();
-                        while (fileInfo.Exists)
-                        {
-                            Thread.Sleep(100);
-                            fileInfo.Refresh();
-                        }
+                        DeleteFile(fileInfo);
                         return true;
                     }
                     catch (IOException ex)
@@ -807,6 +818,18 @@ namespace CloudSync
                 }
             }
             return false;
+        }
+        private static void DeleteFile(FileInfo fileInfo)
+        {
+            if (fileInfo.Attributes != FileAttributes.Normal)
+                fileInfo.Attributes = FileAttributes.Normal;
+            fileInfo.Delete();
+            fileInfo.Refresh();
+            while (fileInfo.Exists)
+            {
+                Thread.Sleep(100);
+                fileInfo.Refresh();
+            }
         }
 
         /// <summary>

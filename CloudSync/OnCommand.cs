@@ -83,7 +83,7 @@ namespace CloudSync
                         if (notice == Notice.Synchronized)
                             RaiseOnStatusChangesEvent(SynchronizationStatus.Synchronized);
                         if (OnNotification != null)
-                            new Thread(() => OnNotification?.Invoke(fromUserId, notice)).Start();
+                            Notify(fromUserId, notice);
                     }
                     else if (command == Commands.SendHashStructure)
                     {

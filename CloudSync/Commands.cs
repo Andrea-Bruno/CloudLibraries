@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading;
 using static CloudSync.Util;
 
 namespace CloudSync
@@ -37,13 +38,19 @@ namespace CloudSync
 
         public enum Notice : byte
         {
+            Authentication,
             LoginSuccessful,
             /// <summary>
             /// Wrong pin
             /// </summary>
             LoginError,
             Synchronized,
+            LoggedOut,
 
+        }
+        private void Notify(ulong? fromUserId, Notice notice)
+        {
+            new Thread(() => OnNotification?.Invoke(fromUserId, notice)).Start();
         }
 
         private void Notification(ulong? toUserId, Notice notice)

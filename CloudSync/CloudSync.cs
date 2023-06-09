@@ -59,16 +59,21 @@ namespace CloudSync
                     var pin = GetPin(secureStorage);
                     if (pin == null)
                     {
-
+#if DEBUG
+                        pin = "777777"; // To facilitate testing, in debug mode the pin will always be this: So use debug mode only for software development and testing!
+#else
                         Random rnd = new Random();
-                        int pinInt = rnd.Next(100000, 1000000);
-                        pin = pinInt.ToString(); // the default pin is the 6 random digits
+                        int pinInt = rnd.Next(0, 1000000);
+                        pin =  "000000" + pinInt.ToString(); // the default pin is the 6 random digits
+                        pin = pin.Substring(pin.Length - 6);
+#endif                        
                         SetPin(secureStorage, null, pin);
                     }
                     SetSyncTimeBuffer();
                 }
                 else
                 {
+                    Notify(null, Notice.Authentication);
                     if (IsLogged)
                         StartSyncClient(); // It's already logged in, so start syncing immediately
                     else
@@ -81,6 +86,8 @@ namespace CloudSync
 
         public void Dispose()
         {
+            RaiseOnStatusChangesEvent(SynchronizationStatus.Undefined);
+            Notify(null, Notice.LoggedOut);
             SecureStorage.Values.Delete("Logged", typeof(bool));
             if (SyncTimeBuffer != null)
             {
