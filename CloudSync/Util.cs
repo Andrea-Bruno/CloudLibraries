@@ -10,6 +10,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -718,7 +719,7 @@ namespace CloudSync
                 }
                 catch (Exception ex)
                 {
-                    throw new Exception("Wrong hashBlocksRemote: Length=" + hashBlocksRemote.Length + " p=" + p, ex);                   
+                    throw new Exception("Wrong hashBlocksRemote: Length=" + hashBlocksRemote.Length + " p=" + p, ex);
                 }
 
                 try
@@ -744,6 +745,31 @@ namespace CloudSync
         }
 
         /// <summary>
+        /// Check if the disk is close to being full and return true if it is within the limits, it can also generate an appropriate error if set by parameters.
+        /// </summary>
+        /// <param name="path">A path pointing to a disk location to test or a drive</param>
+        /// <param name="throwError">If true then an error will be generated if the limit is exceeded</param>
+        /// <param name="preserveSize">Space limit to preserve, default is one gigabyte. If the free space is less then it will return false, or generate an error if set by parameter throwError. If this value is less than MinimumPreserveDiskSize, then MinimumPreserveDiskSize will still be treated as the value.</param>
+        /// <returns>True if space is not running low</returns>
+        /// <exception cref="Exception">If set by parameter, an exception can be generated if the space is close to running out</exception>
+        public static bool PreserveDriveSpace(string path, bool throwError = false, long preserveSize = MinimumPreserveDiskSize)
+        {
+            if (preserveSize < MinimumPreserveDiskSize)
+                preserveSize = MinimumPreserveDiskSize;
+            var fileInfo = new FileInfo(path);
+            string drive = Path.GetPathRoot(fileInfo.FullName);
+            var driveInfo = new DriveInfo(drive);
+            var ok = driveInfo.AvailableFreeSpace > preserveSize;
+            return throwError && !ok ? throw DriveFullException : ok;
+        }
+        /// <summary>
+        /// The disk should never be filled completely to avoid blocking the operating system and disk operations. This is the minimum space you want to keep on the disk.
+        /// </summary>
+        private const long MinimumPreserveDiskSize = 1000000000;
+
+        public static Exception DriveFullException { get { return new Exception("Disk full beyond the allowed limit"); } }
+
+        /// <summary>
         /// Write binary data in append to a file, retrying if the file is busy with other processes.
         /// </summary>
         /// <param name="fileName">File name</param>
@@ -756,6 +782,11 @@ namespace CloudSync
         /// <returns>True for successful</returns>
         public static bool FileAppend(string fileName, byte[] data, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50, int chunkSize = 0, uint chunkNumber = 0)
         {
+            if (!PreserveDriveSpace(fileName))
+            {
+                exception = DriveFullException;
+                return false;
+            }
             exception = null;
             for (int numTries = 0; numTries < attempts; numTries++)
             {
@@ -792,7 +823,7 @@ namespace CloudSync
         /// <summary>
         /// Delete a file and retrying if the file is busy with other processes.
         /// </summary>
-        /// <param name="fileName"></param>
+        /// <param name="fileName">The fully qualified name of the file</param>
         /// <param name="exception">Returns any errors encountered in performing the operation</param>
         /// <param name="attempts">number of attemps</param>
         /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in millisenconds)</param>
@@ -835,7 +866,7 @@ namespace CloudSync
         /// <summary>
         /// Delete a directory and retrying if any error occur.
         /// </summary>
-        /// <param name="directoryName"></param>
+        /// <param name="directoryName">The fully qualified name of the directory</param>
         /// <param name="exception">Returns any errors encountered in performing the operation</param>
         /// <param name="attempts">number of attemps</param>
         /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in millisenconds)</param>
@@ -879,13 +910,18 @@ namespace CloudSync
         /// <summary>
         /// Create a directory and retrying if any error occur.
         /// </summary>
-        /// <param name="directoryName"></param>
+        /// <param name="directoryName">The fully qualified name of the directory</param>
         /// <param name="exception">Returns any errors encountered in performing the operation</param>
         /// <param name="attempts">number of attemps</param>
         /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in millisenconds)</param>
         /// <returns>True for successful</returns>
         public static bool DirectoryCreate(string directoryName, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
         {
+            if (!PreserveDriveSpace(directoryName))
+            {
+                exception = DriveFullException;
+                return false;
+            }
             exception = null;
             for (int numTries = 0; numTries < attempts; numTries++)
             {
@@ -915,6 +951,11 @@ namespace CloudSync
         /// <returns>True for successful</returns>
         public static bool FileMove(string source, string target, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
         {
+            if (!PreserveDriveSpace(target))
+            {
+                exception = DriveFullException;
+                return false;
+            }
             exception = null;
             if (File.Exists(source))
             {
@@ -946,6 +987,11 @@ namespace CloudSync
         /// <returns>True for successful</returns>
         public static bool FileCopy(string source, string target, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
         {
+            if (!PreserveDriveSpace(target))
+            {
+                exception = DriveFullException;
+                return false;
+            }
             exception = null;
             if (File.Exists(source))
             {

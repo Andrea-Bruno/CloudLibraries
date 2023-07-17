@@ -82,6 +82,14 @@ namespace CloudSync
                         }
                         if (notice == Notice.Synchronized)
                             RaiseOnStatusChangesEvent(SynchronizationStatus.Synchronized);
+                        else if (notice == Notice.FullSpace)
+                        {
+                            Spooler.RemoteDriveOverLimit = true;
+                        }
+                        else if (notice == Notice.FullSpaceOff)
+                        {
+                            Spooler.RemoteDriveOverLimit = false;
+                        }
                         if (OnNotification != null)
                             Notify(fromUserId, notice);
                     }
@@ -169,7 +177,7 @@ namespace CloudSync
                         }
                     }
                     else if (command == Commands.SendHashRoot) // NOTE: if command does not arrive check that the cloud is mounted!
-                    {                       
+                    {
                         if (GetHasRoot(out var hashRoot))
                         {
                             var localHash = BitConverter.ToUInt64(hashRoot, 0);
@@ -208,7 +216,16 @@ namespace CloudSync
                         var tmpFile = GetTmpFile(this, fromUserId, hashFileName);
                         var crcId = (ulong)fromUserId ^ hashFileName;
                         Debug.WriteLine("IN #" + part + "/" + total);
-
+                        var maxFileSize = total * data.Length;
+                        // If the disk is about to be full notify the sender, and finish the operation.
+                        lock (FlagsDriveOverLimit)
+                            if (!PreserveDriveSpace(CloudRoot, preserveSize: maxFileSize))
+                            {
+                                if (!FlagsDriveOverLimit.Contains(fromUserId))
+                                    FlagsDriveOverLimit.Add(fromUserId);
+                                Notification(fromUserId, Notice.FullSpace);
+                                return;
+                            }
                         lock (CrcTable)
                         {
                             if (part == 1)
@@ -296,12 +313,31 @@ namespace CloudSync
                                     if (exception != null)
                                         RaiseOnFileError(exception, fileInfo.FullName);
                                     hashDirTable.Remove(hash);
+                                    lock (FlagsDriveOverLimit)
+                                        if (FlagsDriveOverLimit.Contains(fromUserId))
+                                        {
+                                            if (PreserveDriveSpace(CloudRoot))
+                                            {
+                                                FlagsDriveOverLimit.Remove(fromUserId);
+                                                Notification(fromUserId, Notice.FullSpaceOff);
+                                                return;
+                                            }
+                                        }
                                 }
                             }
                         }
                     }
                     else if (command == Commands.CreateDirectory)
                     {
+                        // If the disk is about to be full notify the sender, and finish the operation.
+                        lock (FlagsDriveOverLimit)
+                            if (!PreserveDriveSpace(CloudRoot))
+                            {
+                                if (!FlagsDriveOverLimit.Contains(fromUserId))
+                                    FlagsDriveOverLimit.Add(fromUserId);
+                                Notification(fromUserId, Notice.FullSpace);
+                                return;
+                            }
                         var fullDirectoryName = FullName(values[0]);
                         DirectoryCreate(fullDirectoryName, out Exception exception);
                         if (exception != null)
@@ -329,6 +365,11 @@ namespace CloudSync
                 }
             }
         }
+        /// <summary>
+        /// Flags that indicates that the disk over limit has been notified to the remote device
+        /// </summary>
+        public List<ulong?> FlagsDriveOverLimit = new List<ulong?>();
+
         public uint TotalFilesReceived;
         public uint TotalBytesReceived;
         public readonly ProgressFileTransfer ReceptionInProgress;

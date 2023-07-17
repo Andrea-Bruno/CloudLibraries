@@ -46,7 +46,14 @@ namespace CloudSync
             LoginError,
             Synchronized,
             LoggedOut,
-
+            /// <summary>
+            /// Warns the device is full and that no more write operations are allowed
+            /// </summary>
+            FullSpace,
+            /// <summary>
+            /// Warns that the device is no longer full, write operations are enabled again
+            /// </summary>
+            FullSpaceOff,
         }
         private void Notify(ulong? fromUserId, Notice notice)
         {
@@ -151,6 +158,8 @@ namespace CloudSync
                 return;
             try
             {
+                if (Spooler.RemoteDriveOverLimit)
+                    return; // The remote disk is full, do not send any more data
                 if (fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory))
                 {
                     CreateDirectory(toUserId, fileSystemInfo);
@@ -236,6 +245,8 @@ namespace CloudSync
 
         private void CreateDirectory(ulong? toUserId, FileSystemInfo fileSystemInfo)
         {
+            if (Spooler.RemoteDriveOverLimit)
+                return; // The remote disk is full, do not send any more data
             ExecuteCommand(toUserId, Commands.CreateDirectory, new[] { fileSystemInfo.ClaudRelativeUnixFullName(this).GetBytes() });
         }
 

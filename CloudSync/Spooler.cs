@@ -1,8 +1,12 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 
 namespace CloudSync
 {
+    /// <summary>
+    /// Queue for the operations that the client wants to do on the server
+    /// </summary>
     internal class Spooler
     {
         public Spooler(Sync context)
@@ -24,7 +28,10 @@ namespace CloudSync
                 var duplicate = ToDoOperations.Find(x => x.UserId == userId && x.HashFile == hashFile);
                 if (duplicate != null)
                     ToDoOperations.Remove(duplicate);
-                ToDoOperations.Add(new Operation { Type = type, UserId = userId, HashFile = hashFile });
+                if (!RemoteDriveOverLimit || type != OperationType.Send) // Do not add send operations if the remote disk is full
+                {
+                    ToDoOperations.Add(new Operation { Type = type, UserId = userId, HashFile = hashFile });
+                }
                 Context.RaiseOnStatusChangesEvent();
             }
             ExecuteNext();
@@ -100,5 +107,28 @@ namespace CloudSync
                 }
             }
         }
+        /// <summary>
+        /// Memorize that the remote server device has a full disk and is no longer available to receive data
+        /// </summary>
+        public bool RemoteDriveOverLimit
+        {
+            get { return _RemoteDriveOverLimit; }
+            set
+            {
+                _RemoteDriveOverLimit = value;
+                if (value) // If the remote disk is full then remove the data send operations from the queue
+                {
+                    lock (ToDoOperations)
+                    {
+                        ToDoOperations.ToList().ForEach(toDo =>
+                        {
+                            if (toDo.Type == OperationType.Send)
+                                ToDoOperations.Remove(toDo);
+                        });
+                    }
+                }
+            }
+        }
+        private bool _RemoteDriveOverLimit;
     }
 }
