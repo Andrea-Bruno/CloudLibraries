@@ -64,7 +64,7 @@ namespace CloudSync
                     if (item.UserId == notifyToUserId)
                         return;
                 }
-                Context.StatusNotification(notifyToUserId, false);
+                Context.StatusNotification(notifyToUserId, Sync.Status.Ready);
             }
         }
         public static int MaxConcurrentOperations = 3;

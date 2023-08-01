@@ -263,7 +263,7 @@ namespace CloudSync
             return dateTime;
         }
 
-        public static string ClaudRelativeUnixFullName(this FileSystemInfo fileSystemInfo, Sync cloudSync)
+        public static string CloudRelativeUnixFullName(this FileSystemInfo fileSystemInfo, Sync cloudSync)
         {
             var name = fileSystemInfo.FullName.Substring(cloudSync.CloudRoot.Length);
             name = name.Replace('\\', '/');
@@ -279,7 +279,7 @@ namespace CloudSync
         /// <returns></returns>
         public static ulong HashFileName(this FileSystemInfo fileSystemInfo, Sync cloudSync)
         {
-            var relativeName = ClaudRelativeUnixFullName(fileSystemInfo, cloudSync);
+            var relativeName = CloudRelativeUnixFullName(fileSystemInfo, cloudSync);
             return HashFileName(relativeName, fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory));
         }
 

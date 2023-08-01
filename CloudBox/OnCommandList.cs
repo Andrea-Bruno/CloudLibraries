@@ -28,21 +28,22 @@ namespace CloudBox
         /// <summary>
         /// Add an item to the list
         /// </summary>
-        /// <param name="command"></param>
-        /// <param name="userId"></param>
-        /// <param name="isOutput"></param>
-        public void AddOnCommand(Sync.Commands command, ulong? userId, bool isOutput)
+        /// <param name="userId">Id of sende user</param>
+        /// <param name="command">Command</param>
+        /// <param name="infoData">Information about data</param>
+        /// <param name="isOutput">True if is a command output, false if is command in input</param>
+        public void AddOnCommand(ulong? userId, Sync.Commands command, string infoData, bool isOutput)
         {
             lock (this)
             {
-                var OnCommand = new OnCommand(command, userId, isOutput);
+                var OnCommand = new OnCommand(userId, command, infoData, isOutput);
                 Insert(0, OnCommand);
                 if (Count > PreservedElement)
                 {
                     RemoveAt(Count - 1);
                 }
             }
-            OnCommandEvent?.Invoke(command, userId, isOutput);
+            OnCommandEvent?.Invoke(userId, command, infoData, isOutput);
         }
     }
     /// <summary>
@@ -53,19 +54,17 @@ namespace CloudBox
         /// <summary>
         /// Initializer
         /// </summary>
-        /// <param name="command">Command</param>
         /// <param name="userId">Id of sende user</param>
+        /// <param name="command">Command</param>
+        /// <param name="infoData">Information about data</param>
         /// <param name="isOutput">True if is a command output, false if is command in input</param>
-        public OnCommand(Sync.Commands command, ulong? userId, bool isOutput)
+        public OnCommand(ulong? userId, Sync.Commands command, string infoData, bool isOutput)
         {
-            Command = command;
             UserId = userId;
-            IsOutput = isOutput;
+            Command = command;
+            InfoData = infoData;
+            IsOutput = isOutput;            
         }
-        /// <summary>
-        /// Command
-        /// </summary>
-        public readonly Sync.Commands Command;
         /// <summary>
         /// Date and time of command execution
         /// </summary>
@@ -74,6 +73,14 @@ namespace CloudBox
         /// Id of sender user
         /// </summary>
         public readonly ulong? UserId;
+        /// <summary>
+        /// Command
+        /// </summary>
+        public readonly Sync.Commands Command;
+        /// <summary>
+        /// Information about data
+        /// </summary>
+        public readonly string InfoData;
         /// <summary>
         /// True if is a command output, false if is command in input
         /// </summary>

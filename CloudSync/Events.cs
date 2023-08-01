@@ -78,13 +78,13 @@ namespace CloudSync
         // ===============================================================================
 
 
-        public delegate void OnCommandEventHandler(Commands command, ulong? userId, bool InOutput);
+        public delegate void OnCommandEventHandler(ulong? userId, Commands command, string infoData, bool isOutput);
         public event OnCommandEventHandler OnCommandEvent;
 
-        internal void RaiseOnCommandEvent(Commands command, ulong? userId, bool IsOutput = false)
+        internal void RaiseOnCommandEvent(ulong? userId, Commands command, string infoData = null, bool isOutput = false)
         {
             if (OnCommandEvent != null)
-                new Thread(() => OnCommandEvent?.Invoke(command, userId, IsOutput)).Start();           
+                new Thread(() => OnCommandEvent?.Invoke(userId, command, infoData, isOutput)).Start();           
         }
 
 

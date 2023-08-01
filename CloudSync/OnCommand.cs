@@ -16,14 +16,14 @@ namespace CloudSync
         internal void OnCommand(ulong? fromUserId, ushort command, params byte[][] values)
         {
             OnCommandRunning++;
-            OnCommand(fromUserId, (Commands)command, values);
+            OnCommand(fromUserId, (Commands)command, out string infoData, values);
+            RaiseOnCommandEvent(fromUserId, (Commands)command, infoData);
             OnCommandRunning--;
         }
         public DateTime LastCommunicationReceived { get; private set; }
-        private void OnCommand(ulong? fromUserId, Commands command, params byte[][] values)
+        private void OnCommand(ulong? fromUserId, Commands command, out string infoData, params byte[][] values)
         {
             LastCommunicationReceived = DateTime.UtcNow;
-            RaiseOnCommandEvent(command, fromUserId);
             Debug.WriteLine("IN " + command);
             if (command == Commands.RequestOfAuthentication)
             {
@@ -72,6 +72,7 @@ namespace CloudSync
                     if (command == Commands.Notification)
                     {
                         var notice = (Notice)values[0][0];
+                        infoData = notice.ToString();
                         if (!IsServer)
                         {
                             if (notice == Notice.LoginSuccessful)
@@ -200,10 +201,15 @@ namespace CloudSync
                         if (HashFileTable(out var hashDirTable))
                         {
                             var hash = BitConverter.ToUInt64(values[0], 0);
+                            var chunkPart = BitConverter.ToUInt32(values[1], 0);
+                            infoData = "#" + chunkPart + " " + hash;
                             if (hashDirTable.TryGetValue(hash, out var fileSystemInfo))
                             {
-                                var chunkPart = BitConverter.ToUInt32(values[1], 0);
                                 SendChunkFile(fromUserId, fileSystemInfo, chunkPart);
+                            }
+                            else
+                            {
+                                infoData += " not found";
                             }
                         }
                     }
@@ -215,6 +221,7 @@ namespace CloudSync
                         var data = values[3];
                         var tmpFile = GetTmpFile(this, fromUserId, hashFileName);
                         var crcId = (ulong)fromUserId ^ hashFileName;
+                        infoData = "#" + part + "/" + total + " " + hashFileName;
                         Debug.WriteLine("IN #" + part + "/" + total);
                         var maxFileSize = total * data.Length;
                         // If the disk is about to be full notify the sender, and finish the operation.
@@ -302,6 +309,7 @@ namespace CloudSync
                     else if (command == Commands.DeleteFile)
                     {
                         var hash = values[0].ToUint64();
+                        infoData = hash.ToString();
                         var timestamp = values[1].ToUint32();
                         if (HashFileTable(out var hashDirTable))
                         {
@@ -330,6 +338,8 @@ namespace CloudSync
                     else if (command == Commands.CreateDirectory)
                     {
                         // If the disk is about to be full notify the sender, and finish the operation.
+                        var fullDirectoryName = FullName(values[0]);
+                        infoData = fullDirectoryName;
                         lock (FlagsDriveOverLimit)
                             if (!PreserveDriveSpace(CloudRoot))
                             {
@@ -338,25 +348,25 @@ namespace CloudSync
                                 Notification(fromUserId, Notice.FullSpace);
                                 return;
                             }
-                        var fullDirectoryName = FullName(values[0]);
                         DirectoryCreate(fullDirectoryName, out Exception exception);
                         if (exception != null)
                             RaiseOnFileError(exception, fullDirectoryName);
                         var hash = HashFileName(values[0].ToText(), true);
                         ReceptionInProgress.Completed(hash);
-                        StatusNotification(fromUserId, false);
+                        StatusNotification(fromUserId, Status.Ready);
                     }
                     else if (command == Commands.DeleteDirectory)
                     {
                         var fullDirectoryName = FullName(values[0]);
+                        infoData = fullDirectoryName;
                         DirectoryDelete(fullDirectoryName, out Exception exception);
                         if (exception != null)
                             RaiseOnFileError(exception, fullDirectoryName);
                     }
                     else if (command == Commands.StatusNotification)
                     {
-                        var busy = values[0][0] == 1;
-                        if (!IsServer && busy == false)
+                        var status = (Status)values[0][0];
+                        if (!IsServer && status == Status.Ready)
                         {
                             Spooler.ExecuteNext(fromUserId);
                             //StartSynchronization(null, null);
@@ -364,6 +374,7 @@ namespace CloudSync
                     }
                 }
             }
+            infoData = null;
         }
         /// <summary>
         /// Flags that indicates that the disk over limit has been notified to the remote device

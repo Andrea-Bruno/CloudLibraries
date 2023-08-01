@@ -77,10 +77,14 @@ namespace CloudBox
             return json;
         }
 
-        private void OnRouterConnectionChange(bool connectivity)
+        /// <summary>
+        /// Function that is called when the connection changes (connected or disconnected)
+        /// </summary>
+        /// <param name="isConnected">Notify the new connection status</param>
+        virtual protected void OnRouterConnectionChange(bool isConnected)
         {
             if (Sync == null)
-                if (connectivity)
+                if (isConnected)
                 {
                     ConnectToServer();
                 }
@@ -198,10 +202,9 @@ namespace CloudBox
         /// Generate the context, i.e. initialize the environment for encrypted socket communication between devices
         /// </summary>
         /// <param name="routerEntryPoint">IP or domain name or QR code of the router used for the connection</param>
-        /// <param name="onRouterConnectionChange">Function that acts as an event and will be called when the connection was successful and the client is logged into the router (return true), or when the connection with the router is lost (return false). You can set this action as an event.</param>
         /// <param name="passphrase">If you want to recover the account, you can specify the passphrase</param>
         /// <returns>True for Successful, or false if something went wrong</returns>  
-        public bool CreateContext(string routerEntryPoint, Action<bool> onRouterConnectionChange = null, string passphrase = null)
+        public bool CreateContext(string routerEntryPoint, string passphrase = null)
         {
             var isQRcode = !routerEntryPoint.Contains('.');
             string serverPublicKey = null;
@@ -214,8 +217,8 @@ namespace CloudBox
             File.WriteAllText(FileLastEntryPoint, routerEntryPoint);
             if (Context != null)
                 Debugger.Break();
-            if (onRouterConnectionChange == null)
-                onRouterConnectionChange = OnRouterConnectionChange;
+            //if (onRouterConnectionChange == null)
+            //    onRouterConnectionChange = OnRouterConnectionChange;
 #if DEBUG || DEBUG_AND
             if (Instances.Count == 0)
                 passphrase = IsServer ? TestServerPassphrase : TestClientPassphrase;
@@ -224,7 +227,7 @@ namespace CloudBox
             var signLicense = string.IsNullOrEmpty(LicenseOEM) ? null : new OEM(LicenseOEM);
             Context = new Context(routerEntryPoint, NetworkName, modality: Modality.Server, privateKeyOrPassphrase: passphrase, licenseActivator: signLicense, instanceId: ID.ToString())
             {
-                OnRouterConnectionChange = onRouterConnectionChange,
+                OnRouterConnectionChange = OnRouterConnectionChange,
                 OnCommunicationErrorEvent = OnCommunicationError
             };
             if (serverPublicKey != null)
@@ -433,7 +436,7 @@ namespace CloudBox
                 OnSyncStatusChangesAction?.Invoke(syncStatus, pendingFiles);
             };
             Sync.OnFileTransfer += fileTransfer => TransferredFiles.UpdateList(fileTransfer);
-            Sync.OnCommandEvent += (command, userId, isOutput) => OnCommands.AddOnCommand(command, userId, isOutput);
+            Sync.OnCommandEvent += (userId, command, infoData, isOutput) => OnCommands.AddOnCommand(userId, command, infoData, isOutput);
             Sync.OnFileError += (error, fileName) => AddFileError(error.Message, fileName);
             Sync.OnAntivirus += (message, fileName) => AddAntivirusWarning(message, fileName);
         }
@@ -538,7 +541,10 @@ namespace CloudBox
             if (CommunicationErrorLog.Count > 10)
                 CommunicationErrorLog.RemoveAt(CommunicationErrorLog.Count - 1);
         }
-
+        /// <summary>
+        /// Indicates the current status of the connection to the router. If false then the router is not connected, check the internet network, the connection of the cables to the network, etc..
+        /// </summary>
+        public bool IsConnected => Context != null && Context.IsConnected;
         private readonly string LicenseOEM;
         private const string TestNetDefaultlicenseOEM = "3z66WQrrQnlksDQEcqt7qxABMVBgqexgH/PuY8EmIT4="; // The license activation key on TestNet (for testing)
         /// <summary>
@@ -569,6 +575,7 @@ namespace CloudBox
                     AddTx("WARNING!", "compiled in debug mode");
 #endif
                 }
+                AddTx("Connected to the router", Context?.IsConnected);
                 if (Context != null)
                 {
                     if (Context.InstancedTimeUtc != default)
@@ -577,7 +584,6 @@ namespace CloudBox
                     AddTx("Pubblic Key", Context?.My.GetPublicKey());
                     if (ShowEntryPoint)
                         AddTx("Entry point (router address)", Context?.EntryPoint.ToString());
-                    AddTx("Connected to the router", Context?.IsConnected);
                     AddTx("Keep Alive Failures", Context?.KeepAliveFailures);
                 }
                 AddTx("OEM Id", OEM.GetIdOEM(LicenseOEM));
@@ -638,7 +644,7 @@ namespace CloudBox
         /// <summary>
         /// Unmount corrent instance
         /// </summary>
-        public void Remove()
+        public virtual void Remove()
         {
             Instances.Remove(this);
             Context.Dispose();
@@ -647,7 +653,7 @@ namespace CloudBox
         /// <summary>
         /// Dismount the instance and destroy all data within it. Since it is a dangerous operation this function requires the pin
         /// </summary>
-        public void Destroy()
+        public virtual void Destroy()
         {
             var dir = CloudPath;
             Remove();

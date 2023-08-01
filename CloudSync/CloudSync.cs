@@ -231,10 +231,10 @@ namespace CloudSync
         public bool IsTransferring() { return ConcurrentOperations() > 0; }
         public static readonly ushort AppId = BitConverter.ToUInt16(Encoding.ASCII.GetBytes("sync"), 0);
         public delegate void SendCommand(ulong? contactId, ushort command, params byte[][] values);
-        private void ExecuteCommand(ulong? contactId, Commands command, params byte[][] values)
+        private void ExecuteCommand(ulong? contactId, Commands command, string infoData, params byte[][] values)
         {
             Debug.WriteLine("OUT " + command);
-            RaiseOnCommandEvent(command, contactId, true);
+            RaiseOnCommandEvent(contactId, command, infoData, true);
             Execute.Invoke(contactId, (ushort)command, values);
         }
 
@@ -373,9 +373,9 @@ namespace CloudSync
                                     else
                                     {
                                         if (IsServer)
-                                            RoleManager.ClientsConnected().ForEach(client => DeleteFile(client.Id, item.Key, item.Value.UnixLastWriteTimestamp()));
+                                            RoleManager.ClientsConnected().ForEach(client => DeleteFile(client.Id, item.Key, item.Value));
                                         else
-                                            DeleteFile(null, item.Key, item.Value.UnixLastWriteTimestamp());
+                                            DeleteFile(null, item.Key, item.Value);
                                     }
                                 }
                             }
