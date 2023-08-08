@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using static CloudSync.Util;
 
@@ -39,7 +38,7 @@ namespace CloudSync
         {
 #if DEBUG
             if (!Sync.IsServer)
-                Debugger.Break();
+                System.Diagnostics.Debugger.Break();
 #endif 
             if (clientPubKey != null && id == null)
                 id = PublicKeyToUserId(clientPubKey);

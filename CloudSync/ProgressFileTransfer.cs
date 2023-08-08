@@ -46,11 +46,6 @@ namespace CloudSync
                 {
                     TimeoutChunkFileToTransfer.Remove(hashFileName);
                 }
-                else
-                {
-                    if (!Context.IsServer)
-                        Debugger.Break();
-                }
             if (executeNext)
                 Context.Spooler.ExecuteNext(userId);
         }
@@ -63,7 +58,11 @@ namespace CloudSync
         {
             var timeout = Util.DataTransferTimeOut(chunkLength).Add(TimeSpan.FromMilliseconds(Context.HashFileTableElapsedMs));
             lock (TimeoutChunkFileToTransfer)
-                TimeoutChunkFileToTransfer[hashFileName] = DateTime.UtcNow.Add(timeout);
+            {
+                if (TimeoutChunkFileToTransfer.ContainsKey(hashFileName))
+                    TimeoutChunkFileToTransfer.Remove(hashFileName);
+                TimeoutChunkFileToTransfer.Add(hashFileName, DateTime.UtcNow.Add(timeout));
+            }
             var TimerReference = new TimerReference();
             var timer = new Timer(obj => { Timers.Remove(((TimerReference)obj).Timer); RemoveOverTimeout(); }, TimerReference, (int)timeout.TotalMilliseconds + 1000, Timeout.Infinite);
             TimerReference.Timer = timer;

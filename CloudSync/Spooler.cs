@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 
 namespace CloudSync
@@ -19,7 +18,7 @@ namespace CloudSync
         {
 #if DEBUG_AND || DEBUG
             if (Context.IsServer)
-                Debugger.Break(); // the operations must be given by the client, it is preferable that the server works in slave mode
+                System.Diagnostics.Debugger.Break(); // the operations must be given by the client, it is preferable that the server works in slave mode
 
 #endif
             //Context.ClientFileMonitoring?.Stop();

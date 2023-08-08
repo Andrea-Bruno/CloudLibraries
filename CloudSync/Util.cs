@@ -1,20 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Net;
-using System.Net.NetworkInformation;
 using System.Net.Sockets;
-using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.ComTypes;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
-using System.Web;
 using HashFileTable = System.Collections.Generic.Dictionary<ulong, System.IO.FileSystemInfo>;
 
 namespace CloudSync
@@ -306,25 +299,18 @@ namespace CloudSync
             return ULongHash(startValue, bytes);
         }
 
+        private static readonly SHA256 Sha256 = SHA256.Create();
         public static ulong ULongHash(ulong startValue, byte[] bytes)
         {
             var add = BitConverter.GetBytes((ulong)bytes.Length ^ startValue);
             var concat = new byte[add.Length + bytes.Length];
             Buffer.BlockCopy(bytes, 0, concat, 0, bytes.Length);
             Buffer.BlockCopy(add, 0, concat, bytes.Length, add.Length);
-            //var hash = Sha256Hash.ComputeHash(concat);
-            var hash = SHA256.Create().ComputeHash(concat);
-            return BitConverter.ToUInt64(hash, 0);
-            //var bl = (ulong)bytes.Length;
-            //Array.Resize(ref bytes, (int)Math.Ceiling(bytes.Length / 8d) * 8);
-            //startValue += bl;
-            //for (var i = 0; i < bytes.Length; i += 8)
-            //{
-            //    var v = BitConverter.ToUInt64(bytes, i);
-            //    startValue += v; // prevents zero value of startValue
-            //    startValue *= (v + (ulong)i);
-            //}
-            //return startValue;
+            lock (Sha256) // ComputeHash in one case has generate StackOverFlow error, i try to fyx by lock te instance
+            {
+                var hash = Sha256.ComputeHash(concat);
+                return BitConverter.ToUInt64(hash, 0);
+            }
         }
 
         public static byte[] GetBytes(this string text)
@@ -551,9 +537,9 @@ namespace CloudSync
                 BetweenReverseHasBlockIndex = betweenReverseHasBlockIndex;
 #if (DEBUG)
                 if (BetweenHasBlock == null && BetweenHasBlockIndex != -1)
-                    Debugger.Break(); // wrong !
+                    System.Diagnostics.Debugger.Break(); // wrong !
                 if (BetweenReverseHasBlock == null && BetweenReverseHasBlockIndex != -1)
-                    Debugger.Break(); // wrong !
+                    System.Diagnostics.Debugger.Break(); // wrong !
 #endif                      
             }
 
@@ -565,9 +551,9 @@ namespace CloudSync
                 BetweenReverseHasBlockIndex = BitConverter.ToInt32(betweenReverseHasBlockPIndex, 0);
 #if (DEBUG)
                 if (BetweenHasBlock == null && BetweenHasBlockIndex != -1)
-                    Debugger.Break(); // wrong !
+                    System.Diagnostics.Debugger.Break(); // wrong !
                 if (BetweenReverseHasBlock == null && BetweenReverseHasBlockIndex != -1)
-                    Debugger.Break(); // wrong !
+                    System.Diagnostics.Debugger.Break(); // wrong !
 #endif                      
             }
             public readonly ulong? BetweenHasBlock;

@@ -23,6 +23,7 @@ namespace CloudSync
         public DateTime LastCommunicationReceived { get; private set; }
         private void OnCommand(ulong? fromUserId, Commands command, out string infoData, params byte[][] values)
         {
+            infoData = null;
             LastCommunicationReceived = DateTime.UtcNow;
             Debug.WriteLine("IN " + command);
             if (command == Commands.RequestOfAuthentication)
@@ -303,6 +304,7 @@ namespace CloudSync
                         else
                         {
                             RaiseOnFileTransfer(false, hashFileName, part, total);
+                            Thread.Sleep(5000);
                             RequestChunkFile(fromUserId, hashFileName, part + 1);
                         }
                     }
@@ -366,6 +368,7 @@ namespace CloudSync
                     else if (command == Commands.StatusNotification)
                     {
                         var status = (Status)values[0][0];
+                        infoData = status.ToString();
                         if (!IsServer && status == Status.Ready)
                         {
                             Spooler.ExecuteNext(fromUserId);
@@ -374,7 +377,6 @@ namespace CloudSync
                     }
                 }
             }
-            infoData = null;
         }
         /// <summary>
         /// Flags that indicates that the disk over limit has been notified to the remote device

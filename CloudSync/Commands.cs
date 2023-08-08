@@ -184,16 +184,9 @@ namespace CloudSync
                     {
                         crc = TmpCrc[hashFileName];
                     }
-                    //var fileLength = new FileInfo(tmpFile).Length;
-                    //uint parts = (uint)Math.Ceiling((double)fileLength / ChunkSize);
-                    //parts = parts == 0 ? 1 : parts;
 
                     var chunk = GetChunk(chunkPart, tmpFile, out var parts, out var fileLength, ref crc);
 #if DEBUG                
-                    //if (chunkPart ==  parts && chunk != null)
-                    //    Debugger.Break();
-                    //if (chunk == null && chunkPart != parts)
-                    //    Debugger.Break();
                     if (chunk == null && chunkPart != parts + 1)
                         Debugger.Break();
 #endif
@@ -222,8 +215,9 @@ namespace CloudSync
                         }
                         RaiseOnFileTransfer(true, hashFileName, chunkPart, parts, fileSystemInfo.FullName, fileLength);
                         SendingInProgress.SetTimeout(hashFileName, chunk.Length);
-                        Debug.WriteLine("IN #" + chunkPart + "/" + parts);
-                        ExecuteCommand(toUserId, Commands.SendChunkFile, chunkPart.ToString(), values.ToArray());
+                        var info = "#" + chunkPart + "/" + parts + " " + hashFileName;
+                        Debug.WriteLine("IN " + info);
+                        ExecuteCommand(toUserId, Commands.SendChunkFile, info, values.ToArray());
                     }
                 }
             }
@@ -237,10 +231,6 @@ namespace CloudSync
         public uint TotalFilesSent;
         public uint TotalBytesSent;
 
-        //private void ConfirmChunkReceipt(ulong? toUserId, uint hash, uint chunkPart)
-        //{
-        //    ExecuteCommand(toUserId, Commands.ConfirmChunkReceipt, new byte[][] { hash.GetBytes(), chunkPart.GetBytes() });
-        //}
         private void DeleteFile(ulong? toUserId, ulong hash, FileSystemInfo fileSystemInfo)
         {
             var timestamp = fileSystemInfo.UnixLastWriteTimestamp();
