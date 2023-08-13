@@ -24,26 +24,31 @@ namespace CloudSync
         /// <param name="cloudRoot">The path to the cloud root directory</param>
         /// <param name="isClient">Initialize this instance with this value set to true if the client machine is the master, if instead it is the server set this value to false to activate slave mode.</param>
         /// <param name="doNotCreateSpecialFolders">Set to true if you want to automatically create sub-folders in the cloud area to save images, photos, documents, etc..</param>
-        public Sync(SendCommand sendCommand, out SendCommand onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential isClient = null, bool doNotCreateSpecialFolders = false)
+        /// <param name="isUnmounted">Indicate true if the path to the cloud space is on an unmounted virtual disk</param>
+        public Sync(SendCommand sendCommand, out SendCommand onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential isClient = null, bool doNotCreateSpecialFolders = false, bool isUnmounted = false)
         {
+            _IsMounted = !isUnmounted;
             SecureStorage = secureStorage;
             InstanceId = InstanceCounter;
             InstanceCounter++;
             IsServer = isClient == null;
             CloudRoot = cloudRoot;
-            var createIfNotExists = SetSpecialDirectory(cloudRoot, Icos.Cloud, false) && doNotCreateSpecialFolders == false;
-            SetSpecialDirectory(cloudRoot, Icos.Documents, createIfNotExists: createIfNotExists && IsServer);
-            SetSpecialDirectory(cloudRoot, Icos.Download, createIfNotExists: createIfNotExists && IsServer);
-            SetSpecialDirectory(cloudRoot, Icos.Movies, createIfNotExists: createIfNotExists && IsServer);
-            SetSpecialDirectory(cloudRoot, Icos.Pictures, createIfNotExists: createIfNotExists && IsServer);
-            SetSpecialDirectory(cloudRoot, Icos.Photos, createIfNotExists: createIfNotExists && IsServer);
-            SetSpecialDirectory(cloudRoot, Icos.Settings, createIfNotExists: createIfNotExists && IsServer);
-            if (createIfNotExists)
-                AddDesktopShorcut(cloudRoot);
 
+            if (!isUnmounted)
+            {
+                var createIfNotExists = SetSpecialDirectory(cloudRoot, Icos.Cloud, false) && doNotCreateSpecialFolders == false;
+                SetSpecialDirectory(cloudRoot, Icos.Documents, createIfNotExists: createIfNotExists && IsServer);
+                SetSpecialDirectory(cloudRoot, Icos.Download, createIfNotExists: createIfNotExists && IsServer);
+                SetSpecialDirectory(cloudRoot, Icos.Movies, createIfNotExists: createIfNotExists && IsServer);
+                SetSpecialDirectory(cloudRoot, Icos.Pictures, createIfNotExists: createIfNotExists && IsServer);
+                SetSpecialDirectory(cloudRoot, Icos.Photos, createIfNotExists: createIfNotExists && IsServer);
+                SetSpecialDirectory(cloudRoot, Icos.Settings, createIfNotExists: createIfNotExists && IsServer);
+                if (createIfNotExists)
+                    AddDesktopShorcut(cloudRoot);
+            }
             var rootInfo = new DirectoryInfo(cloudRoot);
             if (rootInfo.Exists)
-                rootInfo.Attributes &= FileAttributes.Encrypted;
+                rootInfo.Attributes |= FileAttributes.Encrypted;
 
             Execute = sendCommand;
             onCommand = OnCommand;
@@ -79,9 +84,52 @@ namespace CloudSync
                     else
                         RequestOfAuthentication(null, isClient, PublicIpAddressInfo(), Environment.MachineName); // Start the login process
                 }
-                WatchCloudRoot(cloudRoot);
             });
             task.Start();
+        }
+
+        /// <summary>
+        /// Function that the host app must call if the disk at the root of the cloud is mounted or unmounted.
+        /// If you plan not to use a virtual disk for cloud space then this function should not be called.
+        /// </summary>
+        public void MoutedDiskStateIsChanged(bool isMounted) => IsMounted = isMounted;
+
+
+        /// <summary>
+        /// This function returns true if the specified path matches a virtual disk path that has not been mounted.
+        /// </summary>
+        internal bool IsMounted
+        {
+            get { return (bool)_IsMounted; }
+            set
+            {
+                if (_IsMounted != value)
+                {
+                    _IsMounted = value;
+                    if (!IsServer)
+                    {
+                        if (value)
+                            OnMount();           
+                        else
+                            OnUnmount();
+                    }
+                }
+            }
+        }
+        private bool? _IsMounted = null;
+
+        private void OnUnmount()
+        {
+            StopWatchCloudRoot();
+            SendingInProgress.Stop();
+            ReceptionInProgress.Stop();
+        }
+
+        private void OnMount()
+        {
+            Spooler.ExecuteNext();
+            WatchCloudRoot();
+            RequestSynchronization();
         }
 
         public void Dispose()
@@ -110,11 +158,16 @@ namespace CloudSync
         private bool IsLogged { get { return SecureStorage.Values.Get("Logged", false); } set { SecureStorage.Values.Set("Logged", value); } }
 
         private FileSystemWatcher pathWatcher;
-        private void WatchCloudRoot(string path)
+        private void WatchCloudRoot()
         {
+            if (pathWatcher != null)
+            {
+                pathWatcher.EnableRaisingEvents = true;
+                return;
+            }
             pathWatcher = new FileSystemWatcher
             {
-                Path = path,
+                Path = CloudRoot,
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.CreationTime,
                 Filter = "*.*",
                 EnableRaisingEvents = true,
@@ -122,6 +175,12 @@ namespace CloudSync
             };
             pathWatcher.Changed += (s, e) => RequestSynchronization();
             pathWatcher.Deleted += (s, e) => RequestSynchronization();
+        }
+
+        private void StopWatchCloudRoot()
+        {
+            if (pathWatcher != null)
+                pathWatcher.EnableRaisingEvents = false;
         }
 
         /// <summary>
@@ -196,6 +255,8 @@ namespace CloudSync
         /// <param name="e">Elapsed event args</param>
         private void StartSynchronization(object sender, ElapsedEventArgs e)
         {
+            if (!IsMounted)
+                return;
             if (!IsTransferring())
             {
                 if (IsServer)
@@ -356,6 +417,8 @@ namespace CloudSync
                     {
                         var watch = Stopwatch.StartNew();
                         StartAnalyzeDirectory(CloudRoot, out var newHashFileTable);
+                        if (!IsMounted)
+                            return false;
                         if (CacheHashFileTable != null)
                         {
                             // check if any files have been deleted

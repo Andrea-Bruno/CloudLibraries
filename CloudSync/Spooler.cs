@@ -106,6 +106,15 @@ namespace CloudSync
                 }
             }
         }
+
+        public void Clear()
+        {
+            lock (ToDoOperations)
+            {
+                ToDoOperations.Clear();
+            }
+        }
+
         /// <summary>
         /// Memorize that the remote server device has a full disk and is no longer available to receive data
         /// </summary>

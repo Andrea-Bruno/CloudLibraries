@@ -95,7 +95,12 @@ namespace CloudSync
                         if (OnNotification != null)
                             Notify(fromUserId, notice);
                     }
-                    else if (command == Commands.SendHashStructure)
+                    if (!IsMounted)
+                    {
+                        infoData = "Operation rejected. The cloud path is not mounted";
+                        return;
+                    }
+                    if (command == Commands.SendHashStructure)
                     {
                         var structure = values[0];
                         var remoteHashes = new Dictionary<ulong, uint>(); // key = hash, value = timestamp

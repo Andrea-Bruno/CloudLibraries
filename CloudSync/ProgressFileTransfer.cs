@@ -104,6 +104,18 @@ namespace CloudSync
                 Completed(key, executeNext: key == expired[expired.Count - 1]);
         }
 
+        public void Stop()
+        {
+            lock (TimeoutChunkFileToTransfer)
+            {
+                foreach (var key in TimeoutChunkFileToTransfer.Keys)
+                {
+                    Completed(key, executeNext: false);
+                }
+                TimeoutChunkFileToTransfer.Clear();
+            }
+        }
+
         /// <summary>
         /// Dispose the instance of the object
         /// </summary>
