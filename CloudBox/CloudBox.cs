@@ -38,10 +38,10 @@ namespace CloudBox
         /// <param name="licenseOEM">The OEM private key for activating licenses.</param>
         /// <param name="name">A label name to assign to this instance (this does not affect how the cloud works)</param>
         /// <param name="doNotCreateSpecialFolders">If instantiated as a server it will automatically create specific subdirectories for documents, photos, etc., unless this parameter is specified</param>
-        /// <param name="isUnmounted">Indicate true if the path to the cloud space is on an unmounted virtual disk</param>
-        public CloudBox(string cloudPath = null, bool isServer = false, ulong? id = null, string licenseOEM = null, string name = null, bool doNotCreateSpecialFolders = false, bool isUnmounted = false)
+        /// <param name="isMounted">Indicate true if the path to the cloud space is on an mounter or unmounted virtual disk</param>
+        public CloudBox(string cloudPath = null, bool isServer = false, ulong? id = null, string licenseOEM = null, string name = null, bool doNotCreateSpecialFolders = false, bool isMounted = true)
         {
-            IsUnmounted = isUnmounted;
+            IsMounted = isMounted;
             DoNotCreateSpecialFolders = doNotCreateSpecialFolders; ;
             _Name = name;
             //if (string.IsNullOrEmpty(routerEntryPoint))
@@ -429,13 +429,13 @@ namespace CloudBox
         /// <param name="isClient">If it is the client, it must provide authentication credentials</param>
         public void StartSync(LoginCredential isClient = null)
         {
-            Sync = new Sync(SendCommand, out OnCommand, Context.SecureStorage, CloudPath, isClient, DoNotCreateSpecialFolders, IsUnmounted);
+            Sync = new Sync(SendCommand, out OnCommand, Context.SecureStorage, CloudPath, isClient, DoNotCreateSpecialFolders, IsMounted);
             Sync.OnNotification += (fromUserId, notice) => OnNotificationAction?.Invoke(fromUserId, notice);
-            Sync.OnSyncStatusChanges += (syncStatus, pendingFiles) =>
+            Sync.OnLocalSyncStatusChanges += (syncStatus, pendingFiles) =>
             {
                 SyncStatus = syncStatus;
                 PendingFiles = pendingFiles;
-                OnSyncStatusChangesAction?.Invoke(syncStatus, pendingFiles);
+                OnLocalSyncStatusChangesAction?.Invoke(syncStatus, pendingFiles);
             };
             Sync.OnFileTransfer += fileTransfer => TransferredFiles.UpdateList(fileTransfer);
             Sync.OnCommandEvent += (userId, command, infoData, isOutput) => OnCommands.AddOnCommand(userId, command, infoData, isOutput);
@@ -446,15 +446,15 @@ namespace CloudBox
         /// <summary>
         /// Indicates if the cloud path is an unmounted virtual disk.
         /// </summary>
-        private bool IsUnmounted { get { return _IsUnmounted; } set { _IsUnmounted = value; Sync?.MoutedDiskStateIsChanged(value); } }
-        private bool _IsUnmounted;
+        private bool IsMounted { get { return _IsMounted; } set { _IsMounted = value; Sync?.MoutedDiskStateIsChanged(value); } }
+        private bool _IsMounted = true;
 
 
         /// <summary>
         /// Function that the host app must call if the disk at the root of the cloud is mounted or unmounted.
         /// If you plan not to use a virtual disk for cloud space then this function should not be called.
         /// </summary>
-        public void MoutedDiskStateIsChanged(bool isMounted) => IsUnmounted = isMounted;
+        public void MoutedDiskStateIsChanged(bool isMounted) => IsMounted = isMounted;
 
 
         /// <summary>
@@ -534,7 +534,7 @@ namespace CloudBox
         /// <summary>
         /// Event that fires when the sync status changes
         /// </summary>
-        public Sync.StatusEventHandler OnSyncStatusChangesAction;
+        public Sync.StatusEventHandler OnLocalSyncStatusChangesAction;
         /// <summary>
         /// Event that tracks communication errors that occur with the remote device
         /// </summary>
@@ -542,7 +542,7 @@ namespace CloudBox
         /// <summary>
         /// Current status of the sync process. We recommend using the OnSyncStatusChangesAction event to update these values in the UI
         /// </summary>
-        public Sync.SynchronizationStatus SyncStatus { get; private set; }
+        public Sync.SyncStatus SyncStatus { get; private set; }
         /// <summary>
         /// Number of files that are waiting to be synced. We recommend using the OnSyncStatusChangesAction event to update these values in the UI
         /// </summary>

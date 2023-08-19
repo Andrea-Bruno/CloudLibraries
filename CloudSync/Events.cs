@@ -1,4 +1,5 @@
-﻿using System.Threading;
+﻿using System;
+using System.Threading;
 
 namespace CloudSync
 {
@@ -8,42 +9,30 @@ namespace CloudSync
         // ======================= Events about the current status =======================
         // ===============================================================================
 
-        public SynchronizationStatus SyncStatus { get; private set; }
+        public SyncStatus LocalSyncStatus { get; private set; }
         public int PendingFiles => Spooler.PendingOperations;
 
-        public enum SynchronizationStatus
+        public enum SyncStatus
         {
             Undefined,
             Pending,
             Synchronized,
         }
 
-        public delegate void StatusEventHandler(SynchronizationStatus syncStatus, int pendingFiles);
+        public delegate void StatusEventHandler(SyncStatus syncStatus, int pendingFiles);
 
-        public event StatusEventHandler OnSyncStatusChanges;
-        internal void RaiseOnStatusChangesEvent(SynchronizationStatus? syncStatus = null)
+        public event StatusEventHandler OnLocalSyncStatusChanges;
+        internal void RaiseOnStatusChangesEvent(SyncStatus localSyncStatus)
         {
-            var lastSyncStatus = SyncStatus;
-            if (syncStatus == null)
+            if (LocalSyncStatus != localSyncStatus)
             {
-                syncStatus = SynchronizationStatus.Undefined;
-            }
-            else
-            {
-                SyncStatus = (SynchronizationStatus)syncStatus;
-            }
-            if (PendingFiles > 0)
-                syncStatus = SynchronizationStatus.Pending;
-            if (lastSyncStatus != SyncStatus)
-            {
-                if (OnSyncStatusChanges != null)
-                    new Thread(() => OnSyncStatusChanges?.Invoke(SyncStatus, PendingFiles)).Start();
-                if (CheckSync != null)
+                LocalSyncStatus = localSyncStatus;
+                if (OnLocalSyncStatusChanges != null)
+                    new Thread(() => OnLocalSyncStatusChanges?.Invoke(LocalSyncStatus, PendingFiles)).Start();
+                if (ClientCheckSync != null)
                 {
-                    var CheckSyncEnabled = CheckSync.Enabled;
-                    CheckSync.Interval = (SyncStatus == SynchronizationStatus.Synchronized ? Sync.CheckEveryMinutes : Sync.RetrySyncFailedAfterMinutes) * 60 * 1000;
-                    CheckSync.Stop();
-                    CheckSync.Enabled = CheckSyncEnabled;
+                    var next = (LocalSyncStatus == SyncStatus.Synchronized ? CheckEveryMinutes : RetrySyncFailedAfterMinutes);
+                    ClientCheckSync.Change(TimeSpan.FromMinutes(next), TimeSpan.FromMinutes(CheckEveryMinutes));
                 }
             }
         }
@@ -56,10 +45,10 @@ namespace CloudSync
         public delegate void FileTransferEventHandler(FileTransfer fileTransfer);
 
         public event FileTransferEventHandler OnFileTransfer;
-        internal void RaiseOnFileTransfer(bool isUpload, ulong hash, uint part, uint total, string name = null, long? length = null )
+        internal void RaiseOnFileTransfer(bool isUpload, ulong hash, uint part, uint total, string name = null, long? length = null)
         {
             if (OnFileTransfer != null)
-                new Thread(() => OnFileTransfer?.Invoke(new FileTransfer { IsUpload = isUpload, Hash = hash, Part = part, Total = total, Name = name, Length = length })).Start();          
+                new Thread(() => OnFileTransfer?.Invoke(new FileTransfer { IsUpload = isUpload, Hash = hash, Part = part, Total = total, Name = name, Length = length })).Start();
         }
 
         public class FileTransfer
@@ -84,7 +73,7 @@ namespace CloudSync
         internal void RaiseOnCommandEvent(ulong? userId, Commands command, string infoData = null, bool isOutput = false)
         {
             if (OnCommandEvent != null)
-                new Thread(() => OnCommandEvent?.Invoke(userId, command, infoData, isOutput)).Start();           
+                new Thread(() => OnCommandEvent?.Invoke(userId, command, infoData, isOutput)).Start();
         }
 
 

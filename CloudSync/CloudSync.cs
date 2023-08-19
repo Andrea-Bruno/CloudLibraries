@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
-using System.Timers;
+using System.Threading;
 using static CloudSync.Util;
 
 using HashFileTable = System.Collections.Generic.Dictionary<ulong, System.IO.FileSystemInfo>;
@@ -24,17 +24,17 @@ namespace CloudSync
         /// <param name="cloudRoot">The path to the cloud root directory</param>
         /// <param name="isClient">Initialize this instance with this value set to true if the client machine is the master, if instead it is the server set this value to false to activate slave mode.</param>
         /// <param name="doNotCreateSpecialFolders">Set to true if you want to automatically create sub-folders in the cloud area to save images, photos, documents, etc..</param>
-        /// <param name="isUnmounted">Indicate true if the path to the cloud space is on an unmounted virtual disk</param>
-        public Sync(SendCommand sendCommand, out SendCommand onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential isClient = null, bool doNotCreateSpecialFolders = false, bool isUnmounted = false)
+        /// <param name="isMounted">Indicate true if the path to the cloud space is on an mounted or unmounted virtual disk</param>
+        public Sync(SendCommand sendCommand, out SendCommand onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential isClient = null, bool doNotCreateSpecialFolders = false, bool isMounted = true)
         {
-            _IsMounted = !isUnmounted;
             SecureStorage = secureStorage;
             InstanceId = InstanceCounter;
             InstanceCounter++;
             IsServer = isClient == null;
             CloudRoot = cloudRoot;
+            IsMounted = isMounted;
 
-            if (!isUnmounted)
+            if (isMounted)
             {
                 var createIfNotExists = SetSpecialDirectory(cloudRoot, Icos.Cloud, false) && doNotCreateSpecialFolders == false;
                 SetSpecialDirectory(cloudRoot, Icos.Documents, createIfNotExists: createIfNotExists && IsServer);
@@ -74,13 +74,13 @@ namespace CloudSync
 #endif                        
                         SetPin(secureStorage, null, pin);
                     }
-                    SetSyncTimeBuffer();
+                    //SetSyncTimeBuffer();
                 }
                 else
                 {
                     Notify(null, Notice.Authentication);
                     if (IsLogged)
-                        StartSyncClient(); // It's already logged in, so start syncing immediately
+                        ClientStartSync(); // It's already logged in, so start syncing immediately
                     else
                         RequestOfAuthentication(null, isClient, PublicIpAddressInfo(), Environment.MachineName); // Start the login process
                 }
@@ -109,7 +109,7 @@ namespace CloudSync
                     if (!IsServer)
                     {
                         if (value)
-                            OnMount();           
+                            OnMount();
                         else
                             OnUnmount();
                     }
@@ -121,27 +121,34 @@ namespace CloudSync
         private void OnUnmount()
         {
             StopWatchCloudRoot();
-            SendingInProgress.Stop();
-            ReceptionInProgress.Stop();
+            SendingInProgress?.Stop();
+            ReceptionInProgress?.Stop();
         }
 
         private void OnMount()
         {
-            Spooler.ExecuteNext();
+            if (IsLogged)
+                Spooler?.ExecuteNext();
             WatchCloudRoot();
             RequestSynchronization();
         }
 
         public void Dispose()
         {
-            RaiseOnStatusChangesEvent(SynchronizationStatus.Undefined);
+            RaiseOnStatusChangesEvent(SyncStatus.Undefined);
             Notify(null, Notice.LoggedOut);
             SecureStorage.Values.Delete("Logged", typeof(bool));
             if (SyncTimeBuffer != null)
             {
-                SyncTimeBuffer.Stop();
+                SyncTimeBuffer.Change(Timeout.Infinite, Timeout.Infinite);
                 SyncTimeBuffer.Dispose();
                 SyncTimeBuffer = null;
+            }
+            if (ClientCheckSync != null)
+            {
+                ClientCheckSync.Change(Timeout.Infinite, Timeout.Infinite);
+                ClientCheckSync.Dispose();
+                ClientCheckSync = null;
             }
             if (pathWatcher != null)
             {
@@ -155,7 +162,7 @@ namespace CloudSync
         /// <summary>
         /// Indicates if the client is connected. Persistent value upon restart from client application.
         /// </summary>
-        private bool IsLogged { get { return SecureStorage.Values.Get("Logged", false); } set { SecureStorage.Values.Set("Logged", value); } }
+        private bool IsLogged { get { return SecureStorage != null && SecureStorage.Values.Get("Logged", false); } set { SecureStorage.Values.Set("Logged", value); } }
 
         private FileSystemWatcher pathWatcher;
         private void WatchCloudRoot()
@@ -188,7 +195,7 @@ namespace CloudSync
         /// It is a timer that gives extra security on the status of the synchronization. Rarely activating it does not weigh on the status of data transmission in the network.
         /// This check does not have to be performed frequently, the system already monitors the changes, both on the client and server side, and the synchronization is started automatically every time there has been a change.
         /// </summary>
-        internal Timer CheckSync;
+        internal Timer ClientCheckSync;
         /// <summary>
         /// After how much idle time, a check on the synchronization status is required
         /// </summary>
@@ -204,24 +211,16 @@ namespace CloudSync
         /// <summary>
         /// CheckSync timer trigger. Each time called it resets the timer time.
         /// </summary>
-        internal void RefreshCheckSyncTimer()
+        internal void RestartCheckSyncTimer()
         {
-            CheckSync?.Stop();
-            CheckSync?.Start();
+            ClientCheckSync?.Change(TimeSpan.FromMinutes(CheckEveryMinutes), TimeSpan.FromMinutes(CheckEveryMinutes));
         }
 
         /// <summary>
         /// Timer that starts the synchronization procedure when something in the cloud path has changed. The timer delays the synchronization of a few seconds because multiple changes may be in progress on the files and it is convenient to wait for the end of the operations.
         /// </summary>
         internal Timer SyncTimeBuffer;
-        private void SetSyncTimeBuffer()
-        {
-            SyncTimeBuffer = new Timer(10000)
-            {
-                AutoReset = false,
-            };
-            SyncTimeBuffer.Elapsed += StartSynchronization;
-        }
+        internal int SyncTimeBufferMs = 10000;
 
         /// <summary>
         /// This function starts the synchronization request, called this function a timer will shortly launch the synchronization.
@@ -231,29 +230,31 @@ namespace CloudSync
         {
             try
             {
-                SyncTimeBuffer?.Stop();
-                SyncTimeBuffer?.Start();
+                SyncTimeBuffer?.Change(SyncTimeBufferMs, Timeout.Infinite);
             }
             catch
             { // is disposed
             }
         }
 
-        private void StartSyncClient()
+        private void ClientStartSync()
         {
-            CheckSync = new Timer(CheckEveryMinutes * 60 * 1000);
-            CheckSync.Elapsed += (s, e) => RequestSynchronization();
-            SetSyncTimeBuffer();
-            StartSynchronization(null, null);
+            if (ClientCheckSync == null)
+            {
+                ClientCheckSync = new Timer((o) => RequestSynchronization(), null, TimeSpan.FromMinutes(CheckEveryMinutes), TimeSpan.FromMinutes(CheckEveryMinutes));
+            }
+            if (SyncTimeBuffer == null)
+            {
+                SyncTimeBuffer = new Timer((o) => StartSynchronization(), null, SyncTimeBufferMs, Timeout.Infinite);
+            }
+            StartSynchronization();
             //SyncTimeBuffer.Start();
         }
 
         /// <summary>
         /// Start file synchronization between client and server, it is recommended not to use this command directly since starting synchronization via call RequestSynchronization()
         /// </summary>
-        /// <param name="sender">senter</param>
-        /// <param name="e">Elapsed event args</param>
-        private void StartSynchronization(object sender, ElapsedEventArgs e)
+        private void StartSynchronization()
         {
             if (!IsMounted)
                 return;
@@ -268,7 +269,8 @@ namespace CloudSync
                 }
                 else
                 {
-                    SendHashRoot();
+                    if (IsLogged)
+                        SendHashRoot();
                 }
             }
         }

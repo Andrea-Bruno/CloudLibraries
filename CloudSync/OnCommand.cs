@@ -69,7 +69,7 @@ namespace CloudSync
             {
                 if (RoleManager.TryToGetCient((ulong)fromUserId, out var Interlocutor, out var isTemp))
                 {
-                    RefreshCheckSyncTimer(); // Reset the timer that checks the synchronization (This is an additional verification check)
+                    RestartCheckSyncTimer(); // Reset the timer that checks the synchronization (This is an additional verification check)
                     if (command == Commands.Notification)
                     {
                         var notice = (Notice)values[0][0];
@@ -79,11 +79,11 @@ namespace CloudSync
                             if (notice == Notice.LoginSuccessful)
                             {
                                 IsLogged = true;
-                                StartSyncClient();
+                                ClientStartSync(); // Login Successful
                             }
                         }
                         if (notice == Notice.Synchronized)
-                            RaiseOnStatusChangesEvent(SynchronizationStatus.Synchronized);
+                            RaiseOnStatusChangesEvent(SyncStatus.Synchronized);
                         else if (notice == Notice.FullSpace)
                         {
                             Spooler.RemoteDriveOverLimit = true;
@@ -169,7 +169,7 @@ namespace CloudSync
                         {
                             if (!remoteHash.SequenceEqual(localHash))
                             {
-                                RaiseOnStatusChangesEvent(SynchronizationStatus.Pending);
+                                RaiseOnStatusChangesEvent(SyncStatus.Pending);
                                 var range = HashBlocksToBlockRange(remoteHash, localHash);
                                 if (IsServer)
                                     SendHashStructure(fromUserId, range);
@@ -178,7 +178,7 @@ namespace CloudSync
                             }
                             else
                             {
-                                RaiseOnStatusChangesEvent(SynchronizationStatus.Synchronized);
+                                RaiseOnStatusChangesEvent(SyncStatus.Synchronized);
                                 Notification(fromUserId, Notice.Synchronized);
                             }
                         }
@@ -191,13 +191,13 @@ namespace CloudSync
                             var remoteHash = BitConverter.ToUInt64(values[0], 0);
                             if (localHash != remoteHash)
                             {
-                                RaiseOnStatusChangesEvent(SynchronizationStatus.Pending);
+                                RaiseOnStatusChangesEvent(SyncStatus.Pending);
                                 SendHashBlocks(fromUserId);
                                 //SendHashStructure(fromUserId);
                             }
                             else
                             {
-                                RaiseOnStatusChangesEvent(SynchronizationStatus.Synchronized);
+                                RaiseOnStatusChangesEvent(SyncStatus.Synchronized);
                                 Notification(fromUserId, Notice.Synchronized);
                             }
                         }

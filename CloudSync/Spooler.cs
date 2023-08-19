@@ -31,7 +31,7 @@ namespace CloudSync
                 {
                     ToDoOperations.Add(new Operation { Type = type, UserId = userId, HashFile = hashFile });
                 }
-                Context.RaiseOnStatusChangesEvent();
+                Context.RaiseOnStatusChangesEvent(Sync.SyncStatus.Pending);
             }
             ExecuteNext();
         }
@@ -74,13 +74,11 @@ namespace CloudSync
             {
                 for (int i = Context.ConcurrentOperations(); i < MaxConcurrentOperations; i++)
                 {
-                    //if (Context.ConcurrentOperations() < MaxConcurrentOperations)
-                    //{
                     if (ToDoOperations.Count > 0)
                     {
                         var toDo = ToDoOperations[0];
                         ToDoOperations.Remove(toDo);
-                        Context.RaiseOnStatusChangesEvent();
+                        Context.RaiseOnStatusChangesEvent(ToDoOperations.Count == 0 ? Sync.SyncStatus.Synchronized : Sync.SyncStatus.Pending);
                         if (toDo.Type == OperationType.Send)
                         {
                             if (Context.HashFileTable(out var localHashes))
@@ -97,12 +95,6 @@ namespace CloudSync
                             Context.RequestFile(toDo.UserId, toDo.HashFile);
                         }
                     }
-                    //else
-                    //{
-                    //        if (userId != null)
-                    //            CheckOperationsInPending((ulong)userId);
-                    //}
-                    //}
                 }
             }
         }

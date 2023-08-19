@@ -123,7 +123,7 @@ namespace CloudSync
             }
         }
 
-        private void SendHashRoot(ulong? toUserId = null)
+        public void SendHashRoot(ulong? toUserId = null)
         {
             if (GetHasRoot(out var hashRoot, true))
             {
