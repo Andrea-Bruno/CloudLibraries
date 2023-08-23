@@ -6,9 +6,9 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="CommunicationChannel" Version="1.23.8.22" />
-	  <PackageReference Include="EncryptedMessaging" Version="1.23.8.22" />
-	  <PackageReference Include="SecureStorage" Version="1.23.8.22" />
+	  <PackageReference Include="CommunicationChannel" Version="1.23.8.23" />
+	  <PackageReference Include="EncryptedMessaging" Version="1.23.8.23" />
+	  <PackageReference Include="SecureStorage" Version="1.23.8.23" />
 	</ItemGroup>
 
 	<ItemGroup>
