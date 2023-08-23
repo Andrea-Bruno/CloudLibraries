@@ -15,6 +15,8 @@ namespace CloudSync
 
         internal void OnCommand(ulong? fromUserId, ushort command, params byte[][] values)
         {
+            if (!Enum.IsDefined(typeof(Commands), command))
+                return; // Commend not supported from this version
             OnCommandRunning++;
             OnCommand(fromUserId, (Commands)command, out string infoData, values);
             RaiseOnCommandEvent(fromUserId, (Commands)command, infoData);

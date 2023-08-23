@@ -63,13 +63,26 @@ namespace CloudSync
                     TimeoutChunkFileToTransfer.Remove(hashFileName);
                 TimeoutChunkFileToTransfer.Add(hashFileName, DateTime.UtcNow.Add(timeout));
             }
-            var TimerReference = new TimerReference();
-            var timer = new Timer(obj => { Timers.Remove(((TimerReference)obj).Timer); RemoveOverTimeout(); }, TimerReference, (int)timeout.TotalMilliseconds + 1000, Timeout.Infinite);
-            TimerReference.Timer = timer;
-            Timers.Add(timer);
+            // https://stackoverflow.com/questions/5230897/can-i-dispose-a-threading-timer-in-its-callback
+            lock (Timers)
+            {
+                if (Disposed)
+                    return;
+                var timer = new Timer(o =>
+                {
+                    var t = (Timer)o;
+                    lock (Timers)
+                    {
+                        _ = Timers.Remove(t);
+                    }
+                    t.Dispose();
+                    RemoveOverTimeout();
+                });
+                timer.Change((int)timeout.TotalMilliseconds + 1000, Timeout.Infinite);
+                Timers.Add(timer);
+            }
         }
         private readonly List<Timer> Timers = new List<Timer>();
-        private class TimerReference { public Timer Timer; }
 
         /// <summary>
         /// Returns a descriptive information that specifies how long it is to timeout for operations in progress
@@ -116,12 +129,18 @@ namespace CloudSync
             }
         }
 
+        public bool Disposed;
+
         /// <summary>
         /// Dispose the instance of the object
         /// </summary>
         public void Dispose()
         {
-            Timers.ToList().ForEach(timer => { timer.Change(Timeout.Infinite, Timeout.Infinite); timer.Dispose(); });
+            Disposed = true;
+            lock (Timers)
+            {
+                Timers.ToList().ForEach(timer => { timer.Change(Timeout.Infinite, Timeout.Infinite); timer.Dispose(); });
+            }
         }
     }
 }
