@@ -38,10 +38,10 @@ namespace CloudBox
         /// <param name="licenseOEM">The OEM private key for activating licenses.</param>
         /// <param name="name">A label name to assign to this instance (this does not affect how the cloud works)</param>
         /// <param name="doNotCreateSpecialFolders">If instantiated as a server it will automatically create specific subdirectories for documents, photos, etc., unless this parameter is specified</param>
-        /// <param name="isMounted">Indicate true if the path to the cloud space is on an mounter or unmounted virtual disk</param>
-        public CloudBox(string cloudPath = null, bool isServer = false, ulong? id = null, string licenseOEM = null, string name = null, bool doNotCreateSpecialFolders = false, bool isMounted = true)
+        /// <param name="isReachable">Indicate true if the path to the cloud space is reachable (true), or unmounted virtual disk (false)</param>
+        public CloudBox(string cloudPath = null, bool isServer = false, ulong? id = null, string licenseOEM = null, string name = null, bool doNotCreateSpecialFolders = false, bool isReachable = true)
         {
-            IsMounted = isMounted;
+            IsReachable = isReachable;
             DoNotCreateSpecialFolders = doNotCreateSpecialFolders; ;
             _Name = name;
             //if (string.IsNullOrEmpty(routerEntryPoint))
@@ -429,7 +429,7 @@ namespace CloudBox
         /// <param name="isClient">If it is the client, it must provide authentication credentials</param>
         public void StartSync(LoginCredential isClient = null)
         {
-            Sync = new Sync(SendCommand, out OnCommand, Context.SecureStorage, CloudPath, isClient, DoNotCreateSpecialFolders, IsMounted);
+            Sync = new Sync(SendCommand, out OnCommand, Context.SecureStorage, CloudPath, isClient, DoNotCreateSpecialFolders, IsReachable);
             Sync.OnNotification += (fromUserId, notice) => OnNotificationAction?.Invoke(fromUserId, notice);
             Sync.OnLocalSyncStatusChanges += (syncStatus, pendingFiles) =>
             {
@@ -446,15 +446,15 @@ namespace CloudBox
         /// <summary>
         /// Indicates if the cloud path is an unmounted virtual disk.
         /// </summary>
-        private bool IsMounted { get { return _IsMounted; } set { _IsMounted = value; Sync?.MoutedDiskStateIsChanged(value); } }
-        private bool _IsMounted = true;
+        private bool IsReachable { get { return _IsReachable; } set { _IsReachable = value; Sync?.IsReachableDiskStateIsChanged(value); } }
+        private bool _IsReachable = true;
 
 
         /// <summary>
         /// Function that the host app must call if the disk at the root of the cloud is mounted or unmounted.
         /// If you plan not to use a virtual disk for cloud space then this function should not be called.
         /// </summary>
-        public void MoutedDiskStateIsChanged(bool isMounted) => IsMounted = isMounted;
+        public void IsReachableDiskStateIsChanged(bool isReachable) => IsReachable = isReachable;
 
 
         /// <summary>

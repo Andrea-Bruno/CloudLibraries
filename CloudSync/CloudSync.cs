@@ -24,28 +24,16 @@ namespace CloudSync
         /// <param name="cloudRoot">The path to the cloud root directory</param>
         /// <param name="isClient">Initialize this instance with this value set to true if the client machine is the master, if instead it is the server set this value to false to activate slave mode.</param>
         /// <param name="doNotCreateSpecialFolders">Set to true if you want to automatically create sub-folders in the cloud area to save images, photos, documents, etc..</param>
-        /// <param name="isMounted">Indicate true if the path to the cloud space is on an mounted or unmounted virtual disk</param>
-        public Sync(SendCommand sendCommand, out SendCommand onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential isClient = null, bool doNotCreateSpecialFolders = false, bool isMounted = true)
+        /// <param name="isReachable">Indicate true if the path to the cloud space is reachable (true), or unmounted virtual disk (false)</param>
+        public Sync(SendCommand sendCommand, out SendCommand onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential isClient = null, bool doNotCreateSpecialFolders = false, bool isReachable = true)
         {
             SecureStorage = secureStorage;
             InstanceId = InstanceCounter;
             InstanceCounter++;
             IsServer = isClient == null;
+            DoNotCreateSpecialFolders = doNotCreateSpecialFolders;
             CloudRoot = cloudRoot;
-            IsMounted = isMounted;
-
-            if (isMounted)
-            {
-                var createIfNotExists = SetSpecialDirectory(cloudRoot, Icos.Cloud, false) && doNotCreateSpecialFolders == false;
-                SetSpecialDirectory(cloudRoot, Icos.Documents, createIfNotExists: createIfNotExists && IsServer);
-                SetSpecialDirectory(cloudRoot, Icos.Download, createIfNotExists: createIfNotExists && IsServer);
-                SetSpecialDirectory(cloudRoot, Icos.Movies, createIfNotExists: createIfNotExists && IsServer);
-                SetSpecialDirectory(cloudRoot, Icos.Pictures, createIfNotExists: createIfNotExists && IsServer);
-                SetSpecialDirectory(cloudRoot, Icos.Photos, createIfNotExists: createIfNotExists && IsServer);
-                SetSpecialDirectory(cloudRoot, Icos.Settings, createIfNotExists: createIfNotExists && IsServer);
-                if (createIfNotExists)
-                    AddDesktopShorcut(cloudRoot);
-            }
+            IsReachable = isReachable;
             var rootInfo = new DirectoryInfo(cloudRoot);
             if (rootInfo.Exists)
                 rootInfo.Attributes |= FileAttributes.Encrypted;
@@ -89,23 +77,57 @@ namespace CloudSync
         }
 
         /// <summary>
+        /// Indicates if the client is connected. Persistent value upon restart from client application.
+        /// </summary>
+        private bool IsLogged
+        {
+            get { return SecureStorage != null && SecureStorage.Values.Get("Logged", false); }
+            set
+            {
+                SecureStorage.Values.Set("Logged", value);
+                if (value)
+                {
+                    CreateDefaultFolders();
+                    ClientStartSync();
+                }
+            }
+        }
+        private void CreateDefaultFolders()
+        {
+            if (IsReachable)
+            {
+                var createIfNotExists = SetSpecialDirectory(CloudRoot, Icos.Cloud, false) && DoNotCreateSpecialFolders == false;
+                createIfNotExists |= Directory.CreateDirectory(CloudRoot).GetDirectories().Length == 0;
+                SetSpecialDirectory(CloudRoot, Icos.Documents, createIfNotExists: createIfNotExists && IsServer);
+                SetSpecialDirectory(CloudRoot, Icos.Download, createIfNotExists: createIfNotExists && IsServer);
+                SetSpecialDirectory(CloudRoot, Icos.Movies, createIfNotExists: createIfNotExists && IsServer);
+                SetSpecialDirectory(CloudRoot, Icos.Pictures, createIfNotExists: createIfNotExists && IsServer);
+                SetSpecialDirectory(CloudRoot, Icos.Photos, createIfNotExists: createIfNotExists && IsServer);
+                SetSpecialDirectory(CloudRoot, Icos.Settings, createIfNotExists: createIfNotExists && IsServer);
+                if (createIfNotExists)
+                    AddDesktopShorcut(CloudRoot);
+            }
+        }
+        private bool DoNotCreateSpecialFolders;
+
+        /// <summary>
         /// Function that the host app must call if the disk at the root of the cloud is mounted or unmounted.
         /// If you plan not to use a virtual disk for cloud space then this function should not be called.
         /// </summary>
-        public void MoutedDiskStateIsChanged(bool isMounted) => IsMounted = isMounted;
+        public void IsReachableDiskStateIsChanged(bool isMounted) => IsReachable = isMounted;
 
 
         /// <summary>
         /// This function returns true if the specified path matches a virtual disk path that has not been mounted.
         /// </summary>
-        internal bool IsMounted
+        internal bool IsReachable
         {
-            get { return (bool)_IsMounted; }
+            get { return (bool)_IsReachable; }
             set
             {
-                if (_IsMounted != value)
+                if (_IsReachable != value)
                 {
-                    _IsMounted = value;
+                    _IsReachable = value;
                     if (!IsServer)
                     {
                         if (value)
@@ -116,7 +138,7 @@ namespace CloudSync
                 }
             }
         }
-        private bool? _IsMounted = null;
+        private bool? _IsReachable = null;
 
         private void OnUnmount()
         {
@@ -128,9 +150,11 @@ namespace CloudSync
         private void OnMount()
         {
             if (IsLogged)
+            {
                 Spooler?.ExecuteNext();
-            WatchCloudRoot();
-            RequestSynchronization();
+                WatchCloudRoot();
+                RequestSynchronization();
+            }
         }
 
         public void Dispose()
@@ -159,10 +183,6 @@ namespace CloudSync
             ReceptionInProgress.Dispose();
             SendingInProgress.Dispose();
         }
-        /// <summary>
-        /// Indicates if the client is connected. Persistent value upon restart from client application.
-        /// </summary>
-        private bool IsLogged { get { return SecureStorage != null && SecureStorage.Values.Get("Logged", false); } set { SecureStorage.Values.Set("Logged", value); } }
 
         private FileSystemWatcher pathWatcher;
         private void WatchCloudRoot()
@@ -213,7 +233,9 @@ namespace CloudSync
         /// </summary>
         internal void RestartCheckSyncTimer()
         {
-            ClientCheckSync?.Change(TimeSpan.FromMinutes(CheckEveryMinutes), TimeSpan.FromMinutes(CheckEveryMinutes));
+            // If the client is out of sync, it tries to sync every minute
+            var next = (LocalSyncStatus == SyncStatus.Synchronized ? RetrySyncFailedAfterMinutes : CheckEveryMinutes);
+            ClientCheckSync.Change(TimeSpan.FromMinutes(next), TimeSpan.FromMinutes(CheckEveryMinutes));
         }
 
         /// <summary>
@@ -247,7 +269,7 @@ namespace CloudSync
             {
                 SyncTimeBuffer = new Timer((o) => StartSynchronization(), null, SyncTimeBufferMs, Timeout.Infinite);
             }
-            StartSynchronization();
+            //StartSynchronization();
             //SyncTimeBuffer.Start();
         }
 
@@ -256,24 +278,30 @@ namespace CloudSync
         /// </summary>
         private void StartSynchronization()
         {
-            if (!IsMounted)
-                return;
-            if (!IsTransferring())
+            if (!performingStartSynchronization)
             {
-                if (IsServer)
+                performingStartSynchronization = true;
+                if (!IsReachable)
+                    return;
+                if (!IsTransferring())
                 {
-                    if (GetHasRoot(out var hashRoot, true))
+                    if (IsServer)
                     {
-                        RoleManager.ClientsConnected().ForEach(client => SendHashRoot(hashRoot, client.Id));
+                        if (GetHasRoot(out var hashRoot, true))
+                        {
+                            RoleManager.ClientsConnected().ForEach(client => SendHashRoot(hashRoot, client.Id));
+                        }
+                    }
+                    else
+                    {
+                        if (IsLogged)
+                            SendHashRoot();
                     }
                 }
-                else
-                {
-                    if (IsLogged)
-                        SendHashRoot();
-                }
+                performingStartSynchronization = false;
             }
         }
+        private bool performingStartSynchronization;
 
         public delegate void OnNotificationEvent(ulong? fromUserId, Notice notice);
 
@@ -393,23 +421,30 @@ namespace CloudSync
                 }
                 void AnalyzeDirectory(DirectoryInfo directory, ref HashFileTable hashFileTable)
                 {
-                    var hash = directory.HashFileName(this);
-                    hashFileTable.Add(hash, directory);
-                    var items = directory.GetFileSystemInfos();
-                    foreach (var item in items)
+                    try
                     {
-                        if (CanBeSeen(item))
+                        var items = directory.GetFileSystemInfos();
+                        var hash = directory.HashFileName(this);
+                        hashFileTable.Add(hash, directory);
+                        foreach (var item in items)
                         {
-                            if (item.Attributes.HasFlag(FileAttributes.Directory))
+                            if (CanBeSeen(item))
                             {
-                                AnalyzeDirectory((DirectoryInfo)item, ref hashFileTable);
-                            }
-                            else
-                            {
-                                hash = item.HashFileName(this);
-                                hashFileTable[hash] = item;
+                                if (item.Attributes.HasFlag(FileAttributes.Directory))
+                                {
+                                    AnalyzeDirectory((DirectoryInfo)item, ref hashFileTable);
+                                }
+                                else
+                                {
+                                    hash = item.HashFileName(this);
+                                    hashFileTable[hash] = item;
+                                }
                             }
                         }
+                    }
+                    catch (Exception ex)
+                    {
+                        RaiseOnFileError(ex, directory.FullName);
                     }
                 }
 
@@ -419,7 +454,7 @@ namespace CloudSync
                     {
                         var watch = Stopwatch.StartNew();
                         StartAnalyzeDirectory(CloudRoot, out var newHashFileTable);
-                        if (!IsMounted)
+                        if (!IsReachable)
                             return false;
                         if (CacheHashFileTable != null)
                         {
@@ -462,6 +497,8 @@ namespace CloudSync
             }
             catch (Exception ex)
             {
+                RaiseOnFileError(ex, null);
+
                 Console.WriteLine(ex.Message);
             }
             hashTable = null;

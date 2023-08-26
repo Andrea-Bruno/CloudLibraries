@@ -81,7 +81,6 @@ namespace CloudSync
                             if (notice == Notice.LoginSuccessful)
                             {
                                 IsLogged = true;
-                                ClientStartSync(); // Login Successful
                             }
                         }
                         if (notice == Notice.Synchronized)
@@ -97,7 +96,7 @@ namespace CloudSync
                         if (OnNotification != null)
                             Notify(fromUserId, notice);
                     }
-                    if (!IsMounted)
+                    if (!IsReachable)
                     {
                         infoData = "Operation rejected. The cloud path is not mounted";
                         return;

@@ -31,8 +31,7 @@ namespace CloudSync
                     new Thread(() => OnLocalSyncStatusChanges?.Invoke(LocalSyncStatus, PendingFiles)).Start();
                 if (ClientCheckSync != null)
                 {
-                    var next = (LocalSyncStatus == SyncStatus.Synchronized ? CheckEveryMinutes : RetrySyncFailedAfterMinutes);
-                    ClientCheckSync.Change(TimeSpan.FromMinutes(next), TimeSpan.FromMinutes(CheckEveryMinutes));
+                    RestartCheckSyncTimer();
                 }
             }
         }
@@ -82,10 +81,10 @@ namespace CloudSync
         // ===============================================================================
 
 
-        public delegate void OnFileErrorHandler(System.Exception error, string fileName);
+        public delegate void OnFileErrorHandler(Exception error, string fileName);
         public event OnFileErrorHandler OnFileError;
 
-        internal void RaiseOnFileError(System.Exception error, string fileName)
+        internal void RaiseOnFileError(Exception error, string fileName)
         {
             if (error.HResult == -2147024671)
             {
