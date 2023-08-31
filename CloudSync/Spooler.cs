@@ -33,7 +33,8 @@ namespace CloudSync
                 }
                 Context.RaiseOnStatusChangesEvent(Sync.SyncStatus.Pending);
             }
-            ExecuteNext();
+            if (ToDoOperations.Count == 1)
+                ExecuteNext();
         }
         private readonly List<Operation> ToDoOperations = new List<Operation>();
         public int PendingOperations => ToDoOperations.Count;
@@ -72,13 +73,13 @@ namespace CloudSync
         {
             lock (ToDoOperations)
             {
+                Context.RaiseOnStatusChangesEvent(ToDoOperations.Count == 0 ? Sync.SyncStatus.Monitoring : Sync.SyncStatus.Pending);
                 for (int i = Context.ConcurrentOperations(); i < MaxConcurrentOperations; i++)
                 {
                     if (ToDoOperations.Count > 0)
                     {
                         var toDo = ToDoOperations[0];
                         ToDoOperations.Remove(toDo);
-                        Context.RaiseOnStatusChangesEvent(ToDoOperations.Count == 0 ? Sync.SyncStatus.Synchronized : Sync.SyncStatus.Pending);
                         if (toDo.Type == OperationType.Send)
                         {
                             if (Context.HashFileTable(out var localHashes))
@@ -99,6 +100,9 @@ namespace CloudSync
             }
         }
 
+        /// <summary>
+        /// Remove all pending operations
+        /// </summary>
         public void Clear()
         {
             lock (ToDoOperations)

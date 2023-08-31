@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using System.Threading;
 using static CloudSync.Util;
@@ -15,18 +16,32 @@ namespace CloudSync
 
         internal void OnCommand(ulong? fromUserId, ushort command, params byte[][] values)
         {
-            if (!Enum.IsDefined(typeof(Commands), command))
-                return; // Commend not supported from this version
-            OnCommandRunning++;
-            OnCommand(fromUserId, (Commands)command, out string infoData, values);
-            RaiseOnCommandEvent(fromUserId, (Commands)command, infoData);
-            OnCommandRunning--;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                lastFromUserId = fromUserId;
+                if (!Enum.IsDefined(typeof(Commands), command))
+                    return; // Commend not supported from this version
+                OnCommandRunning++;
+                OnCommand(fromUserId, (Commands)command, out string infoData, values);
+                RaiseOnCommandEvent(fromUserId, (Commands)command, infoData);
+                OnCommandRunning--;
+            });
         }
-        public DateTime LastCommunicationReceived { get; private set; }
+
+        ulong? lastFromUserId;
+#if DEBUG
+        public void TestSendReady()
+        {
+            StatusNotification(lastFromUserId, Status.Ready);
+        }
+
+#endif
+
+        public DateTime LastCommandReceived { get; private set; }
         private void OnCommand(ulong? fromUserId, Commands command, out string infoData, params byte[][] values)
         {
             infoData = null;
-            LastCommunicationReceived = DateTime.UtcNow;
+            LastCommandReceived = DateTime.UtcNow;
             Debug.WriteLine("IN " + command);
             if (command == Commands.RequestOfAuthentication)
             {
@@ -84,7 +99,7 @@ namespace CloudSync
                             }
                         }
                         if (notice == Notice.Synchronized)
-                            RaiseOnStatusChangesEvent(SyncStatus.Synchronized);
+                            RaiseOnStatusChangesEvent(SyncStatus.Monitoring);
                         else if (notice == Notice.FullSpace)
                         {
                             Spooler.RemoteDriveOverLimit = true;
@@ -114,6 +129,8 @@ namespace CloudSync
                             remoteHashes.Add(BitConverter.ToUInt64(hash8, 0), BitConverter.ToUInt32(timestamp4, 0));
                         }
                         var delimitsRange = values.Length == 1 ? null : new BlockRange(values[1], values[2], values[3], values[4]);
+                        //System.Threading.Tasks.Task.Run(() =>
+                        //{
                         if (HashFileTable(out var localHashes, delimitsRange: delimitsRange))
                         {
                             if (localHashes != null)
@@ -128,12 +145,10 @@ namespace CloudSync
                                         if (remoteDate > localDate)
                                         {
                                             Spooler.AddOperation(Spooler.OperationType.Request, fromUserId, hash);
-                                            //RequestFile(fromUserId, hash);
                                         }
                                         else if (remoteDate < localDate)
                                         {
                                             Spooler.AddOperation(Spooler.OperationType.Send, fromUserId, hash);
-                                            //SendFile(fromUserId, localHashes[hash]);
                                         }
                                     }
                                 }
@@ -157,6 +172,7 @@ namespace CloudSync
                                 }
                             }
                         }
+                        //});
                     }
                     else if (command == Commands.RequestHashStructure)
                     {
@@ -168,7 +184,12 @@ namespace CloudSync
                         var remoteHash = values[0];
                         if (GetHasBlock(out var localHash))
                         {
-                            if (!remoteHash.SequenceEqual(localHash))
+                            if (remoteHash.SequenceEqual(localHash))
+                            {
+                                RaiseOnStatusChangesEvent(SyncStatus.Monitoring);
+                                Notification(fromUserId, Notice.Synchronized);
+                            }
+                            else
                             {
                                 RaiseOnStatusChangesEvent(SyncStatus.Pending);
                                 var range = HashBlocksToBlockRange(remoteHash, localHash);
@@ -176,11 +197,6 @@ namespace CloudSync
                                     SendHashStructure(fromUserId, range);
                                 else
                                     RequestHashStructure(fromUserId, range);
-                            }
-                            else
-                            {
-                                RaiseOnStatusChangesEvent(SyncStatus.Synchronized);
-                                Notification(fromUserId, Notice.Synchronized);
                             }
                         }
                     }
@@ -198,7 +214,7 @@ namespace CloudSync
                             }
                             else
                             {
-                                RaiseOnStatusChangesEvent(SyncStatus.Synchronized);
+                                RaiseOnStatusChangesEvent(SyncStatus.Monitoring);
                                 Notification(fromUserId, Notice.Synchronized);
                             }
                         }
@@ -240,14 +256,32 @@ namespace CloudSync
                                 Notification(fromUserId, Notice.FullSpace);
                                 return;
                             }
+                        var restoreParts = 0u;
                         lock (CrcTable)
                         {
                             if (part == 1)
                             {
-                                FileDelete(tmpFile, out Exception ex);
-                                if (ex != null)
-                                    RaiseOnFileError(ex, tmpFile);
                                 CrcTable[crcId] = startCrc;
+                                var oldDownload = new FileInfo(tmpFile);
+                                if (oldDownload.Exists)
+                                {
+                                    if ((oldDownload.Length % data.LongLength) == 0)
+                                    {
+                                        restoreParts = (uint)(oldDownload.Length / data.LongLength);
+                                        try
+                                        {
+                                            CrcTable[crcId] = ComputingCRC(tmpFile, out int _, data.Length, data);
+                                            part = restoreParts;
+                                        }
+                                        catch (Exception)
+                                        {
+                                            restoreParts = 0u;
+                                            FileDelete(tmpFile, out Exception ex);
+                                            if (ex != null)
+                                                RaiseOnFileError(ex, tmpFile);
+                                        }
+                                    }
+                                }
                             }
                             else
                             {
@@ -255,16 +289,23 @@ namespace CloudSync
                                     return;
                             }
                             if (!CrcTable.ContainsKey(crcId))
-                                Debugger.Break();
-                            CrcTable[crcId] = ULongHash(CrcTable[crcId], data);
+                            {
+                                CrcTable[crcId] = ComputingCRC(tmpFile, out int parts); 
+                                if (parts != part - 1) // Check incongruent part number
+                                {
+                                    Debugger.Break();
+                                    return;
+                                }
+                            }
+                            if (restoreParts == 0u)
+                                CrcTable[crcId] = ULongHash(CrcTable[crcId], data);
                         }
-                        if (!FileAppend(tmpFile, data, out Exception exception, 10, 50, DefaultChunkSize, part))
+                        if (restoreParts == 0u && !FileAppend(tmpFile, data, out Exception exception, 10, 50, DefaultChunkSize, part))
                         {
                             if (exception != null)
                                 RaiseOnFileError(exception, tmpFile);
                             return;
                         }
-
                         if (part == total)
                         {
                             var length = values[5].ToUint32();
@@ -310,7 +351,7 @@ namespace CloudSync
                         else
                         {
                             RaiseOnFileTransfer(false, hashFileName, part, total);
-                            Thread.Sleep(5000);
+                            //Thread.Sleep(5000);
                             RequestChunkFile(fromUserId, hashFileName, part + 1);
                         }
                     }
@@ -375,12 +416,10 @@ namespace CloudSync
                     {
                         var status = (Status)values[0][0];
                         infoData = status.ToString();
-                        if (!IsServer && status == Status.Ready)
-                        {
-                            Spooler.ExecuteNext(fromUserId);
-                            //StartSynchronization(null, null);
-                        }
+                        if (status == Status.Busy)
+                            return;
                     }
+                    Spooler.ExecuteNext(fromUserId);
                 }
             }
         }

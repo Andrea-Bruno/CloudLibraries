@@ -143,7 +143,7 @@ namespace CloudSync
                 ReceptionInProgress.Completed(hash, (ulong)toUserId);
             else
                 ReceptionInProgress.SetTimeout(hash);
-            ExecuteCommand(toUserId, Commands.RequestChunkFile, "#" + chunkPart + " " + hash, new[] { BitConverter.GetBytes(hash), chunkPart.GetBytes() });
+            ExecuteCommand(toUserId, Commands.RequestChunkFile, "#" + chunkPart + " " + hash, new[] { hash.GetBytes(), chunkPart.GetBytes() });
         }
 
         private void ReportReceiptFileCompleted(ulong? toUserId, ulong hash, uint totalParts)

@@ -16,7 +16,7 @@ namespace CloudSync
         {
             Undefined,
             Pending,
-            Synchronized,
+            Monitoring,
         }
 
         public delegate void StatusEventHandler(SyncStatus syncStatus, int pendingFiles);
@@ -29,10 +29,9 @@ namespace CloudSync
                 LocalSyncStatus = localSyncStatus;
                 if (OnLocalSyncStatusChanges != null)
                     new Thread(() => OnLocalSyncStatusChanges?.Invoke(LocalSyncStatus, PendingFiles)).Start();
-                if (ClientCheckSync != null)
-                {
-                    RestartCheckSyncTimer();
-                }
+                if (LocalSyncStatus == SyncStatus.Monitoring)
+                    RequestSynchronization(); //when synced, try syncing again to verify that no files changed while running commands in the spooler
+                RestartCheckSyncTimer();
             }
         }
 

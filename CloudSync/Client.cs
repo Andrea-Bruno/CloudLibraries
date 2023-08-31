@@ -31,7 +31,7 @@ namespace CloudSync
         /// <summary>
         /// True if this client is currently connected
         /// </summary>
-        public bool IsConnected => (DateTime.UtcNow - LastInteraction).TotalMinutes <= Sync.CheckEveryMinutes;
+        public bool IsConnected => (DateTime.UtcNow - LastInteraction).TotalMinutes <= Sync.CheckSyncEveryMinutes;
 
         /// <summary>
         /// Create a client object to save the values of the client that has access to this machine (This instance is for contacts with whom there is encrypted socket communication)

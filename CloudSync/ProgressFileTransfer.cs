@@ -46,8 +46,8 @@ namespace CloudSync
                 {
                     TimeoutChunkFileToTransfer.Remove(hashFileName);
                 }
-            if (executeNext)
-                Context.Spooler.ExecuteNext(userId);
+            //if (executeNext)
+            //    Context.Spooler.ExecuteNext(userId);
         }
         /// <summary>
         /// When file transfer starts, this method sets the timeout. When the timeout expires, the transfer will be considered failed.
@@ -56,7 +56,7 @@ namespace CloudSync
         /// <param name="chunkLength">Length of data to send</param>
         public void SetTimeout(ulong hashFileName, int chunkLength = Util.DefaultChunkSize)
         {
-            var timeout = Util.DataTransferTimeOut(chunkLength).Add(TimeSpan.FromMilliseconds(Context.HashFileTableElapsedMs));
+            var timeout = Util.DataTransferTimeOut(chunkLength);
             lock (TimeoutChunkFileToTransfer)
             {
                 if (TimeoutChunkFileToTransfer.ContainsKey(hashFileName))
@@ -114,7 +114,7 @@ namespace CloudSync
                     }
                 }
             foreach (var key in expired)
-                Completed(key, executeNext: key == expired[expired.Count - 1]);
+                Completed(key, executeNext: false);
         }
 
         public void Stop()

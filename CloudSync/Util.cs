@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -65,7 +66,7 @@ namespace CloudSync
         public static TimeSpan DataTransferTimeOut(int dataSize)
         {
             var timeOutMs = (dataSize / 10) * Spooler.MaxConcurrentOperations + 20000;
-            return new TimeSpan(timeOutMs * TimeSpan.TicksPerMillisecond);
+            return TimeSpan.FromMilliseconds(timeOutMs);
         }
 
         private static string GetPinsFile(SecureStorage.Storage secureStorage)
@@ -748,6 +749,37 @@ namespace CloudSync
             var ok = driveInfo.AvailableFreeSpace > preserveSize;
             return throwError && !ok ? throw DriveFullException : ok;
         }
+
+        /// <summary>
+        /// Compute the CRC for data submission check
+        /// </summary>
+        /// <param name="file">The file to compute the CRC</param>
+        /// <param name="chunkSize">The size of the block</param>
+        /// <param name="firstChunkData">The first block if you want to check this data</param>
+        /// <returns></returns>
+        /// <exception cref="Exception">The first block if you want to check this data</exception>
+        public static ulong ComputingCRC(string file, out int parts, int chunkSize = DefaultChunkSize, byte[] firstChunkData = null)
+        {
+            var crc = startCrc;
+            byte[] buffer = new byte[chunkSize]; // 5MB in bytes is 5 * 2^20
+            parts = 0;
+            using (var steam = new FileStream(file, FileMode.Open))
+            {
+                while (steam.Position < steam.Length)
+                {
+                    steam.Read(buffer, 0, buffer.Length);
+                    crc = ULongHash(crc, buffer);
+                    if (parts == 0 && firstChunkData != null)
+                    {
+                        if (!firstChunkData.SequenceEqual(buffer))
+                            throw new Exception("The old download cannot be recovered");
+                    }
+                    parts++;
+                }
+            }
+            return crc;
+        }
+
         /// <summary>
         /// The disk should never be filled completely to avoid blocking the operating system and disk operations. This is the minimum space you want to keep on the disk.
         /// </summary>

@@ -572,26 +572,9 @@ namespace CloudBox
             {
                 var sb = new StringBuilder();
                 void AddTx(string name, object value = null) => sb.AppendLine(name + ((value == null) ? "" : ": " + value));
-                if (!IsServer)
-                {
-                    AddTx("[CloudBox Client]");
-                    AddTx("Paired to server", (ServerCloud == null ? "None" : ServerCloud.UserId + " UserId"));
-                    AddTx("Logged with server", (Sync != null));
-                }
                 var version = Assembly.GetEntryAssembly().GetName().Version.ToString();
                 if (version != "1.0.0.0")
                     AddTx("Version", version);
-                if (LicenseOEM == TestNetDefaultlicenseOEM)
-                {
-                    if (string.IsNullOrEmpty(LicenseOEM))
-                        AddTx("ERROR!", "Missing license");
-                    else
-                        AddTx("WARNING!", "TestNet license in use");
-#if DEBUG
-                    AddTx("WARNING!", "compiled in debug mode");
-#endif
-                }
-                AddTx("Connected to the router", Context?.IsConnected);
                 if (Context != null)
                 {
                     if (Context.InstancedTimeUtc != default)
@@ -602,29 +585,53 @@ namespace CloudBox
                         AddTx("Entry point (router address)", Context?.EntryPoint.ToString());
                     AddTx("Keep Alive Failures", Context?.KeepAliveFailures);
                 }
+                if (LicenseOEM == TestNetDefaultlicenseOEM)
+                {
+                    if (string.IsNullOrEmpty(LicenseOEM))
+                        AddTx("ERROR!", "Missing license");
+                    else
+                        AddTx("WARNING!", "TestNet license in use");
+#if DEBUG
+                    AddTx("WARNING!", "compiled in debug mode");
+#endif
+                }
+                if (!IsServer)
+                {
+                    AddTx("Paired to server", (ServerCloud == null ? "None" : ServerCloud.UserId + " UserId"));
+                    AddTx("Logged with server", (Sync != null));
+                }
+                AddTx("Connected to the router", Context?.IsConnected);
                 AddTx("OEM Id", OEM.GetIdOEM(LicenseOEM));
                 AddTx("Cloud path", CloudPath);
                 //addTx("Pubblic IP", Util.PublicIpAddressInfo());
-
-
+                if (Context != null)
+                {
+                    AddTx("# CHANNEL:");
+                    AddTx("Last keep alive check", Context?.LastKeepAliveCheck);
+                    AddTx("Last IN", Context?.LastIN);
+                    AddTx("Last command IN", Context?.LastCommandIN);
+                    AddTx("Last OUT", Context?.LastOUT);
+                    AddTx("Last command OUT", Context?.LastCommandOUT);
+                }
                 if (Sync != null)
                 {
-                    AddTx("Last Communication", Sync.LastCommunicationReceived != default ? (int)((DateTime.UtcNow - Sync.LastCommunicationReceived).TotalSeconds) + " seconds ago" : (IsServer ? "No client connected" : "ERROR! cloud unreachable"));
                     AddTx("Pending operations", Sync.PendingOperations);
-
-                    // Sending
-                    AddTx("Total files sent", Sync.TotalFilesSent);
-                    AddTx("Total bytes sent", Sync.TotalBytesSent);
-                    AddTx("Sending file in Progress", Sync.SendingInProgress.TransferInProgress);
-                    AddTx("Sending timeout", Sync.SendingInProgress.TimeOutInfo());
-                    AddTx("Total sent failed by timeout", Sync.SendingInProgress.FailedByTimeout);
-
                     // Reception
+                    AddTx("# RECEPTION:");
+                    AddTx("Last Command received", Sync.LastCommandReceived != default ? (int)((DateTime.UtcNow - Sync.LastCommandReceived).TotalSeconds) + " seconds ago" : (IsServer ? "No client connected" : "ERROR! cloud unreachable"));
                     AddTx("Total files received", Sync.TotalFilesReceived);
                     AddTx("Total bytes received", Sync.TotalBytesReceived);
-                    AddTx("Reception file in Progress", Sync.ReceptionInProgress.TransferInProgress);
+                    AddTx("Reception file in progress", Sync.ReceptionInProgress.TransferInProgress);
                     AddTx("Reception timeout", Sync.ReceptionInProgress.TimeOutInfo());
                     AddTx("Total received failed by timeout", Sync.ReceptionInProgress.FailedByTimeout);
+                    AddTx("# SENDING:");
+                    // Sending
+                    AddTx("Last Command sent", Sync.LastCommandSent != default ? (int)((DateTime.UtcNow - Sync.LastCommandSent).TotalSeconds) + " seconds ago" : (IsServer ? "No client connected" : "ERROR! cloud unreachable"));
+                    AddTx("Total files sent", Sync.TotalFilesSent);
+                    AddTx("Total bytes sent", Sync.TotalBytesSent);
+                    AddTx("Sending file in progress", Sync.SendingInProgress.TransferInProgress);
+                    AddTx("Sending timeout", Sync.SendingInProgress.TimeOutInfo());
+                    AddTx("Total sent failed by timeout", Sync.SendingInProgress.FailedByTimeout);
                 }
                 return sb.ToString();
             }

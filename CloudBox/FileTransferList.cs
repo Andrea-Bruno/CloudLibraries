@@ -57,7 +57,10 @@ namespace CloudBox
                 }
             }
         }
-        public readonly int PreservedElements; // Puts a limit on the preserved elements
+        /// <summary>
+        /// Puts a limit on the preserved elements
+        /// </summary>
+        public readonly int PreservedElements; 
 
         /// <summary>
         /// Event (It is actually an Action to avoid creating multiple links from web page instances) that is raised when the list is updated: Returns the index of the record that has changed, or -1 if a new record has been added at the beginning.

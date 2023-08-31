@@ -116,7 +116,6 @@ namespace CloudSync
         /// </summary>
         public void IsReachableDiskStateIsChanged(bool isMounted) => IsReachable = isMounted;
 
-
         /// <summary>
         /// This function returns true if the specified path matches a virtual disk path that has not been mounted.
         /// </summary>
@@ -219,7 +218,7 @@ namespace CloudSync
         /// <summary>
         /// After how much idle time, a check on the synchronization status is required
         /// </summary>
-        public const int CheckEveryMinutes = 60;
+        public const int CheckSyncEveryMinutes = 60;
         /// <summary>
         /// If the sync fails, a timer retries the sync. Usually the connection fails due to connection errors.
         /// </summary>
@@ -233,9 +232,11 @@ namespace CloudSync
         /// </summary>
         internal void RestartCheckSyncTimer()
         {
-            // If the client is out of sync, it tries to sync every minute
-            var next = (LocalSyncStatus == SyncStatus.Synchronized ? RetrySyncFailedAfterMinutes : CheckEveryMinutes);
-            ClientCheckSync.Change(TimeSpan.FromMinutes(next), TimeSpan.FromMinutes(CheckEveryMinutes));
+            // If the client is out of sync, it tries to sync more frequently           
+            var next = ConcurrentOperations() == 0 && LocalSyncStatus == SyncStatus.Monitoring ? CheckSyncEveryMinutes : RetrySyncFailedAfterMinutes;
+            var timespan = TimeSpan.FromMinutes(next);
+            timespan.Add(TimeSpan.FromMilliseconds(CalculationTimeHashFileTableMS));
+            ClientCheckSync?.Change(timespan, timespan);
         }
 
         /// <summary>
@@ -250,6 +251,7 @@ namespace CloudSync
         /// </summary>
         public void RequestSynchronization()
         {
+            RestartCheckSyncTimer();
             try
             {
                 SyncTimeBuffer?.Change(SyncTimeBufferMs, Timeout.Infinite);
@@ -263,7 +265,8 @@ namespace CloudSync
         {
             if (ClientCheckSync == null)
             {
-                ClientCheckSync = new Timer((o) => RequestSynchronization(), null, TimeSpan.FromMinutes(CheckEveryMinutes), TimeSpan.FromMinutes(CheckEveryMinutes));
+                ClientCheckSync = new Timer((o) => RequestSynchronization());
+                RestartCheckSyncTimer();
             }
             if (SyncTimeBuffer == null)
             {
@@ -295,7 +298,10 @@ namespace CloudSync
                     else
                     {
                         if (IsLogged)
+                        {
+                            Spooler.Clear();
                             SendHashRoot();
+                        }
                     }
                 }
                 performingStartSynchronization = false;
@@ -318,16 +324,21 @@ namespace CloudSync
         private static int InstanceCounter;
         public readonly bool IsServer;
         public readonly string CloudRoot;
-        public int ConcurrentOperations() { return SendingInProgress.TransferInProgress + ReceptionInProgress.TransferInProgress; }
+        public int ConcurrentOperations() { return SendingInProgress == null ? 0 : SendingInProgress.TransferInProgress + ReceptionInProgress.TransferInProgress; }
         public bool IsTransferring() { return ConcurrentOperations() > 0; }
         public static readonly ushort AppId = BitConverter.ToUInt16(Encoding.ASCII.GetBytes("sync"), 0);
         public delegate void SendCommand(ulong? contactId, ushort command, params byte[][] values);
+        public DateTime LastCommandSent { get; private set; }
         private void ExecuteCommand(ulong? contactId, Commands command, string infoData, params byte[][] values)
         {
-            Debug.WriteLine("OUT " + command);
-            RaiseOnCommandEvent(contactId, command, infoData, true);
-            Execute.Invoke(contactId, (ushort)command, values);
-        }
+            LastCommandSent = DateTime.UtcNow;
+            Task.Run(() =>
+            {
+                Debug.WriteLine("OUT " + command);
+                RaiseOnCommandEvent(contactId, command, infoData, true);
+                Execute.Invoke(contactId, (ushort)command, values);
+            });
+            }
 
         private readonly SendCommand Execute;
 
@@ -400,7 +411,7 @@ namespace CloudSync
         /// <summary>
         /// timeout for the cache of HashFileTable, after the timeout the table will be regenerated
         /// </summary>
-        private int HashFileTableExpireCache => 10000 + HashFileTableElapsedMs;
+        private int HashFileTableExpireCache => 10000 + CalculationTimeHashFileTableMS;
 
         /// <summary>
         /// Get a hash table of contents (files and directories), useful to quickly identify what has changed. The table can be delimited within a certain range.
@@ -484,7 +495,7 @@ namespace CloudSync
                         CacheHashFileTable = newHashFileTable;
                         CacheHashFileTableExpire = DateTime.UtcNow.AddMilliseconds(HashFileTableExpireCache);
                         watch.Stop();
-                        HashFileTableElapsedMs = (int)(watch.ElapsedMilliseconds);
+                        CalculationTimeHashFileTableMS = (int)(watch.ElapsedMilliseconds);
                     }
                 }
                 if (delimitsRange != null)
@@ -505,8 +516,8 @@ namespace CloudSync
             return false;
         }
         /// <summary>
-        /// The time taken to compute the cloud path file table hash
+        /// The time taken to compute the cloud path file table hash in milliseconds
         /// </summary>
-        public int HashFileTableElapsedMs { get; internal set; }
+        public int CalculationTimeHashFileTableMS { get; internal set; }
     }
 }
