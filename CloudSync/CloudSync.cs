@@ -77,6 +77,12 @@ namespace CloudSync
         }
 
         /// <summary>
+        /// Approximate value of the end of synchronization (calculated in a statistical way)
+        /// </summary>
+        /// <returns>Time when synchronization is expected to end (UTC value)</returns>
+        public DateTime SyncETA() => Spooler.ETA();
+
+        /// <summary>
         /// Indicates if the client is connected. Persistent value upon restart from client application.
         /// </summary>
         private bool IsLogged

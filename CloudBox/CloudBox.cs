@@ -608,10 +608,10 @@ namespace CloudBox
                 {
                     AddTx("# CHANNEL:");
                     AddTx("Last keep alive check", Context?.LastKeepAliveCheck);
-                    AddTx("Last IN", Context?.LastIN);
+                    AddTx("Last IN (UTC)", Context?.LastIN);
                     AddTx("Last command IN", Context?.LastCommandIN);
                     AddTx("Last OUT", Context?.LastOUT);
-                    AddTx("Last command OUT", Context?.LastCommandOUT);
+                    AddTx("Last command OUT (UTC)", Context?.LastCommandOUT);
                 }
                 if (Sync != null)
                 {

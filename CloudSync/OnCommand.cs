@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using static CloudSync.Util;
 
 namespace CloudSync
@@ -129,50 +130,7 @@ namespace CloudSync
                             remoteHashes.Add(BitConverter.ToUInt64(hash8, 0), BitConverter.ToUInt32(timestamp4, 0));
                         }
                         var delimitsRange = values.Length == 1 ? null : new BlockRange(values[1], values[2], values[3], values[4]);
-                        //System.Threading.Tasks.Task.Run(() =>
-                        //{
-                        if (HashFileTable(out var localHashes, delimitsRange: delimitsRange))
-                        {
-                            if (localHashes != null)
-                            {
-                                //Update file
-                                foreach (var hash in remoteHashes.Keys)
-                                {
-                                    if (localHashes.TryGetValue(hash, out var dateTime))
-                                    {
-                                        var remoteDate = remoteHashes[hash];
-                                        var localDate = dateTime.UnixLastWriteTimestamp();
-                                        if (remoteDate > localDate)
-                                        {
-                                            Spooler.AddOperation(Spooler.OperationType.Request, fromUserId, hash);
-                                        }
-                                        else if (remoteDate < localDate)
-                                        {
-                                            Spooler.AddOperation(Spooler.OperationType.Send, fromUserId, hash);
-                                        }
-                                    }
-                                }
-                                // Send missing files to the remote (or delete local if is removed)
-                                foreach (var hash in localHashes.Keys)
-                                {
-                                    if (!remoteHashes.ContainsKey(hash))
-                                    {
-                                        Spooler.AddOperation(Spooler.OperationType.Send, fromUserId, hash);
-                                    }
-                                }
-
-                                // Request missing files locally
-                                foreach (var hash in remoteHashes.Keys)
-                                {
-                                    var wasDeleted = Existed(hash);
-                                    if (!localHashes.ContainsKey(hash) && !Existed(hash))
-                                    {
-                                        Spooler.AddOperation(Spooler.OperationType.Request, fromUserId, hash);
-                                    }
-                                }
-                            }
-                        }
-                        //});
+                        OnSendHashStructure(fromUserId, remoteHashes, delimitsRange);                        
                     }
                     else if (command == Commands.RequestHashStructure)
                     {
@@ -290,7 +248,7 @@ namespace CloudSync
                             }
                             if (!CrcTable.ContainsKey(crcId))
                             {
-                                CrcTable[crcId] = ComputingCRC(tmpFile, out int parts); 
+                                CrcTable[crcId] = ComputingCRC(tmpFile, out int parts);
                                 if (parts != part - 1) // Check incongruent part number
                                 {
                                     Debugger.Break();
@@ -427,6 +385,64 @@ namespace CloudSync
         /// Flags that indicates that the disk over limit has been notified to the remote device
         /// </summary>
         public List<ulong?> FlagsDriveOverLimit = new List<ulong?>();
+        private Task TaskOnSendHashStructure;
+        /// <summary>
+        /// Add the operations to be performed for file synchronization to the spooler.
+        /// This task with many files may take a long time, so it runs in baskground!
+        /// </summary>
+        /// <param name="fromUserId">User who sent the data required for synchronization</param>
+        /// <param name="remoteHashes">The structure of the remote files used to calculate the synchronization</param>
+        /// <param name="delimitsRange">A possible delimiter that restricts the area of files to be checked for synchronization</param>
+        private void OnSendHashStructure(ulong? fromUserId, Dictionary<ulong, uint> remoteHashes, BlockRange delimitsRange)
+        {
+            if (TaskOnSendHashStructure == null)
+                TaskOnSendHashStructure = Task.Run(() =>
+                {
+                    if (HashFileTable(out var localHashes, delimitsRange: delimitsRange))
+                    {
+                        if (localHashes != null)
+                        {
+                            //Update file
+                            foreach (var hash in remoteHashes.Keys)
+                            {
+                                if (localHashes.TryGetValue(hash, out var dateTime))
+                                {
+                                    var remoteDate = remoteHashes[hash];
+                                    var localDate = dateTime.UnixLastWriteTimestamp();
+                                    if (remoteDate > localDate)
+                                    {
+                                        Spooler.AddOperation(Spooler.OperationType.Request, fromUserId, hash);
+                                    }
+                                    else if (remoteDate < localDate)
+                                    {
+                                        Spooler.AddOperation(Spooler.OperationType.Send, fromUserId, hash);
+                                    }
+                                }
+                            }
+                            // Send missing files to the remote (or delete local if is removed)
+                            foreach (var hash in localHashes.Keys)
+                            {
+                                if (!remoteHashes.ContainsKey(hash))
+                                {
+                                    Spooler.AddOperation(Spooler.OperationType.Send, fromUserId, hash);
+                                }
+                            }
+
+                            // Request missing files locally
+                            foreach (var hash in remoteHashes.Keys)
+                            {
+                                var wasDeleted = Existed(hash);
+                                if (!localHashes.ContainsKey(hash) && !Existed(hash))
+                                {
+                                    Spooler.AddOperation(Spooler.OperationType.Request, fromUserId, hash);
+                                }
+                            }
+                        }
+                    }
+                    TaskOnSendHashStructure = null;
+                });
+        }
+
 
         public uint TotalFilesReceived;
         public uint TotalBytesReceived;

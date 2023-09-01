@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace CloudSync
@@ -13,9 +14,20 @@ namespace CloudSync
             Context = context;
         }
         private readonly Sync Context;
-
+        private DateTime StartSyncUtc;
+        private int Executed;
+        /// <summary>
+        /// Approximate value of the end of synchronization (calculated in a statistical way)
+        /// </summary>
+        /// <returns>Time when synchronization is expected to end (UTC value)</returns>
+        public DateTime ETA() {
+            var diffTime = DateTime.UtcNow - StartSyncUtc;
+            return Executed > 0 ? DateTime.UtcNow.Add(new TimeSpan(diffTime.Ticks / Executed * ToDoOperations.Count)) : default;
+        }
         public void AddOperation(OperationType type, ulong? userId, ulong hashFile)
         {
+            if (StartSyncUtc == default)
+                StartSyncUtc = DateTime.UtcNow;
 #if DEBUG_AND || DEBUG
             if (Context.IsServer)
                 System.Diagnostics.Debugger.Break(); // the operations must be given by the client, it is preferable that the server works in slave mode
@@ -24,19 +36,20 @@ namespace CloudSync
             //Context.ClientFileMonitoring?.Stop();
             lock (ToDoOperations)
             {
-                var duplicate = ToDoOperations.Find(x => x.UserId == userId && x.HashFile == hashFile);
-                if (duplicate != null)
-                    ToDoOperations.Remove(duplicate);
+                // Remove duplicate
+                if (ToDoOperations.ContainsKey(hashFile))
+                    ToDoOperations.Remove(hashFile);
                 if (!RemoteDriveOverLimit || type != OperationType.Send) // Do not add send operations if the remote disk is full
                 {
-                    ToDoOperations.Add(new Operation { Type = type, UserId = userId, HashFile = hashFile });
+                    ToDoOperations.Add(hashFile, new Operation { Type = type, UserId = userId, HashFile = hashFile });
                 }
                 Context.RaiseOnStatusChangesEvent(Sync.SyncStatus.Pending);
             }
             if (ToDoOperations.Count == 1)
                 ExecuteNext();
         }
-        private readonly List<Operation> ToDoOperations = new List<Operation>();
+
+        private readonly Dictionary<ulong, Operation> ToDoOperations = new Dictionary<ulong, Operation>();
         public int PendingOperations => ToDoOperations.Count;
 
         public enum OperationType
@@ -59,10 +72,13 @@ namespace CloudSync
         {
             if (Context.IsServer)
             {
-                foreach (var item in ToDoOperations)
+                lock (ToDoOperations)
                 {
-                    if (item.UserId == notifyToUserId)
-                        return;
+                    foreach (var item in ToDoOperations.Values)
+                    {
+                        if (item.UserId == notifyToUserId)
+                            return;
+                    }
                 }
                 Context.StatusNotification(notifyToUserId, Sync.Status.Ready);
             }
@@ -78,8 +94,9 @@ namespace CloudSync
                 {
                     if (ToDoOperations.Count > 0)
                     {
-                        var toDo = ToDoOperations[0];
-                        ToDoOperations.Remove(toDo);
+                        Executed++;
+                        var toDo = ToDoOperations.Values.ToArray()[0];
+                        ToDoOperations.Remove(toDo.HashFile);
                         if (toDo.Type == OperationType.Send)
                         {
                             if (Context.HashFileTable(out var localHashes))
@@ -124,10 +141,10 @@ namespace CloudSync
                 {
                     lock (ToDoOperations)
                     {
-                        ToDoOperations.ToList().ForEach(toDo =>
+                        ToDoOperations.Values.ToList().ForEach(toDo =>
                         {
                             if (toDo.Type == OperationType.Send)
-                                ToDoOperations.Remove(toDo);
+                                ToDoOperations.Remove(toDo.HashFile);
                         });
                     }
                 }
