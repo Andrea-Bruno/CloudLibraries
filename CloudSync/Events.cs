@@ -6,7 +6,20 @@ namespace CloudSync
     public partial class Sync
     {
         // ===============================================================================
-        // ======================= Events about the current status =======================
+        // =================== Events about the current remote status =====================
+        // ===============================================================================
+
+        private void OnNotify(ulong? fromUserId, Notice notice)
+        {
+            RemoteStatus = notice;
+            new Thread(() => OnNotification?.Invoke(fromUserId, notice)).Start();
+        }
+
+        public Notice RemoteStatus { get; private set; }
+
+
+        // ===============================================================================
+        // =================== Events about the current local status =====================
         // ===============================================================================
 
         public SyncStatus LocalSyncStatus { get; private set; }
@@ -29,7 +42,7 @@ namespace CloudSync
                 LocalSyncStatus = localSyncStatus;
                 if (OnLocalSyncStatusChanges != null)
                     new Thread(() => OnLocalSyncStatusChanges?.Invoke(LocalSyncStatus, PendingFiles)).Start();
-                if (LocalSyncStatus == SyncStatus.Monitoring)
+                if (!SyncIsInPending)
                     RequestSynchronization(); //when synced, try syncing again to verify that no files changed while running commands in the spooler
                 RestartCheckSyncTimer();
             }

@@ -13,7 +13,7 @@ using HashFileTable = System.Collections.Generic.Dictionary<ulong, System.IO.Fil
 
 namespace CloudSync
 {
-    public static class Util
+    public static partial class Util
     {
         static Util()
         {
@@ -381,8 +381,7 @@ namespace CloudSync
             return Path.Combine(GetTempPath(), ((ulong)userId).ToString("X") + hashFileName.ToString("X") + sync.InstanceId);
         }
         public const int DefaultChunkSize = 1024 * 1000; // 1 mb
-        public const ulong startCrc = 2993167723948948793u;
-        public static byte[] GetChunk(uint chunkPart, string fullFileName, out uint parts, out long fileLength, ref ulong crc, int chunkSize = DefaultChunkSize)
+        public static byte[] GetChunk(uint chunkPart, string fullFileName, out uint parts, out long fileLength, int chunkSize = DefaultChunkSize)
         {
             if (chunkSize == 0)
                 chunkSize = DefaultChunkSize;
@@ -390,8 +389,6 @@ namespace CloudSync
             fileLength = new FileInfo(fullFileName).Length;
             parts = (uint)Math.Ceiling((double)fileLength / chunkSize);
             parts = parts == 0 ? 1 : parts;
-            crc = chunkPart == 1 ? startCrc : crc;
-
             if (chunkPart > parts)
                 return null;
             using (var fs = File.OpenRead(fullFileName))
@@ -403,11 +400,12 @@ namespace CloudSync
                     if (toTake > chunkSize)
                         toTake = chunkSize;
                     chunk = reader.ReadBytes((int)toTake);
-                    crc = ULongHash(crc, chunk);
                 }
             }
             return chunk;
         }
+
+        public const ulong StartCRC = CRC.StartCRC;
 
         public enum Icos
         {
@@ -748,36 +746,6 @@ namespace CloudSync
             var driveInfo = new DriveInfo(drive);
             var ok = driveInfo.AvailableFreeSpace > preserveSize;
             return throwError && !ok ? throw DriveFullException : ok;
-        }
-
-        /// <summary>
-        /// Compute the CRC for data submission check
-        /// </summary>
-        /// <param name="file">The file to compute the CRC</param>
-        /// <param name="chunkSize">The size of the block</param>
-        /// <param name="firstChunkData">The first block if you want to check this data</param>
-        /// <returns></returns>
-        /// <exception cref="Exception">The first block if you want to check this data</exception>
-        public static ulong ComputingCRC(string file, out int parts, int chunkSize = DefaultChunkSize, byte[] firstChunkData = null)
-        {
-            var crc = startCrc;
-            byte[] buffer = new byte[chunkSize]; // 5MB in bytes is 5 * 2^20
-            parts = 0;
-            using (var steam = new FileStream(file, FileMode.Open))
-            {
-                while (steam.Position < steam.Length)
-                {
-                    steam.Read(buffer, 0, buffer.Length);
-                    crc = ULongHash(crc, buffer);
-                    if (parts == 0 && firstChunkData != null)
-                    {
-                        if (!firstChunkData.SequenceEqual(buffer))
-                            throw new Exception("The old download cannot be recovered");
-                    }
-                    parts++;
-                }
-            }
-            return crc;
         }
 
         /// <summary>

@@ -66,7 +66,7 @@ namespace CloudSync
                 }
                 else
                 {
-                    Notify(null, Notice.Authentication);
+                    OnNotify(null, Notice.Authentication);
                     if (IsLogged)
                         ClientStartSync(); // It's already logged in, so start syncing immediately
                     else
@@ -165,7 +165,7 @@ namespace CloudSync
         public void Dispose()
         {
             RaiseOnStatusChangesEvent(SyncStatus.Undefined);
-            Notify(null, Notice.LoggedOut);
+            OnNotify(null, Notice.LoggedOut);
             SecureStorage.Values.Delete("Logged", typeof(bool));
             if (SyncTimeBuffer != null)
             {
@@ -228,22 +228,20 @@ namespace CloudSync
         /// <summary>
         /// If the sync fails, a timer retries the sync. Usually the connection fails due to connection errors.
         /// </summary>
-#if DEBUG
-        public const int RetrySyncFailedAfterMinutes = 1;
-#else
         public const int RetrySyncFailedAfterMinutes = 5;
-#endif
         /// <summary>
         /// CheckSync timer trigger. Each time called it resets the timer time.
         /// </summary>
         internal void RestartCheckSyncTimer()
         {
             // If the client is out of sync, it tries to sync more frequently           
-            var next = ConcurrentOperations() == 0 && LocalSyncStatus == SyncStatus.Monitoring ? CheckSyncEveryMinutes : RetrySyncFailedAfterMinutes;
+            var next = SyncIsInPending ? RetrySyncFailedAfterMinutes : CheckSyncEveryMinutes;
             var timespan = TimeSpan.FromMinutes(next);
             timespan.Add(TimeSpan.FromMilliseconds(CalculationTimeHashFileTableMS));
             ClientCheckSync?.Change(timespan, timespan);
         }
+
+        private bool SyncIsInPending => RemoteStatus != Notice.Synchronized || ConcurrentOperations() != 0 || LocalSyncStatus != SyncStatus.Monitoring;
 
         /// <summary>
         /// Timer that starts the synchronization procedure when something in the cloud path has changed. The timer delays the synchronization of a few seconds because multiple changes may be in progress on the files and it is convenient to wait for the end of the operations.
@@ -317,6 +315,9 @@ namespace CloudSync
 
         public delegate void OnNotificationEvent(ulong? fromUserId, Notice notice);
 
+        /// <summary>
+        /// Procedure that is performed upon receipt of a notification from the remote machine. Can be used as an event to check the status of the remote machine.
+        /// </summary>
         public event OnNotificationEvent OnNotification;
 
         internal readonly SecureStorage.Storage SecureStorage;
@@ -338,13 +339,21 @@ namespace CloudSync
         private void ExecuteCommand(ulong? contactId, Commands command, string infoData, params byte[][] values)
         {
             LastCommandSent = DateTime.UtcNow;
+            //new Timer((t) =>
+            //{
+            //    Debug.WriteLine("OUT " + command);
+            //    RaiseOnCommandEvent(contactId, command, infoData, true);
+            //    Execute.Invoke(contactId, (ushort)command, values);
+
+            //}, null, 5000, Timeout.Infinite);
+
             Task.Run(() =>
             {
                 Debug.WriteLine("OUT " + command);
                 RaiseOnCommandEvent(contactId, command, infoData, true);
                 Execute.Invoke(contactId, (ushort)command, values);
             });
-            }
+        }
 
         private readonly SendCommand Execute;
 

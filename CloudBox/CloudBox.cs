@@ -4,10 +4,12 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using CloudSync;
 using EncryptedMessaging;
 using NBitcoin;
+using SecureStorage;
 using static CommunicationChannel.Channel;
 
 namespace CloudBox
@@ -392,7 +394,7 @@ namespace CloudBox
         /// </summary>
         /// <returns>Entry point (Url or IP), or null</returns>
         public static string LastEntryPoint()
-        {
+        {            
             return File.Exists(FileLastEntryPoint) ? File.ReadAllText(FileLastEntryPoint) : null;
         }
 
@@ -530,6 +532,9 @@ namespace CloudBox
 
         public readonly FileTransferList TransferredFiles = new FileTransferList();
         public readonly OnCommandList OnCommands = new OnCommandList();
+        /// <summary>
+        /// Procedure that is performed upon receipt of a notification from the remote machine. Can be used as an event to check the status of the remote machine.
+        /// </summary>
         public Sync.OnNotificationEvent OnNotificationAction;
         /// <summary>
         /// Event that fires when the sync status changes

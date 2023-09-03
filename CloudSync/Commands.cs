@@ -60,10 +60,6 @@ namespace CloudSync
             Ready = 0,
             Busy = 1,
         }
-        private void Notify(ulong? fromUserId, Notice notice)
-        {
-            new Thread(() => OnNotification?.Invoke(fromUserId, notice)).Start();
-        }
 
         private void Notification(ulong? toUserId, Notice notice)
         {
@@ -136,7 +132,6 @@ namespace CloudSync
             ExecuteCommand(toUserId, Commands.SendHashRoot, null, hashRoot);
         }
 
-
         private void RequestChunkFile(ulong? toUserId, ulong hash, uint chunkPart, bool isReceptFileCompleted = false)
         {
             if (isReceptFileCompleted)
@@ -155,71 +150,66 @@ namespace CloudSync
 
         public readonly ProgressFileTransfer SendingInProgress;
         public void SendFile(ulong? toUserId, FileSystemInfo fileSystemInfo) => SendChunkFile(toUserId, fileSystemInfo, 1);
-        private readonly Dictionary<ulong, ulong> TmpCrc = new Dictionary<ulong, ulong>();
         private void SendChunkFile(ulong? toUserId, FileSystemInfo fileSystemInfo, uint chunkPart)
         {
             if (!fileSystemInfo.Exists)
                 return;
+#if RELEASE
             try
             {
-                if (Spooler.RemoteDriveOverLimit)
-                    return; // The remote disk is full, do not send any more data
-                if (fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory))
+#endif
+            if (Spooler.RemoteDriveOverLimit)
+                return; // The remote disk is full, do not send any more data
+            if (fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory))
+            {
+                CreateDirectory(toUserId, fileSystemInfo);
+            }
+            else
+            {
+                var hashFileName = fileSystemInfo.HashFileName(this);
+                var tmpFile = GetTmpFile(this, toUserId, hashFileName);
+                if (chunkPart == 1)
                 {
-                    CreateDirectory(toUserId, fileSystemInfo);
+                    FileCopy(fileSystemInfo.FullName, tmpFile, out Exception exception);
+                    if (exception != null)
+                        RaiseOnFileError(exception, fileSystemInfo.FullName);
                 }
-                else
-                {
-                    var hashFileName = fileSystemInfo.HashFileName(this);
-                    var tmpFile = GetTmpFile(this, toUserId, hashFileName);
-                    ulong crc = default;
-                    if (chunkPart == 1)
-                    {
-                        FileCopy(fileSystemInfo.FullName, tmpFile, out Exception exception);
-                        if (exception != null)
-                            RaiseOnFileError(exception, fileSystemInfo.FullName);
-                        TmpCrc.Remove(hashFileName);
-                    }
-                    else
-                    {
-                        crc = TmpCrc[hashFileName];
-                    }
 
-                    var chunk = GetChunk(chunkPart, tmpFile, out var parts, out var fileLength, ref crc);
-#if DEBUG                
-                    if (chunk == null && chunkPart != parts + 1)
-                        Debugger.Break();
+                var chunk = GetChunk(chunkPart, tmpFile, out var parts, out var fileLength);
+#if DEBUG
+                if (chunk == null && chunkPart != parts + 1)
+                    Debugger.Break();
 #endif
 
-                    if (chunk == null)
-                    {
-                        //File send completed;
-                        TmpCrc.Remove(hashFileName);
-                        FileDelete(tmpFile, out Exception exception);
-                        if (exception != null)
-                            RaiseOnFileError(exception, fileSystemInfo.FullName);
-                        TotalFilesSent++;
-                        TotalBytesSent += (uint)fileLength;
-                        SendingInProgress.Completed(hashFileName, (ulong)toUserId);
-                    }
-                    else
-                    {
-                        TmpCrc[hashFileName] = crc;
-                        var values = new List<byte[]>(new[] { BitConverter.GetBytes(hashFileName), BitConverter.GetBytes(chunkPart), BitConverter.GetBytes(parts), chunk });
-                        if (chunkPart == parts)
-                        {
-                            values.Add(BitConverter.GetBytes(fileSystemInfo.UnixLastWriteTimestamp()));
-                            values.Add(BitConverter.GetBytes((uint)((FileInfo)fileSystemInfo).Length));
-                            values.Add(fileSystemInfo.CloudRelativeUnixFullName(this).GetBytes());
-                            values.Add(crc.GetBytes());
-                        }
-                        RaiseOnFileTransfer(true, hashFileName, chunkPart, parts, fileSystemInfo.FullName, fileLength);
-                        SendingInProgress.SetTimeout(hashFileName, chunk.Length);
-                        var info = "#" + chunkPart + "/" + parts + " " + hashFileName;
-                        Debug.WriteLine("IN " + info);
-                        ExecuteCommand(toUserId, Commands.SendChunkFile, info, values.ToArray());
-                    }
+                if (chunk == null)
+                {
+                    //File send completed;
+                    CRC.RemoveCRC(toUserId, hashFileName);
+                    FileDelete(tmpFile, out Exception exception);
+                    if (exception != null)
+                        RaiseOnFileError(exception, fileSystemInfo.FullName);
+                    TotalFilesSent++;
+                    TotalBytesSent += (uint)fileLength;
+                    SendingInProgress.Completed(hashFileName, (ulong)toUserId);
                 }
+                else if (CRC.Update(toUserId, hashFileName, ref chunkPart, chunk, tmpFile, false, out _))
+                {
+                    var values = new List<byte[]>(new[] { BitConverter.GetBytes(hashFileName), BitConverter.GetBytes(chunkPart), BitConverter.GetBytes(parts), chunk });
+                    if (chunkPart == parts)
+                    {
+                        values.Add(BitConverter.GetBytes(fileSystemInfo.UnixLastWriteTimestamp()));
+                        values.Add(BitConverter.GetBytes((uint)((FileInfo)fileSystemInfo).Length));
+                        values.Add(fileSystemInfo.CloudRelativeUnixFullName(this).GetBytes());
+                        values.Add(CRC.GetCRC(toUserId, hashFileName, parts).GetBytes());
+                    }
+                    RaiseOnFileTransfer(true, hashFileName, chunkPart, parts, fileSystemInfo.FullName, fileLength);
+                    SendingInProgress.SetTimeout(hashFileName, chunk.Length);
+                    var info = "#" + chunkPart + "/" + parts + " " + hashFileName;
+                    Debug.WriteLine("IN " + info);
+                    ExecuteCommand(toUserId, Commands.SendChunkFile, info, values.ToArray());
+                }
+            }
+#if RELEASE
             }
             catch (Exception ex)
             {
@@ -227,6 +217,7 @@ namespace CloudSync
                 RaiseOnFileError(ex, fileSystemInfo.FullName);
                 Debug.WriteLine(ex.Message);
             }
+#endif
         }
         public uint TotalFilesSent;
         public uint TotalBytesSent;
@@ -234,7 +225,7 @@ namespace CloudSync
         private void DeleteFile(ulong? toUserId, ulong hash, FileSystemInfo fileSystemInfo)
         {
             var timestamp = fileSystemInfo.UnixLastWriteTimestamp();
-            ExecuteCommand(toUserId, Commands.DeleteFile, fileSystemInfo.FullName, new[] { hash.GetBytes(),  timestamp.GetBytes() });
+            ExecuteCommand(toUserId, Commands.DeleteFile, fileSystemInfo.FullName, new[] { hash.GetBytes(), timestamp.GetBytes() });
         }
 
         private void CreateDirectory(ulong? toUserId, FileSystemInfo fileSystemInfo)

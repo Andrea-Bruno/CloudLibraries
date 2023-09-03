@@ -20,9 +20,10 @@ namespace CloudSync
         /// Approximate value of the end of synchronization (calculated in a statistical way)
         /// </summary>
         /// <returns>Time when synchronization is expected to end (UTC value)</returns>
-        public DateTime ETA() {
+        public DateTime ETA()
+        {
             var diffTime = DateTime.UtcNow - StartSyncUtc;
-            return Executed > 0 ? DateTime.UtcNow.Add(new TimeSpan(diffTime.Ticks / Executed * ToDoOperations.Count)) : default;
+            return ToDoOperations.Count == 0 ? default : Executed > 0 ? DateTime.UtcNow.Add(new TimeSpan(diffTime.Ticks / Executed * ToDoOperations.Count)) : default;
         }
         public void AddOperation(OperationType type, ulong? userId, ulong hashFile)
         {

@@ -110,7 +110,7 @@ namespace CloudSync
                             Spooler.RemoteDriveOverLimit = false;
                         }
                         if (OnNotification != null)
-                            Notify(fromUserId, notice);
+                            OnNotify(fromUserId, notice);
                     }
                     if (!IsReachable)
                     {
@@ -130,7 +130,7 @@ namespace CloudSync
                             remoteHashes.Add(BitConverter.ToUInt64(hash8, 0), BitConverter.ToUInt32(timestamp4, 0));
                         }
                         var delimitsRange = values.Length == 1 ? null : new BlockRange(values[1], values[2], values[3], values[4]);
-                        OnSendHashStructure(fromUserId, remoteHashes, delimitsRange);                        
+                        OnSendHashStructure(fromUserId, remoteHashes, delimitsRange);
                     }
                     else if (command == Commands.RequestHashStructure)
                     {
@@ -201,7 +201,6 @@ namespace CloudSync
                         var total = BitConverter.ToUInt32(values[2], 0);
                         var data = values[3];
                         var tmpFile = GetTmpFile(this, fromUserId, hashFileName);
-                        var crcId = (ulong)fromUserId ^ hashFileName;
                         infoData = "#" + part + "/" + total + " " + hashFileName;
                         Debug.WriteLine("IN #" + part + "/" + total);
                         var maxFileSize = total * data.Length;
@@ -214,103 +213,67 @@ namespace CloudSync
                                 Notification(fromUserId, Notice.FullSpace);
                                 return;
                             }
-                        var restoreParts = 0u;
-                        lock (CrcTable)
+                        if (part != 1)
                         {
-                            if (part == 1)
+                            if (!(File.Exists(tmpFile)))
+                                return;
+                        }
+                        if (CRC.Update(fromUserId, hashFileName, ref part, data, tmpFile, true, out var isRestored, part == 1 ? data : null))
+                        {
+                            if (!isRestored && !FileAppend(tmpFile, data, out Exception exception, 10, 50, DefaultChunkSize, part))
                             {
-                                CrcTable[crcId] = startCrc;
-                                var oldDownload = new FileInfo(tmpFile);
-                                if (oldDownload.Exists)
+                                if (exception != null)
+                                    RaiseOnFileError(exception, tmpFile);
+                                return;
+                            }
+                            if (part == total)
+                            {
+                                var length = values[5].ToUint32();
+                                var expectedCrc = BitConverter.ToUInt64(values[7], 0);
+                                if (expectedCrc == CRC.GetCRC(fromUserId, hashFileName, part) && new FileInfo(tmpFile).Length.Equals(length)) // Use the length to check if the file was received correctly
                                 {
-                                    if ((oldDownload.Length % data.LongLength) == 0)
+                                    var target = FullName(values[6]);
+                                    var unixTimestamp = values[4].ToUint32();
+                                    TotalFilesReceived++;
+                                    TotalBytesReceived += length;
+                                    if (File.Exists(target))
                                     {
-                                        restoreParts = (uint)(oldDownload.Length / data.LongLength);
-                                        try
-                                        {
-                                            CrcTable[crcId] = ComputingCRC(tmpFile, out int _, data.Length, data);
-                                            part = restoreParts;
-                                        }
-                                        catch (Exception)
-                                        {
-                                            restoreParts = 0u;
-                                            FileDelete(tmpFile, out Exception ex);
-                                            if (ex != null)
-                                                RaiseOnFileError(ex, tmpFile);
-                                        }
+                                        if (new FileInfo(target).UnixLastWriteTimestamp() > unixTimestamp)
+                                            return;
+                                        FileDelete(target, out Exception exception1);
+                                        if (exception1 != null)
+                                            RaiseOnFileError(exception1, target);
                                     }
-                                }
-                            }
-                            else
-                            {
-                                if (!(File.Exists(tmpFile)))
-                                    return;
-                            }
-                            if (!CrcTable.ContainsKey(crcId))
-                            {
-                                CrcTable[crcId] = ComputingCRC(tmpFile, out int parts);
-                                if (parts != part - 1) // Check incongruent part number
-                                {
-                                    Debugger.Break();
-                                    return;
-                                }
-                            }
-                            if (restoreParts == 0u)
-                                CrcTable[crcId] = ULongHash(CrcTable[crcId], data);
-                        }
-                        if (restoreParts == 0u && !FileAppend(tmpFile, data, out Exception exception, 10, 50, DefaultChunkSize, part))
-                        {
-                            if (exception != null)
-                                RaiseOnFileError(exception, tmpFile);
-                            return;
-                        }
-                        if (part == total)
-                        {
-                            var length = values[5].ToUint32();
-                            var expectedCrc = BitConverter.ToUInt64(values[7], 0);
-                            if (expectedCrc == CrcTable[crcId] && new FileInfo(tmpFile).Length.Equals(length)) // Use the length to check if the file was received correctly
-                            {
-                                var target = FullName(values[6]);
-                                var unixTimestamp = values[4].ToUint32();
-                                TotalFilesReceived++;
-                                TotalBytesReceived += length;
-                                if (File.Exists(target))
-                                {
-                                    if (new FileInfo(target).UnixLastWriteTimestamp() > unixTimestamp)
-                                        return;
-                                    FileDelete(target, out Exception exception1);
-                                    if (exception1 != null)
-                                        RaiseOnFileError(exception1, target);
+                                    else
+                                    {
+                                        var targetDirectory = new FileInfo(target).Directory;
+                                        DirectoryCreate(targetDirectory.FullName, out Exception exception1);
+                                        if (exception1 != null)
+                                            RaiseOnFileError(exception1, targetDirectory.FullName);
+                                    }
+                                    FileMove(tmpFile, target, out Exception exception2);
+                                    if (exception2 != null)
+                                        RaiseOnFileError(exception2, target);
+                                    var fileInfo = new FileInfo(target);
+                                    fileInfo.LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp);
+                                    RaiseOnFileTransfer(false, hashFileName, part, total, target, (int)length);
                                 }
                                 else
                                 {
-                                    var targetDirectory = new FileInfo(target).Directory;
-                                    DirectoryCreate(targetDirectory.FullName, out Exception exception1);
+                                    // Debugger.Break();
+                                    FileDelete(tmpFile, out Exception exception1);
                                     if (exception1 != null)
-                                        RaiseOnFileError(exception1, targetDirectory.FullName);
+                                        RaiseOnFileError(exception1, tmpFile);
                                 }
-                                FileMove(tmpFile, target, out Exception exception2);
-                                if (exception2 != null)
-                                    RaiseOnFileError(exception2, target);
-                                var fileInfo = new FileInfo(target);
-                                fileInfo.LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp);
-                                RaiseOnFileTransfer(false, hashFileName, part, total, target, (int)length);
+                                CRC.RemoveCRC(fromUserId, hashFileName);
+                                ReportReceiptFileCompleted(fromUserId, hashFileName, total);
                             }
                             else
                             {
-                                // Debugger.Break();
-                                FileDelete(tmpFile, out Exception exception1);
-                                if (exception1 != null)
-                                    RaiseOnFileError(exception1, tmpFile);
+                                RaiseOnFileTransfer(false, hashFileName, part, total);
+                                //Thread.Sleep(5000);
+                                RequestChunkFile(fromUserId, hashFileName, part + 1);
                             }
-                            CrcTable.Remove(crcId);
-                            ReportReceiptFileCompleted(fromUserId, hashFileName, total);
-                        }
-                        else
-                        {
-                            RaiseOnFileTransfer(false, hashFileName, part, total);
-                            //Thread.Sleep(5000);
-                            RequestChunkFile(fromUserId, hashFileName, part + 1);
                         }
                     }
                     else if (command == Commands.DeleteFile)
@@ -447,7 +410,6 @@ namespace CloudSync
         public uint TotalFilesReceived;
         public uint TotalBytesReceived;
         public readonly ProgressFileTransfer ReceptionInProgress;
-        private static readonly Dictionary<ulong, ulong> CrcTable = new Dictionary<ulong, ulong>();
         private string FullName(byte[] unixRelativeName)
         {
             var text = unixRelativeName.ToText();
