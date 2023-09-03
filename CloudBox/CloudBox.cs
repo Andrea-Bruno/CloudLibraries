@@ -403,7 +403,7 @@ namespace CloudBox
         /// </summary>
         /// <returns>False if already logged out, true otherwise</returns>
         public bool Logout()
-        {
+        {            
             if (File.Exists(FileLastEntryPoint))
                 File.Delete(FileLastEntryPoint);
             StopSync();

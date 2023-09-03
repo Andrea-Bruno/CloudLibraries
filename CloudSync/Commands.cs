@@ -168,7 +168,7 @@ namespace CloudSync
             {
                 var hashFileName = fileSystemInfo.HashFileName(this);
                 var tmpFile = GetTmpFile(this, toUserId, hashFileName);
-                if (chunkPart == 1)
+                if (!File.Exists(tmpFile)) // old if (chunkPart == 1)
                 {
                     FileCopy(fileSystemInfo.FullName, tmpFile, out Exception exception);
                     if (exception != null)

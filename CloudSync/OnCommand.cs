@@ -2,9 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices.ComTypes;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using static CloudSync.Util;
 
@@ -17,7 +15,7 @@ namespace CloudSync
 
         internal void OnCommand(ulong? fromUserId, ushort command, params byte[][] values)
         {
-            System.Threading.Tasks.Task.Run(() =>
+            Task.Run(() =>
             {
                 lastFromUserId = fromUserId;
                 if (!Enum.IsDefined(typeof(Commands), command))
@@ -361,6 +359,7 @@ namespace CloudSync
             if (TaskOnSendHashStructure == null)
                 TaskOnSendHashStructure = Task.Run(() =>
                 {
+                    Spooler.Clear();
                     if (HashFileTable(out var localHashes, delimitsRange: delimitsRange))
                     {
                         if (localHashes != null)
