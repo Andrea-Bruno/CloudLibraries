@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Linq;
 
 namespace CloudSync
@@ -22,13 +23,24 @@ namespace CloudSync
         /// <returns>Time when synchronization is expected to end (UTC value)</returns>
         public DateTime ETA()
         {
+            if (StartSyncUtc == default || Executed < 20)
+                return default;
             var diffTime = DateTime.UtcNow - StartSyncUtc;
-            return ToDoOperations.Count == 0 ? default : Executed > 0 ? DateTime.UtcNow.Add(new TimeSpan(diffTime.Ticks / Executed * ToDoOperations.Count)) : default;
+            if (diffTime.TotalMinutes < 1)
+                return default;
+            if ((DateTime.UtcNow - LastETAUpdate).TotalMinutes < 5) // Update ETA each 5 minutes
+                return LastETA;
+            LastETA = DateTime.UtcNow.Add(new TimeSpan(diffTime.Ticks / Executed * ToDoOperations.Count));
+            var round = LastETA.Ticks / TimeSpan.TicksPerMinute * TimeSpan.TicksPerMinute;
+            LastETA = new DateTime(round);
+            LastETAUpdate = DateTime.UtcNow;
+            return LastETA;
         }
+        private DateTime LastETAUpdate;
+        private DateTime LastETA;
+
         public void AddOperation(OperationType type, ulong? userId, ulong hashFile)
         {
-            if (StartSyncUtc == default)
-                StartSyncUtc = DateTime.UtcNow;
 #if DEBUG_AND || DEBUG
             if (Context.IsServer)
                 System.Diagnostics.Debugger.Break(); // the operations must be given by the client, it is preferable that the server works in slave mode
@@ -47,7 +59,10 @@ namespace CloudSync
                 Context.RaiseOnStatusChangesEvent(Sync.SyncStatus.Pending);
             }
             if (ToDoOperations.Count == 1)
+            {
+                StartSyncUtc = DateTime.UtcNow;
                 ExecuteNext();
+            }
         }
 
         private readonly Dictionary<ulong, Operation> ToDoOperations = new Dictionary<ulong, Operation>();
@@ -115,6 +130,11 @@ namespace CloudSync
                         }
                     }
                 }
+            }
+            if (ToDoOperations.Count == 0)
+            {
+                StartSyncUtc = default;
+                Executed = 0;
             }
         }
 
