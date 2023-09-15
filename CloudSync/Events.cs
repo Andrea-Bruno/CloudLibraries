@@ -30,6 +30,7 @@ namespace CloudSync
             Undefined,
             Pending,
             Monitoring,
+            RemoteDriveOverLimit,
         }
 
         public delegate void StatusEventHandler(SyncStatus syncStatus, int pendingFiles);

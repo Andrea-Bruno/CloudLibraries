@@ -52,11 +52,15 @@ namespace CloudSync
                 // Remove duplicate
                 if (ToDoOperations.ContainsKey(hashFile))
                     ToDoOperations.Remove(hashFile);
-                if (!RemoteDriveOverLimit || type != OperationType.Send) // Do not add send operations if the remote disk is full
+                if (RemoteDriveOverLimit && type == OperationType.Send) // Do not add send operations if the remote disk is full
+                {
+                    Context.RaiseOnStatusChangesEvent(Sync.SyncStatus.RemoteDriveOverLimit);
+                }
+                else
                 {
                     ToDoOperations.Add(hashFile, new Operation { Type = type, UserId = userId, HashFile = hashFile });
+                    Context.RaiseOnStatusChangesEvent(Sync.SyncStatus.Pending);
                 }
-                Context.RaiseOnStatusChangesEvent(Sync.SyncStatus.Pending);
             }
             if (ToDoOperations.Count == 1)
             {
