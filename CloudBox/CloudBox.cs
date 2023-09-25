@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading;
 using CloudSync;
 using EncryptedMessaging;
 using NBitcoin;
@@ -284,6 +285,14 @@ namespace CloudBox
         /// <returns>Validated for Successful, or other result if QR code or PIN is not valid</returns>        
         public LoginResult Login(string qrCode, string pin, string entryPoint = null)
         {
+            var result = TryLogin(qrCode, pin, entryPoint);
+            if (result != LoginResult.Successful)
+                Logout();
+            return result;
+        }
+
+        private LoginResult TryLogin(string qrCode, string pin, string entryPoint = null)
+        {
             if (IsServer)
                 Debugger.Break(); // non sense for server                     
             Logout();
@@ -293,10 +302,22 @@ namespace CloudBox
             if (entry != null)
                 entryPoint = entry;
             CreateContext(entryPoint);
+            // =================
+            // NOTE: Login is performed when the context has established the connection with the router
+            // =================
             Context.SecureStorage.Values.Set("pin", pin);
             Context.SecureStorage.Values.Set("ServerPublicKey", serverPublicKey);
-            return LoginResult.Validated;
+            if (SpinWait.SpinUntil(() => Sync != null && (Sync.IsLogged || Sync.LoginError), 30000))
+                return Sync.LoginError ? LoginResult.WrongPassword : LoginResult.Successful;
+            else if (Context.LicenseExpired)
+                return LoginResult.LicenseExpired;
+            else if (Sync == null)
+                return LoginResult.RemoteHostNotReachable;
+            else if (Sync.RemoteHostReachable)
+                return LoginResult.CloudNotResponding;
+            return LoginResult.RemoteHostNotReachable;
         }
+
         /// <summary>
         /// The encryption key of the QR code and for the client also the ID of the server useful for communicating with it
         /// </summary>
@@ -309,10 +330,14 @@ namespace CloudBox
         /// </summary>
         public enum LoginResult
         {
-            Validated,
+            Successful,
+            LicenseExpired,
             WrongPassword,
-            WrongQR
+            CloudNotResponding,
+            WrongQR,
+            RemoteHostNotReachable,
         }
+
 #pragma warning restore CS1591
         /// <summary>
         /// It receives the data of a QR code as input, validates it and if recognized returns true
@@ -394,7 +419,7 @@ namespace CloudBox
         /// </summary>
         /// <returns>Entry point (Url or IP), or null</returns>
         public static string LastEntryPoint()
-        {            
+        {
             return File.Exists(FileLastEntryPoint) ? File.ReadAllText(FileLastEntryPoint) : null;
         }
 
@@ -403,7 +428,7 @@ namespace CloudBox
         /// </summary>
         /// <returns>False if already logged out, true otherwise</returns>
         public bool Logout()
-        {            
+        {
             if (File.Exists(FileLastEntryPoint))
                 File.Delete(FileLastEntryPoint);
             StopSync();
@@ -421,7 +446,7 @@ namespace CloudBox
         /// <summary>
         /// True if logged
         /// </summary>
-        public bool IsLogged => Sync != null;
+        public bool IsLogged => Sync != null && Sync.IsLogged;
 
         private readonly bool DoNotCreateSpecialFolders;
 
@@ -495,7 +520,6 @@ namespace CloudBox
         /// </summary>
         public readonly List<FileError> AntivirusWarnings = new List<FileError>();
 
-
         /// <summary>
         /// Class to describe file errors
         /// </summary>
@@ -509,13 +533,10 @@ namespace CloudBox
             /// Error description
             /// </summary>
             public string Error { get; set; }
-            /// <summary>
-            /// Full path and file name
+            /// <summary>/// Full path and file name
             /// </summary>
             public string FileName { get; set; }
-
         }
-
 
         /// <summary>
         /// Stops transmitting with the cloud server, but the connection with the router remains active
@@ -615,8 +636,8 @@ namespace CloudBox
                     AddTx("Last keep alive check", Context?.LastKeepAliveCheck);
                     AddTx("Last IN (UTC)", Context?.LastIN);
                     AddTx("Last command IN", Context?.LastCommandIN);
-                    AddTx("Last OUT", Context?.LastOUT);
-                    AddTx("Last command OUT (UTC)", Context?.LastCommandOUT);
+                    AddTx("Last OUT (UTC)", Context?.LastOUT);
+                    AddTx("Last command OUT", Context?.LastCommandOUT);
                 }
                 if (Sync != null)
                 {

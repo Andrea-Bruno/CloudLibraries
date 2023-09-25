@@ -85,11 +85,12 @@ namespace CloudSync
         /// <summary>
         /// Indicates if the client is connected. Persistent value upon restart from client application.
         /// </summary>
-        private bool IsLogged
+        public bool IsLogged
         {
             get { return SecureStorage != null && SecureStorage.Values.Get("Logged", false); }
-            set
+            internal set
             {
+                LoginError = false;
                 SecureStorage.Values.Set("Logged", value);
                 if (value)
                 {
@@ -98,6 +99,14 @@ namespace CloudSync
                 }
             }
         }
+
+        public bool LoginError { get; private set; }
+
+        /// <summary>
+        /// True if there has been a communication from the remote machine (server or client), confirming that it is reachable.
+        /// </summary>
+        public bool RemoteHostReachable => LastCommandReceived != default;
+
         private void CreateDefaultFolders()
         {
             if (IsReachable)

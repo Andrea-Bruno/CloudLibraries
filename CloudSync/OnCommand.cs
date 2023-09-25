@@ -93,9 +93,9 @@ namespace CloudSync
                         if (!IsServer)
                         {
                             if (notice == Notice.LoginSuccessful)
-                            {
                                 IsLogged = true;
-                            }
+                            else if (notice == Notice.LoginError)
+                                LoginError = true;
                         }
                         if (notice == Notice.Synchronized)
                             RaiseOnStatusChangesEvent(SyncStatus.Monitoring);

@@ -53,7 +53,6 @@ namespace CloudSync
         // ========================== Events about File Transfer =========================
         // ===============================================================================
 
-
         public delegate void FileTransferEventHandler(FileTransfer fileTransfer);
 
         public event FileTransferEventHandler OnFileTransfer;
@@ -88,11 +87,9 @@ namespace CloudSync
                 new Thread(() => OnCommandEvent?.Invoke(userId, command, infoData, isOutput)).Start();
         }
 
-
         // ===============================================================================
         // ==================== Events about File Error ==================================
         // ===============================================================================
-
 
         public delegate void OnFileErrorHandler(Exception error, string fileName);
         public event OnFileErrorHandler OnFileError;
