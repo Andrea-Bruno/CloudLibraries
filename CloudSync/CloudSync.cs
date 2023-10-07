@@ -7,6 +7,7 @@ using System.Threading;
 using static CloudSync.Util;
 
 using HashFileTable = System.Collections.Generic.Dictionary<ulong, System.IO.FileSystemInfo>;
+using System.Linq;
 
 namespace CloudSync
 {
@@ -31,14 +32,14 @@ namespace CloudSync
             InstanceId = InstanceCounter;
             InstanceCounter++;
             IsServer = isClient == null;
-            DoNotCreateSpecialFolders = doNotCreateSpecialFolders;
+            DontCreateSpecialFolders = doNotCreateSpecialFolders;
             CloudRoot = cloudRoot;
             IsReachable = isReachable;
             var rootInfo = new DirectoryInfo(cloudRoot);
             if (rootInfo.Exists)
                 rootInfo.Attributes |= FileAttributes.Encrypted;
 
-            Execute = sendCommand;
+            SendCommandDelegate = sendCommand;
             onCommand = OnCommand;
             Spooler = new Spooler(this);
             ReceptionInProgress = new ProgressFileTransfer(this);
@@ -94,7 +95,10 @@ namespace CloudSync
                 SecureStorage.Values.Set("Logged", value);
                 if (value)
                 {
-                    CreateDefaultFolders();
+                    if (IsReachable)
+                    {
+                        CreateUserFolder(CloudRoot, !DontCreateSpecialFolders && !IsServer);
+                    }
                     ClientStartSync();
                 }
             }
@@ -107,23 +111,7 @@ namespace CloudSync
         /// </summary>
         public bool RemoteHostReachable => LastCommandReceived != default;
 
-        private void CreateDefaultFolders()
-        {
-            if (IsReachable)
-            {
-                var createIfNotExists = SetSpecialDirectory(CloudRoot, Icos.Cloud, false) && DoNotCreateSpecialFolders == false;
-                createIfNotExists |= Directory.CreateDirectory(CloudRoot).GetDirectories().Length == 0;
-                SetSpecialDirectory(CloudRoot, Icos.Documents, createIfNotExists: createIfNotExists && IsServer);
-                SetSpecialDirectory(CloudRoot, Icos.Download, createIfNotExists: createIfNotExists && IsServer);
-                SetSpecialDirectory(CloudRoot, Icos.Movies, createIfNotExists: createIfNotExists && IsServer);
-                SetSpecialDirectory(CloudRoot, Icos.Pictures, createIfNotExists: createIfNotExists && IsServer);
-                SetSpecialDirectory(CloudRoot, Icos.Photos, createIfNotExists: createIfNotExists && IsServer);
-                SetSpecialDirectory(CloudRoot, Icos.Settings, createIfNotExists: createIfNotExists && IsServer);
-                if (createIfNotExists)
-                    AddDesktopShorcut(CloudRoot);
-            }
-        }
-        private bool DoNotCreateSpecialFolders;
+        private bool DontCreateSpecialFolders;
 
         /// <summary>
         /// Function that the host app must call if the disk at the root of the cloud is mounted or unmounted.
@@ -132,7 +120,7 @@ namespace CloudSync
         public void IsReachableDiskStateIsChanged(bool isMounted) => IsReachable = isMounted;
 
         /// <summary>
-        /// This function returns true if the specified path matches a virtual disk path that has not been mounted.
+        /// Indicate true if the path to the cloud space is reachable (true), or unmounted virtual disk (false).
         /// </summary>
         internal bool IsReachable
         {
@@ -171,31 +159,36 @@ namespace CloudSync
             }
         }
 
+        private bool Disposed;
         public void Dispose()
         {
-            RaiseOnStatusChangesEvent(SyncStatus.Undefined);
-            OnNotify(null, Notice.LoggedOut);
-            SecureStorage.Values.Delete("Logged", typeof(bool));
-            if (SyncTimeBuffer != null)
+            if (!Disposed)
             {
-                SyncTimeBuffer.Change(Timeout.Infinite, Timeout.Infinite);
-                SyncTimeBuffer.Dispose();
-                SyncTimeBuffer = null;
+                Disposed = true;
+                RaiseOnStatusChangesEvent(SyncStatus.Undefined);
+                OnNotify(null, Notice.LoggedOut);
+                SecureStorage.Values.Delete("Logged", typeof(bool));
+                if (SyncTimeBuffer != null)
+                {
+                    SyncTimeBuffer.Change(Timeout.Infinite, Timeout.Infinite);
+                    SyncTimeBuffer.Dispose();
+                    SyncTimeBuffer = null;
+                }
+                if (ClientCheckSync != null)
+                {
+                    ClientCheckSync.Change(Timeout.Infinite, Timeout.Infinite);
+                    ClientCheckSync.Dispose();
+                    ClientCheckSync = null;
+                }
+                if (pathWatcher != null)
+                {
+                    pathWatcher.EnableRaisingEvents = false;
+                    pathWatcher.Dispose();
+                    pathWatcher = null;
+                }
+                ReceptionInProgress.Dispose();
+                SendingInProgress.Dispose();
             }
-            if (ClientCheckSync != null)
-            {
-                ClientCheckSync.Change(Timeout.Infinite, Timeout.Infinite);
-                ClientCheckSync.Dispose();
-                ClientCheckSync = null;
-            }
-            if (pathWatcher != null)
-            {
-                pathWatcher.EnableRaisingEvents = false;
-                pathWatcher.Dispose();
-                pathWatcher = null;
-            }
-            ReceptionInProgress.Dispose();
-            SendingInProgress.Dispose();
         }
 
         private FileSystemWatcher pathWatcher;
@@ -250,7 +243,7 @@ namespace CloudSync
             ClientCheckSync?.Change(timespan, timespan);
         }
 
-        private bool SyncIsInPending => RemoteStatus != Notice.Synchronized || ConcurrentOperations() != 0 || LocalSyncStatus != SyncStatus.Monitoring;
+        private bool SyncIsInPending => RemoteStatus != Notice.Synchronized || ConcurrentOperations() != 0 || LocalSyncStatus != SyncStatus.Monitoring || Spooler.InPending != 0;
 
         /// <summary>
         /// Timer that starts the synchronization procedure when something in the cloud path has changed. The timer delays the synchronization of a few seconds because multiple changes may be in progress on the files and it is convenient to wait for the end of the operations.
@@ -347,24 +340,19 @@ namespace CloudSync
         public DateTime LastCommandSent { get; private set; }
         private void ExecuteCommand(ulong? contactId, Commands command, string infoData, params byte[][] values)
         {
-            LastCommandSent = DateTime.UtcNow;
-            //new Timer((t) =>
-            //{
-            //    Debug.WriteLine("OUT " + command);
-            //    RaiseOnCommandEvent(contactId, command, infoData, true);
-            //    Execute.Invoke(contactId, (ushort)command, values);
-
-            //}, null, 5000, Timeout.Infinite);
-
-            Task.Run(() =>
+            if (!Disposed)
             {
-                Debug.WriteLine("OUT " + command);
-                RaiseOnCommandEvent(contactId, command, infoData, true);
-                Execute.Invoke(contactId, (ushort)command, values);
-            });
+                LastCommandSent = DateTime.UtcNow;
+                Task.Run(() =>
+                {
+                    Debug.WriteLine("OUT " + command);
+                    RaiseOnCommandEvent(contactId, command, infoData, true);
+                    SendCommandDelegate.Invoke(contactId, (ushort)command, values);
+                });
+            }
         }
 
-        private readonly SendCommand Execute;
+        private readonly SendCommand SendCommandDelegate;
 
         private bool GetLocalHashStrucrure(out byte[] localHashStrucrure, BlockRange delimitsRange)
         {
@@ -446,6 +434,10 @@ namespace CloudSync
         /// <returns>True if the operation completed successfully, or false if there was a critical error</returns>
         public bool HashFileTable(out HashFileTable hashTable, bool noCache = false, BlockRange delimitsRange = null)
         {
+#if DEBUG
+            var timer = new Stopwatch();
+            timer.Start();
+#endif
             try
             {
 
@@ -465,6 +457,8 @@ namespace CloudSync
                         {
                             if (CanBeSeen(item))
                             {
+                                if (!SyncIsInPending)
+                                    Spooler.SetFilePendingStatus(item, false);
                                 if (item.Attributes.HasFlag(FileAttributes.Directory))
                                 {
                                     AnalyzeDirectory((DirectoryInfo)item, ref hashFileTable);
@@ -479,6 +473,7 @@ namespace CloudSync
                     }
                     catch (Exception ex)
                     {
+                        Debugger.Break();
                         RaiseOnFileError(ex, directory.FullName);
                     }
                 }
@@ -522,18 +517,29 @@ namespace CloudSync
                         CalculationTimeHashFileTableMS = (int)(watch.ElapsedMilliseconds);
                     }
                 }
+
                 if (delimitsRange != null)
                 {
                     hashTable = GetRestrictedHashFileTable(CacheHashFileTable, out _, delimitsRange);
+
+#if DEBUG
+                    timer.Stop();
+                    if (timer.ElapsedMilliseconds > 10000)
+                        Debugger.Break();
+#endif
                     return true;
                 }
                 hashTable = CacheHashFileTable;
+#if DEBUG
+                timer.Stop();
+                if (timer.ElapsedMilliseconds > 10000)
+                    Debugger.Break();
+#endif
                 return true;
             }
             catch (Exception ex)
             {
                 RaiseOnFileError(ex, null);
-
                 Console.WriteLine(ex.Message);
             }
             hashTable = null;

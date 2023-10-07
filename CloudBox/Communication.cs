@@ -137,16 +137,24 @@ namespace CloudBox
 
         internal void SendCommand(Contact contact, Command command, byte[][] data)
         {
+#if DEBUG
+          if  (CloudBox.Context == null)
+                Debugger.Break();
+#endif
             // Encryption is disabled because the data that must be encrypted by the client when it sends it is not saved in the clear, so it is not necessary to add additional encryption
-            CloudBox.Context.Messaging.SendCommandToSubApplication(contact, AppId, (ushort)command, true, false, data);
+            CloudBox.Context?.Messaging.SendCommandToSubApplication(contact, AppId, (ushort)command, true, false, data);
         }
 
         internal void SendCommand(ulong ToIdUser, Command command, byte[][] data)
         {
+#if DEBUG
+            if (CloudBox.Context == null)
+                Debugger.Break();
+#endif
             if (data == null)
                 data = new byte[0][];
             // Encryption is disabled because the data that must be encrypted by the client when it sends it is not saved in the clear, so it is not necessary to add additional encryption
-            CloudBox.Context.Messaging.SendMessage(MessageType.SubApplicationCommandWithParameters, Functions.JoinData(false, data).Combine(BitConverter.GetBytes(AppId), BitConverter.GetBytes((ushort)command)), null, null, null, new ulong[] { ToIdUser }, true, false);
+            CloudBox.Context?.Messaging.SendMessage(MessageType.SubApplicationCommandWithParameters, Functions.JoinData(false, data).Combine(BitConverter.GetBytes(AppId), BitConverter.GetBytes((ushort)command)), null, null, null, new ulong[] { ToIdUser }, true, false);
         }
 
         private string GetPath(ulong? forUserId, string type = null, bool createFolder = false)

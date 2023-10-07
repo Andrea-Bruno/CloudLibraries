@@ -67,6 +67,15 @@ namespace CloudBox
         }
 
         /// <summary>
+        /// Returns true if it is a good time to perform the software update. If some operation is in progress then it returns false;
+        /// </summary>
+        /// <returns></returns>
+        public bool CanRestart()
+        {
+            return Context != null && Context.LastOUT.AddMinutes(10) < DateTime.UtcNow;
+        }
+
+        /// <summary>
         /// Digitally sign a document
         /// </summary>
         /// <param name="scopeOfSignature">Indicates the intention of the signer (the purpose for which the signature is placed on the document)</param>
@@ -88,11 +97,8 @@ namespace CloudBox
         /// <param name="isConnected">Notify the new connection status</param>
         virtual protected void OnRouterConnectionChange(bool isConnected)
         {
-            if (Sync == null)
-                if (isConnected)
-                {
+            if (Sync == null && isConnected)
                     ConnectToServer();
-                }
         }
 
         private static void UnhandledExceptionEventHandler(object sender, UnhandledExceptionEventArgs e)
@@ -209,7 +215,7 @@ namespace CloudBox
         /// <param name="routerEntryPoint">IP or domain name or QR code of the router used for the connection</param>
         /// <param name="passphrase">If you want to recover the account, you can specify the passphrase</param>
         /// <returns>True for Successful, or false if something went wrong</returns>  
-        public bool CreateContext(string routerEntryPoint, string passphrase = null)
+        public Context CreateContext(string routerEntryPoint, string passphrase = null)
         {
             var isQRcode = !routerEntryPoint.Contains('.');
             string serverPublicKey = null;
@@ -217,7 +223,7 @@ namespace CloudBox
             {
                 var qrCode = routerEntryPoint;
                 if (SolveQRCode(qrCode, out routerEntryPoint, out serverPublicKey, out EncryptedQR) == false)
-                    return false;
+                    return null;
             }
             File.WriteAllText(FileLastEntryPoint, routerEntryPoint);
             if (Context != null)
@@ -242,7 +248,7 @@ namespace CloudBox
                 Name = _Name;
             }
             Context.OnContactEvent += OnContactEvent;
-            return true;
+            return Context;
         }
 
         private void SetServerCloudContact(string serverPublicKey)
@@ -301,15 +307,15 @@ namespace CloudBox
             if (SolveQRCode(qrCode, out string entry, out string serverPublicKey, out EncryptedQR) == false) return LoginResult.WrongQR;
             if (entry != null)
                 entryPoint = entry;
-            CreateContext(entryPoint);
+            var context = CreateContext(entryPoint);
             // =================
             // NOTE: Login is performed when the context has established the connection with the router
             // =================
-            Context.SecureStorage.Values.Set("pin", pin);
-            Context.SecureStorage.Values.Set("ServerPublicKey", serverPublicKey);
-            if (SpinWait.SpinUntil(() => Sync != null && (Sync.IsLogged || Sync.LoginError), 30000))
+            context.SecureStorage.Values.Set("pin", pin);
+            context.SecureStorage.Values.Set("ServerPublicKey", serverPublicKey);
+            if (SpinWait.SpinUntil(() => Sync != null && (Sync.IsLogged || Sync.LoginError), 60000))
                 return Sync.LoginError ? LoginResult.WrongPassword : LoginResult.Successful;
-            else if (Context.LicenseExpired)
+            else if (context.LicenseExpired)
                 return LoginResult.LicenseExpired;
             else if (Sync == null)
                 return LoginResult.RemoteHostNotReachable;
@@ -601,15 +607,16 @@ namespace CloudBox
                 var version = Assembly.GetEntryAssembly().GetName().Version.ToString();
                 if (version != "1.0.0.0")
                     AddTx("Version", version);
-                if (Context != null)
+                var context = Context;
+                if (context != null)
                 {
                     if (Context.InstancedTimeUtc != default)
                         AddTx("Started at", Context.InstancedTimeUtc + " UTC");
-                    AddTx("User Id", Context?.My.Id);
-                    AddTx("Pubblic Key", Context?.My.GetPublicKey());
+                    AddTx("User Id", context?.My.Id);
+                    AddTx("Pubblic Key", context?.My.GetPublicKey());
                     if (ShowEntryPoint)
-                        AddTx("Entry point (router address)", Context?.EntryPoint.ToString());
-                    AddTx("Keep Alive Failures", Context?.KeepAliveFailures);
+                        AddTx("Entry point (router address)", context?.EntryPoint.ToString());
+                    AddTx("Keep Alive Failures", context?.KeepAliveFailures);
                 }
                 if (LicenseOEM == TestNetDefaultlicenseOEM)
                 {
@@ -626,38 +633,39 @@ namespace CloudBox
                     AddTx("Paired to server", (ServerCloud == null ? "None" : ServerCloud.UserId + " UserId"));
                     AddTx("Logged with server", (Sync != null));
                 }
-                AddTx("Connected to the router", Context?.IsConnected);
+                AddTx("Connected to the router", context?.IsConnected);
                 AddTx("OEM Id", OEM.GetIdOEM(LicenseOEM));
                 AddTx("Cloud path", CloudPath);
                 //addTx("Pubblic IP", Util.PublicIpAddressInfo());
-                if (Context != null)
+                if (context != null)
                 {
                     AddTx("# CHANNEL:");
-                    AddTx("Last keep alive check", Context?.LastKeepAliveCheck);
-                    AddTx("Last IN (UTC)", Context?.LastIN);
-                    AddTx("Last command IN", Context?.LastCommandIN);
-                    AddTx("Last OUT (UTC)", Context?.LastOUT);
-                    AddTx("Last command OUT", Context?.LastCommandOUT);
+                    AddTx("Last keep alive check", context?.LastKeepAliveCheck);
+                    AddTx("Last IN (UTC)", context?.LastIN);
+                    AddTx("Last command IN", context?.LastCommandIN);
+                    AddTx("Last OUT (UTC)", context?.LastOUT);
+                    AddTx("Last command OUT", context?.LastCommandOUT);
                 }
-                if (Sync != null)
+                var sync = Sync;
+                if (sync != null)
                 {
-                    AddTx("Pending operations", Sync.PendingOperations);
+                    AddTx("Pending operations", sync.PendingOperations);
                     // Reception
                     AddTx("# RECEPTION:");
-                    AddTx("Last Command received", Sync.LastCommandReceived != default ? (int)((DateTime.UtcNow - Sync.LastCommandReceived).TotalSeconds) + " seconds ago" : (IsServer ? "No client connected" : "ERROR! cloud unreachable"));
-                    AddTx("Total files received", Sync.TotalFilesReceived);
-                    AddTx("Total bytes received", Sync.TotalBytesReceived);
-                    AddTx("Reception file in progress", Sync.ReceptionInProgress.TransferInProgress);
-                    AddTx("Reception timeout", Sync.ReceptionInProgress.TimeOutInfo());
-                    AddTx("Total received failed by timeout", Sync.ReceptionInProgress.FailedByTimeout);
+                    AddTx("Last Command received", sync.LastCommandReceived != default ? (int)((DateTime.UtcNow - sync.LastCommandReceived).TotalSeconds) + " seconds ago" : (IsServer ? "No client connected" : "ERROR! cloud unreachable"));
+                    AddTx("Total files received", sync.TotalFilesReceived);
+                    AddTx("Total bytes received", sync.TotalBytesReceived);
+                    AddTx("Reception file in progress", sync.ReceptionInProgress.TransferInProgress);
+                    AddTx("Reception timeout", sync.ReceptionInProgress.TimeOutInfo());
+                    AddTx("Total received failed by timeout", sync.ReceptionInProgress.FailedByTimeout);
                     AddTx("# SENDING:");
                     // Sending
-                    AddTx("Last Command sent", Sync.LastCommandSent != default ? (int)((DateTime.UtcNow - Sync.LastCommandSent).TotalSeconds) + " seconds ago" : (IsServer ? "No client connected" : "ERROR! cloud unreachable"));
-                    AddTx("Total files sent", Sync.TotalFilesSent);
-                    AddTx("Total bytes sent", Sync.TotalBytesSent);
-                    AddTx("Sending file in progress", Sync.SendingInProgress.TransferInProgress);
-                    AddTx("Sending timeout", Sync.SendingInProgress.TimeOutInfo());
-                    AddTx("Total sent failed by timeout", Sync.SendingInProgress.FailedByTimeout);
+                    AddTx("Last Command sent", sync.LastCommandSent != default ? (int)((DateTime.UtcNow - sync.LastCommandSent).TotalSeconds) + " seconds ago" : (IsServer ? "No client connected" : "ERROR! cloud unreachable"));
+                    AddTx("Total files sent", sync.TotalFilesSent);
+                    AddTx("Total bytes sent", sync.TotalBytesSent);
+                    AddTx("Sending file in progress", sync.SendingInProgress.TransferInProgress);
+                    AddTx("Sending timeout", sync.SendingInProgress.TimeOutInfo());
+                    AddTx("Total sent failed by timeout", sync.SendingInProgress.FailedByTimeout);
                 }
                 return sb.ToString();
             }
@@ -748,17 +756,16 @@ namespace CloudBox
         private static readonly ushort CloudAppId = BitConverter.ToUInt16(Encoding.ASCII.GetBytes("cloud"), 0);
         private void SendCommand(ulong? toContactId, ushort command, byte[][] values)
         {
+#if DEBUG
+            if (Context == null)
+                Debugger.Break();
+#endif
             var sendToContact = ServerCloud;
             if (sendToContact == null && toContactId != null)
                 CloudSyncUsers.TryGetValue((ulong)toContactId, out sendToContact);
             if (sendToContact != null && Sync != null)
             {
-                //if (IsServer)OnCommand
-                //{
-                //    var clientId = (ulong)sendToContact.UserId;
-                //    return;
-                //}
-                Context.Messaging.SendCommandToSubApplication(sendToContact, Sync.AppId, command, true, true, values);
+                Context?.Messaging.SendCommandToSubApplication(sendToContact, Sync.AppId, command, true, true, values);
             }
         }
 

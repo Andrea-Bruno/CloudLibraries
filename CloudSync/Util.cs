@@ -27,6 +27,25 @@ namespace CloudSync
                 return Sha256Hash.ComputeHash(data);
         }
 
+        /// <summary>
+        /// Create user subfolders: Documents, Pictures, Movies, etc..
+        /// </summary>
+        /// <param name="userPath"></param>
+        /// <param name="createSubFolder"></param>
+        public static void CreateUserFolder(string userPath, bool createSubFolder = true)
+        {
+                var created = SetSpecialDirectory(userPath, Icos.Cloud, false);
+                if (createSubFolder)
+                    AddDesktopShorcut(userPath);
+                var createIfNotExists = createSubFolder && new DirectoryInfo(userPath).GetDirectories().FirstOrDefault(x => !x.Attributes.HasFlag(FileAttributes.Hidden) && !x.Name.StartsWith(".")) == default;
+                SetSpecialDirectory(userPath, Icos.Documents, createIfNotExists: createIfNotExists);
+                SetSpecialDirectory(userPath, Icos.Download, createIfNotExists: createIfNotExists);
+                SetSpecialDirectory(userPath, Icos.Movies, createIfNotExists: createIfNotExists);
+                SetSpecialDirectory(userPath, Icos.Pictures, createIfNotExists: createIfNotExists);
+                SetSpecialDirectory(userPath, Icos.Photos, createIfNotExists: createIfNotExists);
+                SetSpecialDirectory(userPath, Icos.Settings, createIfNotExists: createIfNotExists);
+        }
+
         public static bool CheckConnection(Uri uri)
         {
             try

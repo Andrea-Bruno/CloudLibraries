@@ -228,6 +228,11 @@ namespace CloudSync
             ExecuteCommand(toUserId, Commands.DeleteFile, fileSystemInfo.FullName, new[] { hash.GetBytes(), timestamp.GetBytes() });
         }
 
+        private void DeleteFile(ulong? toUserId, ulong hash, uint unixTimestamp, string infoData)
+        {
+            ExecuteCommand(toUserId, Commands.DeleteFile, infoData, new[] { hash.GetBytes(), unixTimestamp.GetBytes() });
+        }
+
         private void CreateDirectory(ulong? toUserId, FileSystemInfo fileSystemInfo)
         {
             if (Spooler.RemoteDriveOverLimit)

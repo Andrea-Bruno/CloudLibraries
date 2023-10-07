@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data.Common;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 
 namespace CloudSync
@@ -49,15 +51,16 @@ namespace CloudSync
             //Context.ClientFileMonitoring?.Stop();
             lock (ToDoOperations)
             {
-                // Remove duplicate
-                if (ToDoOperations.ContainsKey(hashFile))
-                    ToDoOperations.Remove(hashFile);
                 if (RemoteDriveOverLimit && type == OperationType.Send) // Do not add send operations if the remote disk is full
                 {
                     Context.RaiseOnStatusChangesEvent(Sync.SyncStatus.RemoteDriveOverLimit);
                 }
                 else
                 {
+                    // Remove duplicate
+                    if (ToDoOperations.ContainsKey(hashFile))
+                        ToDoOperations.Remove(hashFile);
+                    SetRecursiveFilePendingStatus(hashFile, true);
                     ToDoOperations.Add(hashFile, new Operation { Type = type, UserId = userId, HashFile = hashFile });
                     Context.RaiseOnStatusChangesEvent(Sync.SyncStatus.Pending);
                 }
@@ -116,7 +119,7 @@ namespace CloudSync
                     {
                         Executed++;
                         var toDo = ToDoOperations.Values.ToArray()[0];
-                        ToDoOperations.Remove(toDo.HashFile);
+                        RemoveOperation(toDo.HashFile);
                         if (toDo.Type == OperationType.Send)
                         {
                             if (Context.HashFileTable(out var localHashes))
@@ -145,13 +148,109 @@ namespace CloudSync
         /// <summary>
         /// Remove all pending operations
         /// </summary>
-        public void Clear()
+        public void Clear(bool removePendingFileAttribute = false)
         {
+            if (removePendingFileAttribute)
+                foreach (var toDO in ToDoOperations.ToArray())
+                    SetRecursiveFilePendingStatus(toDO.Value.HashFile, false);
+            if (FilePendingTree.Count != 0)
+                FilePendingTree.Clear();
             lock (ToDoOperations)
             {
                 ToDoOperations.Clear();
             }
         }
+
+        /// <summary>
+        /// Add a flag that shows the pending status in the operating system's file explorer
+        /// </summary>
+        /// <param name="hashFile">The hash of the file to set the pending state</param>
+        /// <param name="pendingStatus">True to set the state that indicates the file is waiting to sync with the cloud</param>
+        private void SetRecursiveFilePendingStatus(ulong hashFile, bool pendingStatus)
+        {
+            if (Context.HashFileTable(out var localHashes))
+                if (localHashes.TryGetValue(hashFile, out var fileSystemInfo))
+                    SetRecursiveFilePendingStatus(fileSystemInfo, pendingStatus);
+        }
+
+        /// <summary>
+        /// Add a flag that shows the pending status in the operating system's file explorer
+        /// </summary>
+        /// <param name="fileSystemInfo">The fileSystemInfo of the file to set the pending state</param>
+        /// <param name="pendingStatus">True to set the state that indicates the file is waiting to sync with the cloud</param>
+        private void SetRecursiveFilePendingStatus(FileSystemInfo fileSystemInfo, bool pendingStatus)
+        {
+            try
+            {
+                if (pendingStatus)
+                {   // ADD
+                    if (fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory))
+                    {
+                        var hash = fileSystemInfo.HashFileName(Context);
+                        if (!FilePendingTree.ContainsKey(hash))
+                            FilePendingTree[hash] = 0;
+                        FilePendingTree[hash]++;
+                    }
+                    SetFilePendingStatus(fileSystemInfo, pendingStatus);
+                    var parent = ((DirectoryInfo)fileSystemInfo).Parent;
+                    if (Path.GetFullPath(parent.FullName) != Path.GetFullPath(Context.CloudRoot))
+                        SetRecursiveFilePendingStatus(parent, pendingStatus);
+                }
+                else
+                {  // REMOVE
+                    int subCount = 0;
+                    if (fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory))
+                    {
+                        var hash = fileSystemInfo.HashFileName(Context);
+                        if (FilePendingTree.ContainsKey(hash))
+                        {
+                            FilePendingTree[hash]--;
+                            subCount = FilePendingTree[hash];
+                            if (subCount == 0)
+                                FilePendingTree.Remove(hash);
+                        }
+                    }
+                    if (subCount == 0)
+                        SetFilePendingStatus(fileSystemInfo, pendingStatus);
+                }
+            }
+            catch (Exception) { }
+        }
+
+        /// <summary>
+        /// Add a flag that shows the pending status in the operating system's file explorer
+        /// </summary>
+        /// <param name="fileSystemInfo">The fileSystemInfo of the file to set the pending state</param>
+        /// <param name="pendingStatus">True to set the state that indicates the file is waiting to sync with the cloud</param>
+
+        public static void SetFilePendingStatus(FileSystemInfo fileSystemInfo, bool pendingStatus)
+        {
+            try
+            {
+                if (pendingStatus)
+                {   // ADD
+                    if (!fileSystemInfo.Attributes.HasFlag(Pending))
+                        fileSystemInfo.Attributes |= Pending;
+                }
+                else
+                {  // REMOVE
+                    if (fileSystemInfo.Attributes.HasFlag(Pending))
+                        fileSystemInfo.Attributes &= ~Pending;
+                }
+            }
+            catch (Exception) { }
+        }
+
+        private Dictionary<ulong, int> FilePendingTree = new Dictionary<ulong, int>();
+
+
+        private void RemoveOperation(ulong hashFile)
+        {
+            SetRecursiveFilePendingStatus(hashFile, false);
+            ToDoOperations.Remove(hashFile);
+        }
+
+        const FileAttributes Pending = FileAttributes.Archive | FileAttributes.Offline;
 
         /// <summary>
         /// Memorize that the remote server device has a full disk and is no longer available to receive data
@@ -169,7 +268,7 @@ namespace CloudSync
                         ToDoOperations.Values.ToList().ForEach(toDo =>
                         {
                             if (toDo.Type == OperationType.Send)
-                                ToDoOperations.Remove(toDo.HashFile);
+                                RemoveOperation(toDo.HashFile);
                         });
                     }
                 }

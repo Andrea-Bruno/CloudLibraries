@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using static CloudSync.Util;
@@ -231,13 +233,29 @@ namespace CloudSync
                                 if (expectedCrc == CRC.GetCRC(fromUserId, hashFileName, part) && new FileInfo(tmpFile).Length.Equals(length)) // Use the length to check if the file was received correctly
                                 {
                                     var target = FullName(values[6]);
+                                    var fileInfo = new FileInfo(target);
+                                    if (hashFileName != HashFileName(values[6].ToText(), false))
+                                    {
+                                        Debugger.Break();
+                                        return;
+                                    }
                                     var unixTimestamp = values[4].ToUint32();
                                     TotalFilesReceived++;
                                     TotalBytesReceived += length;
                                     if (File.Exists(target))
                                     {
-                                        if (new FileInfo(target).UnixLastWriteTimestamp() > unixTimestamp)
+                                        if (fileInfo.UnixLastWriteTimestamp() > unixTimestamp)
+                                        {
+                                            // Debugger.Break();
+                                            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                                            {
+                                                // In Windows, duplicate file names with different case are not allowed
+                                                var currentNameFile = (fileInfo.Directory.GetFiles(fileInfo.Name).FirstOrDefault())?.Name;
+                                                if (currentNameFile != fileInfo.Name) // Check if the file is the same not case sensitive
+                                                    DeleteFile(fromUserId, hashFileName, unixTimestamp, fileInfo.FullName);
+                                            }
                                             return;
+                                        }
                                         FileDelete(target, out Exception exception1);
                                         if (exception1 != null)
                                             RaiseOnFileError(exception1, target);
@@ -252,7 +270,6 @@ namespace CloudSync
                                     FileMove(tmpFile, target, out Exception exception2);
                                     if (exception2 != null)
                                         RaiseOnFileError(exception2, target);
-                                    var fileInfo = new FileInfo(target);
                                     fileInfo.LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp);
                                     RaiseOnFileTransfer(false, hashFileName, part, total, target, (int)length);
                                 }
@@ -394,7 +411,7 @@ namespace CloudSync
                             foreach (var hash in remoteHashes.Keys)
                             {
                                 var wasDeleted = Existed(hash);
-                                if (!localHashes.ContainsKey(hash) && !Existed(hash))
+                                if (!localHashes.ContainsKey(hash) && !wasDeleted)
                                 {
                                     Spooler.AddOperation(Spooler.OperationType.Request, fromUserId, hash);
                                 }
@@ -404,7 +421,6 @@ namespace CloudSync
                     TaskOnSendHashStructure = null;
                 });
         }
-
 
         public uint TotalFilesReceived;
         public uint TotalBytesReceived;
