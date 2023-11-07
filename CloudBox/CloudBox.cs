@@ -4,13 +4,12 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using CloudSync;
 using EncryptedMessaging;
 using NBitcoin;
-using SecureStorage;
 using static CommunicationChannel.Channel;
 
 namespace CloudBox
@@ -41,7 +40,7 @@ namespace CloudBox
         /// <param name="licenseOEM">The OEM private key for activating licenses.</param>
         /// <param name="name">A label name to assign to this instance (this does not affect how the cloud works)</param>
         /// <param name="doNotCreateSpecialFolders">If instantiated as a server it will automatically create specific subdirectories for documents, photos, etc., unless this parameter is specified</param>
-        /// <param name="isReachable">Indicate true if the path to the cloud space is reachable (true), or unmounted virtual disk (false)</param>
+        /// <param name="isReachable">Indicate true if the path to the cloud space is reachable (true), or unmounted virtual disk (false). Use IsReachableDiskStateIsChanged to notify that access to the cloud path has changed.</param>
         public CloudBox(string cloudPath = null, bool isServer = false, ulong? id = null, string licenseOEM = null, string name = null, bool doNotCreateSpecialFolders = false, bool isReachable = true)
         {
             IsReachable = isReachable;
@@ -82,13 +81,48 @@ namespace CloudBox
         /// <param name="signatureFileName">Returns the name of the file containing the digital signature</param>
         /// <param name="fileName">The name of the file being signed</param>
         /// <param name="document">The file you are signing (in the form of binary data)</param>
+        /// <param name="saveToCloud">If true, both the document and the digital signature will be saved in the cloud area</param>
         /// <returns>Digital signature in json format</returns>
-        public string SignDocument(DigitalSignature.Scope scopeOfSignature, out string signatureFileName, string fileName = null, byte[] document = null)
+        public string SignDocument(DigitalSignature.Scope scopeOfSignature, out string signatureFileName, string fileName, byte[] document, bool saveToCloud = true)
         {
             var sign = new DigitalSignature(Context.My.GetPrivateKeyBinary(), scopeOfSignature, fileName, document);
-            var json = sign.Save();
+            var jsonSignature = sign.Save();
             signatureFileName = fileName + sign.FileExtension();
-            return json;
+
+            if (saveToCloud)
+            {
+                if (CloudPath != null && IsReachable)
+                {
+                    var n = 0;
+                    string signatureDir;
+                    do
+                    {
+                        signatureDir = Path.Combine(CloudPath, "Documents", "Signed", Path.GetFileNameWithoutExtension(fileName) + (n == 0 ? "" : n.ToString()));
+                        if (!Directory.Exists(signatureDir))
+                        {
+                            Directory.CreateDirectory(signatureDir);
+                            break;
+                        }
+                        n++;
+                    } while (true);
+                    File.WriteAllBytes(Path.Combine(signatureDir, fileName), document);
+                    File.WriteAllText(Path.Combine(signatureDir, signatureFileName), jsonSignature);
+                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    {
+                        Process.Start("explorer", signatureDir);
+                    }
+                    else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                    {
+                        Process.Start("xdg-open", signatureDir);
+                    }
+                    else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                    {
+                        Process.Start("open", signatureDir);
+                    }                   
+                }
+            }
+
+            return jsonSignature;
         }
 
         /// <summary>
@@ -98,7 +132,7 @@ namespace CloudBox
         virtual protected void OnRouterConnectionChange(bool isConnected)
         {
             if (Sync == null && isConnected)
-                    ConnectToServer();
+                ConnectToServer();
         }
 
         private static void UnhandledExceptionEventHandler(object sender, UnhandledExceptionEventArgs e)
@@ -486,6 +520,7 @@ namespace CloudBox
         /// <summary>
         /// Function that the host app must call if the disk at the root of the cloud is mounted or unmounted.
         /// If you plan not to use a virtual disk for cloud space then this function should not be called.
+        /// If you use a virtual disk as a path to the cloud, this feature will suspend synchronization when the disk is unsmounted.
         /// </summary>
         public void IsReachableDiskStateIsChanged(bool isReachable) => IsReachable = isReachable;
 

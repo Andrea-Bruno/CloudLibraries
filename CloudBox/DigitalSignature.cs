@@ -52,7 +52,7 @@ namespace CloudBox
             ScopeOfSignature = scopeOfSignature;
             var signBase = new byte[] { Version }.Concat(publicKey.ToBytes()).Concat(hash).Concat(blockchainHashBlock).Concat(new byte[] { (byte)ScopeOfSignature }).ToArray();
             var hashBase = new uint256(Hash256(signBase));
-            var signature = key.Sign(hashBase);  
+            var signature = key.Sign(hashBase);
             Signature = signature.ToDER().ToHex();
             if (file == null)
             {
@@ -131,7 +131,7 @@ namespace CloudBox
                 return false;
             var signBase = new byte[] { Version }.Concat(PublicKey.HexToBytes()).Concat(hash).Concat(BlockchainHashBlock.HexToBytes()).Concat(new byte[] { (byte)ScopeOfSignature }).ToArray();
             var hashBase = new uint256(Hash256(signBase));
-            var publicKey = new PubKey(PublicKey.HexToBytes());        
+            var publicKey = new PubKey(PublicKey.HexToBytes());
             return publicKey.Verify(hashBase, Signature.HexToBytes());
         }
 
@@ -154,13 +154,26 @@ namespace CloudBox
             return "." + UserId() + ".sign";
         }
 
+        private static readonly Dictionary<string, Tuple<DateTime, string>> JsonCache = new Dictionary<string, Tuple<DateTime, string>>();
+
         private Dictionary<string, object> Json(string url)
         {
-            using (WebClient wc = new WebClient())
+            string json = null;
+
+            if (JsonCache.TryGetValue(url, out Tuple<DateTime, string> cache))
             {
-                var json = wc.DownloadString(url);
-                return JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+                if (cache.Item1.AddMinutes(10) >= DateTime.UtcNow)
+                    json = cache.Item2;
             }
+            if (json == null)
+            {
+                using (WebClient wc = new WebClient())
+                {
+                    json = wc.DownloadString(url);
+                }
+                JsonCache[url] = new Tuple<DateTime, string>(DateTime.UtcNow, json);
+            }
+            return JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
         }
 
         /// <summary>
@@ -210,7 +223,7 @@ namespace CloudBox
             /// </summary>
             Viewed,
         }
-    
+
         /// <summary>
         /// Public key of the signer (base 64 format)
         /// </summary>

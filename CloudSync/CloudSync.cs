@@ -36,9 +36,10 @@ namespace CloudSync
             CloudRoot = cloudRoot;
             IsReachable = isReachable;
             var rootInfo = new DirectoryInfo(cloudRoot);
+            if (IsServer)
+                rootInfo.Create();
             if (rootInfo.Exists)
                 rootInfo.Attributes |= FileAttributes.Encrypted;
-
             SendCommandDelegate = sendCommand;
             onCommand = OnCommand;
             Spooler = new Spooler(this);
@@ -417,6 +418,8 @@ namespace CloudSync
         {
             return OldHashFileTable != null && OldHashFileTable.ContainsKey(hashFile);
         }
+
+        public void ResetCacheHashFileTable() => CacheHashFileTable = null;
         private HashFileTable OldHashFileTable;
         private HashFileTable CacheHashFileTable;
         private DateTime CacheHashFileTableExpire;
@@ -434,13 +437,12 @@ namespace CloudSync
         /// <returns>True if the operation completed successfully, or false if there was a critical error</returns>
         public bool HashFileTable(out HashFileTable hashTable, bool noCache = false, BlockRange delimitsRange = null)
         {
-#if DEBUG
+#if DEBUG && !TEST
             var timer = new Stopwatch();
             timer.Start();
 #endif
             try
             {
-
                 void StartAnalyzeDirectory(string directoryName, out HashFileTable hashDirTable)
                 {
                     hashDirTable = new HashFileTable();
@@ -522,7 +524,7 @@ namespace CloudSync
                 {
                     hashTable = GetRestrictedHashFileTable(CacheHashFileTable, out _, delimitsRange);
 
-#if DEBUG
+#if DEBUG && !TEST
                     timer.Stop();
                     if (timer.ElapsedMilliseconds > 10000)
                         Debugger.Break();
@@ -530,7 +532,7 @@ namespace CloudSync
                     return true;
                 }
                 hashTable = CacheHashFileTable;
-#if DEBUG
+#if DEBUG && !TEST
                 timer.Stop();
                 if (timer.ElapsedMilliseconds > 10000)
                     Debugger.Break();

@@ -35,7 +35,6 @@ namespace CloudSync
         {
             StatusNotification(lastFromUserId, Status.Ready);
         }
-
 #endif
 
         public DateTime LastCommandReceived { get; private set; }
@@ -85,7 +84,13 @@ namespace CloudSync
             }
             else
             {
-                if (RoleManager.TryToGetCient((ulong)fromUserId, out var Interlocutor, out var isTemp))
+                if (!RoleManager.TryToGetCient((ulong)fromUserId, out var Interlocutor, out var isTemp))
+                {
+#if DEBUG
+                    Debugger.Break(); // Client not found!
+#endif
+                }
+                else
                 {
                     RestartCheckSyncTimer(); // Reset the timer that checks the synchronization (This is an additional verification check)
                     if (command == Commands.Notification)

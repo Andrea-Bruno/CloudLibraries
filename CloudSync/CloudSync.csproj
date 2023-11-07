@@ -2,11 +2,15 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <Configurations>Debug;Release;DEBUG_AND</Configurations>
+    <Configurations>Debug;Release;DEBUG_AND;Test</Configurations>
     <UserSecretsId>8d0a6e5c-7792-4721-9f23-2b58240b121d</UserSecretsId>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <Optimize>False</Optimize>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Test|AnyCPU'">
     <Optimize>False</Optimize>
   </PropertyGroup>
 

@@ -237,7 +237,7 @@ namespace CloudSync
             return false;
         }
 
-        private static readonly List<string> ExcludeFile = new List<string> { "desktop.ini" };
+        private static readonly List<string> ExcludeFile = new List<string> { "desktop.ini", "tmp", "temp" };
         private static readonly List<string> ExcludeExtension = new List<string> { ".desktop" };
 
         /// <summary>
