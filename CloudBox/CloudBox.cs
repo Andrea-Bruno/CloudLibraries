@@ -54,7 +54,7 @@ namespace CloudBox
 
 
             if (string.IsNullOrEmpty(licenseOEM))
-                licenseOEM = TestNetDefaultlicenseOEM;
+                licenseOEM = TestNetDefaultLicenseOEM;
             LicenseOEM = licenseOEM;
             IsServer = isServer;
             ID = id == null ? BitConverter.ToUInt64(Util.Hash256(cloudPath.GetBytes()), 0) : id.Value;
@@ -629,7 +629,7 @@ namespace CloudBox
         /// </summary>
         public bool IsConnected => Context != null && Context.IsConnected;
         private readonly string LicenseOEM;
-        private const string TestNetDefaultlicenseOEM = "3z66WQrrQnlksDQEcqt7qxABMVBgqexgH/PuY8EmIT4="; // The license activation key on TestNet (for testing)
+        private const string TestNetDefaultLicenseOEM = "3z66WQrrQnlksDQEcqt7qxABMVBgqexgH/PuY8EmIT4="; // The license activation key on TestNet (for testing)
         /// <summary>
         /// Returns a detailed report of this cloud server or client instance
         /// </summary>
@@ -653,7 +653,7 @@ namespace CloudBox
                         AddTx("Entry point (router address)", context?.EntryPoint.ToString());
                     AddTx("Keep Alive Failures", context?.KeepAliveFailures);
                 }
-                if (LicenseOEM == TestNetDefaultlicenseOEM)
+                if (LicenseOEM == TestNetDefaultLicenseOEM)
                 {
                     if (string.IsNullOrEmpty(LicenseOEM))
                         AddTx("ERROR!", "Missing license");

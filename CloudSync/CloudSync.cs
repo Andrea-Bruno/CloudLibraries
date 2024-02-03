@@ -437,6 +437,13 @@ namespace CloudSync
         /// <returns>True if the operation completed successfully, or false if there was a critical error</returns>
         public bool HashFileTable(out HashFileTable hashTable, bool noCache = false, BlockRange delimitsRange = null)
         {
+            if (!Directory.Exists(CloudRoot))
+            {
+                RaiseOnFileError(new Exception("Cloud root not found!"), CloudRoot);
+                hashTable = null;
+                return false;
+            }
+
 #if DEBUG && !TEST
             var timer = new Stopwatch();
             timer.Start();

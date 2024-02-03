@@ -34,16 +34,16 @@ namespace CloudSync
         /// <param name="createSubFolder"></param>
         public static void CreateUserFolder(string userPath, bool createSubFolder = true)
         {
-                var created = SetSpecialDirectory(userPath, Icos.Cloud, false);
-                if (createSubFolder)
-                    AddDesktopShorcut(userPath);
-                var createIfNotExists = createSubFolder && new DirectoryInfo(userPath).GetDirectories().FirstOrDefault(x => !x.Attributes.HasFlag(FileAttributes.Hidden) && !x.Name.StartsWith(".")) == default;
-                SetSpecialDirectory(userPath, Icos.Documents, createIfNotExists: createIfNotExists);
-                SetSpecialDirectory(userPath, Icos.Download, createIfNotExists: createIfNotExists);
-                SetSpecialDirectory(userPath, Icos.Movies, createIfNotExists: createIfNotExists);
-                SetSpecialDirectory(userPath, Icos.Pictures, createIfNotExists: createIfNotExists);
-                SetSpecialDirectory(userPath, Icos.Photos, createIfNotExists: createIfNotExists);
-                SetSpecialDirectory(userPath, Icos.Settings, createIfNotExists: createIfNotExists);
+            var created = SetSpecialDirectory(userPath, Icos.Cloud, false);
+            if (createSubFolder)
+                AddDesktopShorcut(userPath);
+            var createIfNotExists = createSubFolder && new DirectoryInfo(userPath).GetDirectories().FirstOrDefault(x => !x.Attributes.HasFlag(FileAttributes.Hidden) && !x.Name.StartsWith(".")) == default;
+            SetSpecialDirectory(userPath, Icos.Documents, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Icos.Download, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Icos.Movies, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Icos.Pictures, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Icos.Photos, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Icos.Settings, createIfNotExists: createIfNotExists);
         }
 
         public static bool CheckConnection(Uri uri)
@@ -410,18 +410,29 @@ namespace CloudSync
             parts = parts == 0 ? 1 : parts;
             if (chunkPart > parts)
                 return null;
-            using (var fs = File.OpenRead(fullFileName))
+            for (int attempt = 0; attempt < 5; attempt++)
             {
-                using (var reader = new BinaryReader(fs))
+                try
                 {
-                    fs.Position = (chunkPart - 1) * chunkSize;
-                    var toTake = reader.BaseStream.Length - reader.BaseStream.Position;
-                    if (toTake > chunkSize)
-                        toTake = chunkSize;
-                    chunk = reader.ReadBytes((int)toTake);
+                    using (var fs = File.OpenRead(fullFileName))
+                    {
+                        using (var reader = new BinaryReader(fs))
+                        {
+                            fs.Position = (chunkPart - 1) * chunkSize;
+                            var toTake = reader.BaseStream.Length - reader.BaseStream.Position;
+                            if (toTake > chunkSize)
+                                toTake = chunkSize;
+                            chunk = reader.ReadBytes((int)toTake);
+                        }
+                    }
+                    return chunk;
+                }
+                catch (Exception)
+                {
+                    Thread.Sleep(1000);
                 }
             }
-            return chunk;
+            return null;
         }
 
         public const ulong StartCRC = CRC.StartCRC;

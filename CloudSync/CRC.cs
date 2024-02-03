@@ -114,7 +114,6 @@ namespace CloudSync
                 if (crc.LastPart == part)
                     return crc.TempCRC;
             }
-            Debugger.Break();
             return 0;
         }
 
