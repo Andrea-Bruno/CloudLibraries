@@ -94,7 +94,7 @@ namespace CloudSync
 
         private void SendHashStructure(ulong? toUserId, BlockRange delimitsRange = null)
         {
-            if (GetLocalHashStrucrure(out var structure, delimitsRange))
+            if (GetLocalHashStructure(out var structure, delimitsRange))
             {
                 if (delimitsRange == null)
                     ExecuteCommand(toUserId, Commands.SendHashStructure, null, new[] { structure });

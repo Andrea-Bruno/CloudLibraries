@@ -355,7 +355,7 @@ namespace CloudSync
 
         private readonly SendCommand SendCommandDelegate;
 
-        private bool GetLocalHashStrucrure(out byte[] localHashStrucrure, BlockRange delimitsRange)
+        private bool GetLocalHashStructure(out byte[] localHashStructure, BlockRange delimitsRange)
         {
             if (HashFileTable(out var hashFileTable))
             {
@@ -364,7 +364,7 @@ namespace CloudSync
                     hashFileTable = GetRestrictedHashFileTable(hashFileTable, out _, delimitsRange); // Returns null if the delimiterRange is invalid. In this case, all operations must be interrupted!
                     if (hashFileTable == null)
                     {
-                        localHashStrucrure = null;
+                        localHashStructure = null;
                         return false;
 
                     }
@@ -378,10 +378,10 @@ namespace CloudSync
                     Buffer.BlockCopy(BitConverter.GetBytes(item.Value.UnixLastWriteTimestamp()), 0, array, offset, 4);
                     offset += 4;
                 }
-                localHashStrucrure = array;
+                localHashStructure = array;
                 return true;
             }
-            localHashStrucrure = null;
+            localHashStructure = null;
             return false;
         }
 
@@ -475,7 +475,8 @@ namespace CloudSync
                                 else
                                 {
                                     hash = item.HashFileName(this);
-                                    hashFileTable[hash] = item;
+                                    hashFileTable.Add(hash, item);
+                                    // hashFileTable[hash] = item;
                                 }
                             }
                         }
@@ -494,7 +495,10 @@ namespace CloudSync
                         var watch = Stopwatch.StartNew();
                         StartAnalyzeDirectory(CloudRoot, out var newHashFileTable);
                         if (!IsReachable)
+                        {
+                            hashTable = null;
                             return false;
+                        }
                         if (CacheHashFileTable != null)
                         {
                             // check if any files have been deleted

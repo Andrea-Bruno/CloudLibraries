@@ -36,7 +36,7 @@ namespace CloudSync
         {
             var created = SetSpecialDirectory(userPath, Icos.Cloud, false);
             if (createSubFolder)
-                AddDesktopShorcut(userPath);
+                AddDesktopShortcut(userPath);
             var createIfNotExists = createSubFolder && new DirectoryInfo(userPath).GetDirectories().FirstOrDefault(x => !x.Attributes.HasFlag(FileAttributes.Hidden) && !x.Name.StartsWith(".")) == default;
             SetSpecialDirectory(userPath, Icos.Documents, createIfNotExists: createIfNotExists);
             SetSpecialDirectory(userPath, Icos.Download, createIfNotExists: createIfNotExists);
@@ -254,7 +254,7 @@ namespace CloudSync
         }
 
         /// <summary>
-        /// Convert a date to unix timestamp format
+        /// Convert a date to Unix timestamp format
         /// </summary>
         /// <param name="dateTime">Date and time value to convert</param>
         /// <returns>Integer value indicating date and time in unix format</returns>
@@ -512,13 +512,15 @@ namespace CloudSync
                 File.SetAttributes(pathDirectory, File.GetAttributes(pathDirectory) | FileAttributes.System);
             }
         }
-        public static void AddDesktopShorcut(string fullName, Icos ico = Icos.Cloud)
+        public static void AddDesktopShortcut(string fullName, Icos ico = Icos.Cloud)
         {
-            var desktopDir = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-            AddShorcut(fullName, desktopDir, ico);
+            AddShortcut(fullName, DesktopPath(), ico);
         }
-
-        public static void AddShorcut(string source, string target, Icos ico)
+        public static string DesktopPath()
+        {
+            return RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Desktop") : Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+        }
+        public static void AddShortcut(string source, string target, Icos ico)
         {
             var icoFullName = IcoFullName(ico);
             var fileName = new FileInfo(source).Name;
@@ -543,19 +545,25 @@ namespace CloudSync
             }
             else if (Environment.OSVersion.Platform == PlatformID.Unix)
             {
-                var targetFile = Path.Combine(target, fileName + ".desktop");
-                using (var writer = new StreamWriter(targetFile))
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
                 {
-                    writer.WriteLine(@"[Desktop Entry]");
-                    writer.WriteLine(@"Type=Link");
-                    writer.WriteLine(@"Terminal=false");
-                    writer.WriteLine(@"Icon=" + icoFullName);
-                    writer.WriteLine(@"Name=" + fileName);
-                    writer.WriteLine(@"URL=file:///" + source);
+                    System.Diagnostics.Process.Start("ln", "-s " + source + " " + target);
+                }
+                else
+                {
+                    var targetFile = Path.Combine(target, fileName + ".desktop");
+                    using (var writer = new StreamWriter(targetFile))
+                    {
+                        writer.WriteLine(@"[Desktop Entry]");
+                        writer.WriteLine(@"Type=Link");
+                        writer.WriteLine(@"Terminal=false");
+                        writer.WriteLine(@"Icon=" + icoFullName);
+                        writer.WriteLine(@"Name=" + fileName);
+                        writer.WriteLine(@"URL=file:///" + source);
+                    }
                 }
             }
         }
-
         public class BlockRange
         {
             public BlockRange(ulong? betweenHasBlock, int betweenHasBlockIndex, ulong? betweenReverseHasBlock, int betweenReverseHasBlockIndex)
@@ -609,9 +617,9 @@ namespace CloudSync
         /// <summary>
         /// If delimitsRange != Null, returns HashFileTable of range, otherwise returns HashBlocks (out byte[] returnHashBlocks)
         /// </summary>
-        /// <param name="hashFileTable">The whole hash table whitout delimits</param>
+        /// <param name="hashFileTable">The whole hash table without delimits</param>
         /// <param name="returnHashBlocks">Return hash block if delimitsRange is null</param>
-        /// <param name="delimitsRange">An object that indicates the portion of the filetable hash to take</param>
+        /// <param name="delimitsRange">An object that indicates the portion of the FileTable hash to take</param>
         /// <returns></returns>
         public static HashFileTable GetRestrictedHashFileTable(HashFileTable hashFileTable, out byte[] returnHashBlocks, BlockRange delimitsRange = null)
         {
@@ -791,7 +799,7 @@ namespace CloudSync
         /// <param name="fileName">File name</param>
         /// <param name="data">Binary data to write</param>
         /// <param name="exception">Returns any errors encountered in performing the operation</param>
-        /// <param name="attempts">number of attemps</param>
+        /// <param name="attempts">number of attempts</param>
         /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt</param>
         /// <param name="chunkSize">Set a value different of 0 to check a file size if is consistent with the chunk size size</param>
         /// <param name="chunkNumber">Chunk number (base 1) if chunk size is different of 0</param>

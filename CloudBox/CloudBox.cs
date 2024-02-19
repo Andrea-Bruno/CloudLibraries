@@ -428,14 +428,14 @@ namespace CloudBox
 #if RELEASE
 
                     ShowEntryPoint = false;
-                    ep = "server.cloudservices.agency";
+                    ep = "server.tc0.it";
 #elif DEBUG
-                    ep = "test.cloudservices.agency";
+                    ep = "test.tc0.it";
 #endif
                 }
                 else if (!ep.Contains("."))
                 {
-                    ep += ".cloudservices.agency";
+                    ep += ".tc0.it";
                 }
 
                 if (!string.IsNullOrEmpty(ep))
