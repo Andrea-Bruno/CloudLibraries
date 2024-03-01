@@ -470,7 +470,10 @@ namespace CloudSync
                                     Spooler.SetFilePendingStatus(item, false);
                                 if (item.Attributes.HasFlag(FileAttributes.Directory))
                                 {
-                                    AnalyzeDirectory((DirectoryInfo)item, ref hashFileTable);
+                                    if (!DirToExclude((DirectoryInfo)item))
+                                    {
+                                        AnalyzeDirectory((DirectoryInfo)item, ref hashFileTable);
+                                    }                                
                                 }
                                 else
                                 {
@@ -562,5 +565,12 @@ namespace CloudSync
         /// The time taken to compute the cloud path file table hash in milliseconds
         /// </summary>
         public int CalculationTimeHashFileTableMS { get; internal set; }
+
+        private static readonly string[] ExcludeDir = { "bin", "obj", ".vs", "packages", "apppackages" };
+        private static bool DirToExclude(DirectoryInfo directory)
+        {
+            return ExcludeDir.Contains(directory.Name.ToLower());
+        }
+
     }
 }

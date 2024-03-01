@@ -653,6 +653,7 @@ namespace CloudBox
                         AddTx("Entry point (router address)", context?.EntryPoint.ToString());
                     AddTx("Keep Alive Failures", context?.KeepAliveFailures);
                 }
+                AddTx("OEM Id", OEM.GetIdOEM(LicenseOEM));
                 if (LicenseOEM == TestNetDefaultLicenseOEM)
                 {
                     if (string.IsNullOrEmpty(LicenseOEM))
@@ -669,7 +670,6 @@ namespace CloudBox
                     AddTx("Logged with server", (Sync != null));
                 }
                 AddTx("Connected to the router", context?.IsConnected);
-                AddTx("OEM Id", OEM.GetIdOEM(LicenseOEM));
                 AddTx("Cloud path", CloudPath);
                 //addTx("Pubblic IP", Util.PublicIpAddressInfo());
                 if (context != null)

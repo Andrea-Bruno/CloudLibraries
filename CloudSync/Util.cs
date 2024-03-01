@@ -405,7 +405,14 @@ namespace CloudSync
             if (chunkSize == 0)
                 chunkSize = DefaultChunkSize;
             byte[] chunk;
-            fileLength = new FileInfo(fullFileName).Length;
+            var fileInfo = new FileInfo(fullFileName);
+            if (!fileInfo.Exists)
+            {
+                parts = 0;
+                fileLength = 0;
+                return null;
+            }
+            fileLength = fileInfo.Length;
             parts = (uint)Math.Ceiling((double)fileLength / chunkSize);
             parts = parts == 0 ? 1 : parts;
             if (chunkPart > parts)
