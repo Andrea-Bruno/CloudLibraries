@@ -55,7 +55,7 @@ namespace CloudSync
                 if (IsServer)
                 {
                     // The server must check if the client knows the PIN (If it has solved the cryptographic problem then the PIN is known)
-                    if (RoleManager.TryToGetCient((ulong)fromUserId, out var client, out var isTemp))
+                    if (RoleManager.TryToGetClient((ulong)fromUserId, out var client, out var isTemp))
                     {
                         if (client.Authenticate(values[0]))
                         {
@@ -84,7 +84,7 @@ namespace CloudSync
             }
             else
             {
-                if (!RoleManager.TryToGetCient((ulong)fromUserId, out var Interlocutor, out var isTemp))
+                if (!RoleManager.TryToGetClient((ulong)fromUserId, out var Interlocutor, out var isTemp))
                 {
 #if DEBUG
                     Debugger.Break(); // Client not found!

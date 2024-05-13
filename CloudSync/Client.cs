@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using System.Xml.Serialization;
 using static CloudSync.RoleManager;
 
@@ -55,6 +56,11 @@ namespace CloudSync
         }
 
         /// <summary>
+        /// If set, it indicates that the client only has access to files shared with a group via an application that uses the encrypted json API
+        /// </summary>
+        public string GroupForSharing;
+
+        /// <summary>
         /// Create an interlocutor and save it: This function is used by the client to create the interlocutor and thus have its session variables
         /// </summary>
         /// <param name="sync"></param>
@@ -90,11 +96,15 @@ namespace CloudSync
                 return false;
             }
             LastAttempt = DateTime.UtcNow;
-            var passed = AuthenticationProof.Validate(authenticationProof, out string pin, out string label);
+
+            var passed = AuthenticationProof.Validate(Sync.CloudRoot, authenticationProof, out string pin, out string label, out string group);
             if (passed)
             {
                 Label = label;
-                Util.RemoveFromPins(Sync.SecureStorage, pin);
+                if (group != null)
+                    GroupForSharing = group;
+                else
+                    Util.RemoveFromPins(Sync.SecureStorage, pin);
                 Save();
             }
             AuthenticationProof = null;
@@ -110,7 +120,7 @@ namespace CloudSync
         /// <summary>
         /// The size of the larger side of the image preview images requested by the client. A value of zero indicates that this client does not want the thumbnails
         /// </summary>
-        public short ThumbanailSize;
+        public short ThumbnailSize;
 
         /// <summary>
         /// The id of the client

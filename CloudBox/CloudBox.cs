@@ -34,7 +34,7 @@ namespace CloudBox
         /// <summary>
         /// Cloud Server will communicate to clients for making operations on cloud storage.
         /// </summary>
-        /// <param name="cloudPath">Directoty position of the cloud (a null value will be considered the default path)</param>
+        /// <param name="cloudPath">Directory position of the cloud (a null value will be considered the default path)</param>
         /// <param name="isServer">True if this instance is a server cloud</param>
         /// <param name="id">Used to create multiple instances</param>
         /// <param name="licenseOEM">The OEM private key for activating licenses.</param>
@@ -251,9 +251,9 @@ namespace CloudBox
         /// <returns>True for Successful, or false if something went wrong</returns>  
         public Context CreateContext(string routerEntryPoint, string passphrase = null)
         {
-            var isQRcode = !routerEntryPoint.Contains('.');
+            var isQRCode = !routerEntryPoint.Contains('.');
             string serverPublicKey = null;
-            if (isQRcode)
+            if (isQRCode)
             {
                 var qrCode = routerEntryPoint;
                 if (SolveQRCode(qrCode, out routerEntryPoint, out serverPublicKey, out EncryptedQR) == false)
@@ -401,18 +401,16 @@ namespace CloudBox
                 var offset = 1;
                 if (type == 1)
                 {
-                    // var modulus = qr.Skyp(offset).Take(256);
                     offset += 256;
-                    // var exponent = qr.Skyp(offset).Take(3);
                     offset += 3;
                 }
                 else if (type == 2)
                 {
-                    var QRkey = qr.Skyp(offset).Take(24);
+                    var QRKey = qr.Skyp(offset).Take(24);
                     offset += 24;
                     var serverId = BitConverter.ToUInt64(qr.Skyp(offset).Take(8), 0);
                     offset += 8;
-                    EncryptedQR = new Tuple<ulong, byte[]>(serverId, QRkey);
+                    EncryptedQR = new Tuple<ulong, byte[]>(serverId, QRKey);
                 }
                 else if (type > 2)
                     return false;
@@ -648,7 +646,7 @@ namespace CloudBox
                     if (Context.InstancedTimeUtc != default)
                         AddTx("Started at", Context.InstancedTimeUtc + " UTC");
                     AddTx("User Id", context?.My.Id);
-                    AddTx("Pubblic Key", context?.My.GetPublicKey());
+                    AddTx("Public Key", context?.My.GetPublicKey());
                     if (ShowEntryPoint)
                         AddTx("Entry point (router address)", context?.EntryPoint.ToString());
                     AddTx("Keep Alive Failures", context?.KeepAliveFailures);
@@ -671,7 +669,7 @@ namespace CloudBox
                 }
                 AddTx("Connected to the router", context?.IsConnected);
                 AddTx("Cloud path", CloudPath);
-                //addTx("Pubblic IP", Util.PublicIpAddressInfo());
+                //addTx("Public IP", Util.PublicIpAddressInfo());
                 if (context != null)
                 {
                     AddTx("# CHANNEL:");
@@ -729,12 +727,12 @@ namespace CloudBox
             }
         }
         /// <summary>
-        /// Lista di tutte le istanze attualmente attive
+        /// List of all currently active instances
         /// </summary>
         public static readonly List<CloudBox> Instances = new List<CloudBox>();
 
         /// <summary>
-        /// Unmount corrent instance
+        /// Unmount current instance
         /// </summary>
         public virtual void Remove()
         {

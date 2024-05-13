@@ -12,7 +12,7 @@ namespace CloudBox
         /// <summary>
         /// Initializer
         /// </summary>
-        /// <param name="preservedElements">Number of elemento to keep in the list</param>
+        /// <param name="preservedElements">Number of element to keep in the list</param>
         public OnCommandList(int preservedElements = 16)
         {
             PreservedElement = preservedElements;
@@ -28,7 +28,7 @@ namespace CloudBox
         /// <summary>
         /// Add an item to the list
         /// </summary>
-        /// <param name="userId">Id of sende user</param>
+        /// <param name="userId">Id of user</param>
         /// <param name="command">Command</param>
         /// <param name="infoData">Information about data</param>
         /// <param name="isOutput">True if is a command output, false if is command in input</param>
@@ -54,7 +54,7 @@ namespace CloudBox
         /// <summary>
         /// Initializer
         /// </summary>
-        /// <param name="userId">Id of sende user</param>
+        /// <param name="userId">Id of user</param>
         /// <param name="command">Command</param>
         /// <param name="infoData">Information about data</param>
         /// <param name="isOutput">True if is a command output, false if is command in input</param>
