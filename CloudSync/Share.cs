@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 
 namespace CloudSync
 {
@@ -25,7 +26,7 @@ namespace CloudSync
             var lines = new List<string>();
             if (File.Exists(shareSettingFile))
             {
-                lines = new List<string>(File.ReadLines(shareSettingFile));
+                lines.AddRange(File.ReadLines(shareSettingFile));
             }
             if (removeComment)
             {
@@ -96,13 +97,18 @@ namespace CloudSync
         /// <summary>
         /// Generate a 10 character pin using the file group guid as the seed
         /// </summary>
-        /// <param name="cloudPath"></param>
-        /// <param name="sharingGroup"></param>
+        /// <param name="cloudPath">Path of cloud</param>
+        /// <param name="sharingGroup">Group name</param>
         /// <param name="date">Day on which the pin is valid</param>
         /// <returns></returns>
         public static string GetPin(string cloudPath, string sharingGroup, DateTime? date = null)
         {
-            var record = GetRecords(cloudPath, sharingGroup, out string _).FirstOrDefault(x => x.StartsWith("# Guid ="));
+            var records = GetRecords(cloudPath, sharingGroup, out string _);
+            if (records == null)
+                throw new Exception("Undefined file group!");
+            var record = records.FirstOrDefault(x => x.StartsWith("# Guid="));
+            if (record == null)
+                throw new Exception("File group without Guid!");
             var guid = Guid.Parse(record.Split('=')[1]);
             if (date == null)
                 date = DateTime.UtcNow;
@@ -112,16 +118,16 @@ namespace CloudSync
             {
                 var random = algorithm.ComputeHash(guid.ToByteArray().Concat(BitConverter.GetBytes(week)));
                 var val = BitConverter.ToUInt64(random, 0);
-                return (val + "000000000000").Take(12).ToString();
+                var numBase = "000000000" + val;
+                return numBase.Substring(numBase.Length - 9);
             }
         }
 
         /// <summary>
         /// Return the last 2 pins for validation purposes
         /// </summary>
-        /// <param name="cloudPath"></param>
-        /// <param name="sharingGroup"></param>
-        /// <param name="pin"></param>
+        /// <param name="cloudPath">Path of cloud</param>
+        /// <param name="sharingGroup">Group name</param>
         /// <returns>If the pin is valid and not expired it returns true</returns>
         internal static List<string> GetPins(string cloudPath, string sharingGroup)
         {

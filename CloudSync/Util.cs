@@ -34,16 +34,16 @@ namespace CloudSync
         /// <param name="createSubFolder"></param>
         public static void CreateUserFolder(string userPath, bool createSubFolder = true)
         {
-            var created = SetSpecialDirectory(userPath, Icos.Cloud, false);
+            var created = SetSpecialDirectory(userPath, Ico.Cloud, false);
             if (createSubFolder)
                 AddDesktopShortcut(userPath);
             var createIfNotExists = createSubFolder && new DirectoryInfo(userPath).GetDirectories().FirstOrDefault(x => !x.Attributes.HasFlag(FileAttributes.Hidden) && !x.Name.StartsWith(".")) == default;
-            SetSpecialDirectory(userPath, Icos.Documents, createIfNotExists: createIfNotExists);
-            SetSpecialDirectory(userPath, Icos.Download, createIfNotExists: createIfNotExists);
-            SetSpecialDirectory(userPath, Icos.Movies, createIfNotExists: createIfNotExists);
-            SetSpecialDirectory(userPath, Icos.Pictures, createIfNotExists: createIfNotExists);
-            SetSpecialDirectory(userPath, Icos.Photos, createIfNotExists: createIfNotExists);
-            SetSpecialDirectory(userPath, Icos.Settings, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Ico.Documents, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Ico.Download, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Ico.Movies, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Ico.Pictures, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Ico.Photos, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Ico.Settings, createIfNotExists: createIfNotExists);
         }
 
         public static bool CheckConnection(Uri uri)
@@ -81,6 +81,24 @@ namespace CloudSync
                 return null;
             }
         }
+
+        public static IPAddress GetLocalIpAddress()
+        {
+            try
+            {
+                using (Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
+                {
+                    socket.Connect("8.8.8.8", 65530);
+                    IPEndPoint endPoint = socket.LocalEndPoint as IPEndPoint;
+                    return endPoint.Address;
+                }
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
 
         public static TimeSpan DataTransferTimeOut(int dataSize)
         {
@@ -264,7 +282,7 @@ namespace CloudSync
         }
 
         /// <summary>
-        /// Convert unix timestamp to date and time format
+        /// Convert Unix timestamp to date and time format
         /// </summary>
         /// <param name="unixTimeStamp">Unix timestamp</param>
         /// <returns></returns>
@@ -444,7 +462,7 @@ namespace CloudSync
 
         public const ulong StartCRC = CRC.StartCRC;
 
-        public enum Icos
+        public enum Ico
         {
             Cloud,
             Documents,
@@ -464,7 +482,7 @@ namespace CloudSync
         /// <param name="pathIsParent">Specifies whether the path parameter is the parent or the full name</param>
         /// <param name="createIfNotExists">If true, create the directory if it doesn't exist</param>
         /// <returns>Returns true if the directory was created</returns>
-        public static bool SetSpecialDirectory(string path, Icos directoryName, bool pathIsParent = true, bool createIfNotExists = true)
+        public static bool SetSpecialDirectory(string path, Ico directoryName, bool pathIsParent = true, bool createIfNotExists = true)
         {
             var created = false;
             var pathDirectory = pathIsParent ? Path.Combine(path, directoryName.ToString()) : path;
@@ -487,7 +505,7 @@ namespace CloudSync
             return created;
         }
 
-        private static string IcoFullName(Icos ico) => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", ico + ".ico");
+        private static string IcoFullName(Ico ico) => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", ico + ".ico");
 
         public static void SetDirectoryIcon(string pathDirectory, string iconFilePath)
         {
@@ -519,7 +537,7 @@ namespace CloudSync
                 File.SetAttributes(pathDirectory, File.GetAttributes(pathDirectory) | FileAttributes.System);
             }
         }
-        public static void AddDesktopShortcut(string fullName, Icos ico = Icos.Cloud)
+        public static void AddDesktopShortcut(string fullName, Ico ico = Ico.Cloud)
         {
             AddShortcut(fullName, DesktopPath(), ico);
         }
@@ -527,16 +545,34 @@ namespace CloudSync
         {
             return RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Desktop") : Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
         }
-        public static void AddShortcut(string source, string target, Icos ico)
+
+        /// <summary>
+        /// Add a link (Shortcut) to a file
+        /// </summary>
+        /// <param name="sourceFile">The file to link</param>
+        /// <param name="targetDir">The directory (phat location) where to put the link</param>
+        /// <param name="ico">The icon to use</param>
+        public static void AddShortcut(string sourceFile, string targetDir, Ico ico)
         {
             var icoFullName = IcoFullName(ico);
-            var fileName = new FileInfo(source).Name;
+            AddShortcut(sourceFile, targetDir, icoFullName);
+        }
+
+        /// <summary>
+        /// Add a link (Shortcut) to a file
+        /// </summary>
+        /// <param name="sourceFile">The file to link</param>
+        /// <param name="targetDir">The directory (phat location) where to put the link</param>
+        /// <param name="icoFullName">The icon full file name to use</param>
+        public static void AddShortcut(string sourceFile, string targetDir, string icoFullName)
+        {
+            var fileName = new FileInfo(sourceFile).Name;
             if (Environment.OSVersion.Platform == PlatformID.Win32NT)
             {
-                using (var writer = new StreamWriter(target + "\\" + fileName + ".url"))
+                using (var writer = new StreamWriter(targetDir + "\\" + fileName + ".url"))
                 {
                     writer.WriteLine("[InternetShortcut]");
-                    writer.WriteLine("URL=file:///" + source);
+                    writer.WriteLine("URL=file:///" + sourceFile);
                     writer.WriteLine("IconIndex=0");
                     var icon = icoFullName.Replace('\\', '/');
                     writer.WriteLine("IconFile=" + icon);
@@ -554,11 +590,11 @@ namespace CloudSync
             {
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
                 {
-                    System.Diagnostics.Process.Start("ln", "-s " + source + " " + target);
+                    System.Diagnostics.Process.Start("ln", "-s " + sourceFile + " " + targetDir);
                 }
                 else
                 {
-                    var targetFile = Path.Combine(target, fileName + ".desktop");
+                    var targetFile = Path.Combine(targetDir, fileName + ".desktop");
                     using (var writer = new StreamWriter(targetFile))
                     {
                         writer.WriteLine(@"[Desktop Entry]");
@@ -566,11 +602,13 @@ namespace CloudSync
                         writer.WriteLine(@"Terminal=false");
                         writer.WriteLine(@"Icon=" + icoFullName);
                         writer.WriteLine(@"Name=" + fileName);
-                        writer.WriteLine(@"URL=file:///" + source);
+                        writer.WriteLine(@"URL=file:///" + sourceFile);
                     }
                 }
             }
         }
+
+
         public class BlockRange
         {
             public BlockRange(ulong? betweenHasBlock, int betweenHasBlockIndex, ulong? betweenReverseHasBlock, int betweenReverseHasBlockIndex)
@@ -856,8 +894,8 @@ namespace CloudSync
         /// </summary>
         /// <param name="fileName">The fully qualified name of the file</param>
         /// <param name="exception">Returns any errors encountered in performing the operation</param>
-        /// <param name="attempts">number of attemps</param>
-        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in millisenconds)</param>
+        /// <param name="attempts">number of attempts</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in milliseconds)</param>
         /// <returns>True for successful</returns>
         public static bool FileDelete(string fileName, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
         {
@@ -899,8 +937,8 @@ namespace CloudSync
         /// </summary>
         /// <param name="directoryName">The fully qualified name of the directory</param>
         /// <param name="exception">Returns any errors encountered in performing the operation</param>
-        /// <param name="attempts">number of attemps</param>
-        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in millisenconds)</param>
+        /// <param name="attempts">number of attempts</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in milliseconds)</param>
         /// <returns>True for successful</returns>
         public static bool DirectoryDelete(string directoryName, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
         {
@@ -943,8 +981,8 @@ namespace CloudSync
         /// </summary>
         /// <param name="directoryName">The fully qualified name of the directory</param>
         /// <param name="exception">Returns any errors encountered in performing the operation</param>
-        /// <param name="attempts">number of attemps</param>
-        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in millisenconds)</param>
+        /// <param name="attempts">number of attempts</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in milliseconds)</param>
         /// <returns>True for successful</returns>
         public static bool DirectoryCreate(string directoryName, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
         {
@@ -977,8 +1015,8 @@ namespace CloudSync
         /// <param name="source">Source file name</param>
         /// <param name="target">Target file name</param>
         /// <param name="exception">Returns any errors encountered in performing the operation</param>
-        /// <param name="attempts">number of attemps</param>
-        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in millisenconds)</param>
+        /// <param name="attempts">number of attempts</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in milliseconds)</param>
         /// <returns>True for successful</returns>
         public static bool FileMove(string source, string target, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
         {
@@ -1013,8 +1051,8 @@ namespace CloudSync
         /// <param name="source">Source file name</param>
         /// <param name="target">Target file name</param>
         /// <param name="exception">Returns any errors encountered in performing the operation</param>
-        /// <param name="attempts">number of attemps</param>
-        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in millisenconds)</param>
+        /// <param name="attempts">number of attempts</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in milliseconds)</param>
         /// <returns>True for successful</returns>
         public static bool FileCopy(string source, string target, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
         {
@@ -1054,5 +1092,8 @@ namespace CloudSync
                 }
             }
         }
+
+
+
     }
 }

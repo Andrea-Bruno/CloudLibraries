@@ -14,13 +14,16 @@ namespace CloudBox
     /// </summary>
     static public class Share
     {
-      
+
         /// <summary>
         /// Generate the file sharing link inherent to the group you have selected.
         /// Give this link to the person with whom you would like to share files belonging to this group!
         /// </summary>
-        /// <returns></returns>
-        public static string GenerateSharingLink(CloudBox cloudBox = null, string qr = null)
+        /// <param name="sharingGroup">Group name</param>
+        /// <param name="cloudBox">Cloud client</param>
+        /// <param name="qr">QR code</param>
+        /// <returns>Info about Link and Pin to sharing the files of the group</returns>
+        public static string GenerateSharingLink(string sharingGroup, CloudBox cloudBox = null, string qr = null)
         {
             if (cloudBox.IsServer)
             {
@@ -53,12 +56,12 @@ namespace CloudBox
             });
             var proxyUrl = "http://" + entryPoint + ":5050/proxyinfo";
             var proxyAddress = proxyUrl + "?ping";
-            System.Net.WebClient wc = new WebClient();
+            WebClient wc = new WebClient();
             string result = wc.DownloadString(proxyAddress);
             if (result != "ok")
                 throw new Exception("The encrypted proxy is unreachable, or the cloud does not have the proxy!");
             proxyUrl += "?qr=" + qr;
-            return "The link to access shared files is: " + proxyUrl + Environment.NewLine + "The pin is: " + Environment.NewLine + "Attention: Provide links and pins using different communication systems!";
+            return "The link to access shared files is: " + proxyUrl + Environment.NewLine + "The pin is: " + CloudSync.Share.GetPin(cloudBox.CloudPath, sharingGroup) + Environment.NewLine + "Attention: Provide links and pins separately using different communication systems!";
         }
     }
 }

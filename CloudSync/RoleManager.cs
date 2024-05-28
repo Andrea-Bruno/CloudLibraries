@@ -42,7 +42,7 @@ namespace CloudSync
                 System.Diagnostics.Debugger.Break();
 #endif 
 
-            var isRestApiClient = clientPubKey != null; // True if the client is using the encrypted rest api protocol, designed for use by javascript/browser
+            var isRestApiClient = clientPubKey != null; // True if the client is using the encrypted rest api protocol, designed for use by JavaScript/browser
 
             if (clientPubKey != null && id == null)
                 id = PublicKeyToUserId(clientPubKey);

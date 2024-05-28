@@ -6,7 +6,6 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
 using CloudSync;
 using EncryptedMessaging;
 using NBitcoin;
@@ -17,18 +16,18 @@ namespace CloudBox
     /// <summary>
     /// The main part of the cloud: This part is identical between client and server because there are no substantial differences at this level. The server can create an object inheriting from this class and add new functionality to it
     /// </summary>
-    public class CloudBox
+    public abstract partial class CloudBox
     {
         static CloudBox()
         {
             AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionEventHandler;
         }
 #if DEBUG
-        private readonly string TestServerPassphrase = "damage exit piece auto enough mom quantum remain sting crouch little hill";
-        private readonly string TestClientPassphrase = "enact struggle torch clutch pear maid goose region believe predict tonight oppose";
+        protected readonly string TestServerPassphrase = "damage exit piece auto enough mom quantum remain sting crouch little hill";
+        protected readonly string TestClientPassphrase = "enact struggle torch clutch pear maid goose region believe predict tonight oppose";
 #elif DEBUG_AND
-        private readonly string TestServerPassphrase = "rack bacon scrub mirror code music mad force step laundry boat chronic";
-        private readonly string TestClientPassphrase = "river hint into tobacco section turn enforce lunch multiply basket police captain";
+        protected readonly string TestServerPassphrase = "rack bacon scrub mirror code music mad force step laundry boat chronic";
+        protected readonly string TestClientPassphrase = "river hint into tobacco section turn enforce lunch multiply basket police captain";
 #endif
 
         /// <summary>
@@ -60,7 +59,6 @@ namespace CloudBox
             ID = id == null ? BitConverter.ToUInt64(Util.Hash256(cloudPath.GetBytes()), 0) : id.Value;
             if (!string.IsNullOrEmpty(cloudPath) && cloudPath != GetCloudPath(null, isServer))
                 _cloudPath = cloudPath;
-            Communication = new Communication(this);
             lock (Instances)
                 Instances.Add(this);
         }
@@ -118,21 +116,11 @@ namespace CloudBox
                     else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
                     {
                         Process.Start("open", signatureDir);
-                    }                   
+                    }
                 }
             }
 
             return jsonSignature;
-        }
-
-        /// <summary>
-        /// Function that is called when the connection changes (connected or disconnected)
-        /// </summary>
-        /// <param name="isConnected">Notify the new connection status</param>
-        virtual protected void OnRouterConnectionChange(bool isConnected)
-        {
-            if (Sync == null && isConnected)
-                ConnectToServer();
         }
 
         private static void UnhandledExceptionEventHandler(object sender, UnhandledExceptionEventArgs e)
@@ -215,35 +203,6 @@ namespace CloudBox
         }
 
         /// <summary>
-        /// Connect to server and start sync
-        /// </summary>
-        /// <param name="serverPublicKey">It is the server to which this client must connect (the public key of the server)</param>
-        /// <param name="pin">If the client is running, this is the Pin on the server that is required to log in and then connect the client to the server</param>       
-        /// <returns>Successful</returns>        
-        public void ConnectToServer(string serverPublicKey = null, string pin = null)
-        {
-            if (!IsServer)
-            {
-                if (EncryptedQR != null)
-                {
-                    // If the login was partially done with an encrypted QR code, once the connection with the router has been established, it asks the cloud for the QR code in order to log in definitively
-                    Communication.SendCommand(EncryptedQR.Item1, Communication.Command.GetEncryptedQR, null);
-                    return;
-                }
-                if (pin == null)
-                    pin = Context.SecureStorage.Values.Get("pin", null);
-                if (!string.IsNullOrEmpty(pin))
-                    Context.SecureStorage.Values.Set("pin", pin);
-                if (serverPublicKey == null)
-                    serverPublicKey = Context.SecureStorage.Values.Get("ServerPublicKey", null);
-                SetServerCloudContact(serverPublicKey);
-            }
-            var credential = IsServer ? null : new LoginCredential { Pin = pin, PublicKey = Context.My.GetPublicKeyBinary() };
-            StartSync(credential);
-            return;
-        }
-
-        /// <summary>
         /// Generate the context, i.e. initialize the environment for encrypted socket communication between devices
         /// </summary>
         /// <param name="routerEntryPoint">IP or domain name or QR code of the router used for the connection</param>
@@ -262,8 +221,6 @@ namespace CloudBox
             File.WriteAllText(FileLastEntryPoint, routerEntryPoint);
             if (Context != null)
                 Debugger.Break();
-            //if (onRouterConnectionChange == null)
-            //    onRouterConnectionChange = OnRouterConnectionChange;
 #if DEBUG || DEBUG_AND
             if (Instances.Count == 0)
                 passphrase = IsServer ? TestServerPassphrase : TestClientPassphrase;
@@ -272,7 +229,7 @@ namespace CloudBox
             var signLicense = string.IsNullOrEmpty(LicenseOEM) ? null : new OEM(LicenseOEM);
             Context = new Context(routerEntryPoint, NetworkName, modality: Modality.Server, privateKeyOrPassphrase: passphrase, licenseActivator: signLicense, instanceId: ID.ToString())
             {
-                OnRouterConnectionChange = OnRouterConnectionChange,
+                OnRouterConnectionChange = OnRouterConnectionChangeEvent,
                 OnCommunicationErrorEvent = OnCommunicationError
             };
             if (serverPublicKey != null)
@@ -285,100 +242,17 @@ namespace CloudBox
             return Context;
         }
 
-        private void SetServerCloudContact(string serverPublicKey)
-        {
-#if DEBUG || DEBUG_AND
-            if (serverPublicKey == null)
-            {
-                var mnemo = new Mnemonic(TestServerPassphrase, Wordlist.AutoDetect(TestServerPassphrase));
-                var hdRoot = mnemo.DeriveExtKey();
-                var privateKey = hdRoot.PrivateKey;
-                serverPublicKey = Convert.ToBase64String(privateKey.PubKey.ToBytes());
-            }
-#endif
-#pragma warning disable
-            // ReSharper disable once ConditionIsAlwaysTrueOrFalse
-            if (serverPublicKey == null)
-                // ReSharper disable once HeuristicUnreachableCode
-                serverPublicKey = Context.SecureStorage.Values.Get("ServerPublicKey", null);
-            else
-                Context.SecureStorage.Values.Set("ServerPublicKey", serverPublicKey);
-            // ReSharper disable once ConditionIsAlwaysTrueOrFalse
-            if (serverPublicKey != null)
-            {
-                ServerCloud = Context.Contacts.AddContact(serverPublicKey, "Server cloud", Modality.Server, Contacts.SendMyContact.None);
-            }
-#pragma warning restore            
-        }
-
-        ///// <summary>
-        ///// The entry point of the router/server, to connect the cloud server or client to the network
-        ///// </summary>
-        //public string RouterEntryPoint { get; private set; }
-
         /// <summary>
-        /// Login the Client to the Cloud Server by entry QrCode and Pin of server
+        /// Marking for a function that is changed when the connection status changes.
+        /// This method is invoked when the connection is activated or deactivated.
         /// </summary>
-        /// <param name="qrCode">QR code generated by server cloud, in text format</param>
-        /// <param name="pin">Pin</param>
-        /// <param name="entryPoint">Router entry point, optional parameter for QR codes that do not contain the entry point</param>
-        /// <returns>Validated for Successful, or other result if QR code or PIN is not valid</returns>        
-        public LoginResult Login(string qrCode, string pin, string entryPoint = null)
-        {
-            var result = TryLogin(qrCode, pin, entryPoint);
-            if (result != LoginResult.Successful)
-                Logout();
-            return result;
-        }
-
-        private LoginResult TryLogin(string qrCode, string pin, string entryPoint = null)
-        {
-            if (IsServer)
-                Debugger.Break(); // non sense for server                     
-            Logout();
-            if (string.IsNullOrEmpty(pin))
-                return LoginResult.WrongPassword;
-            if (SolveQRCode(qrCode, out string entry, out string serverPublicKey, out EncryptedQR) == false) return LoginResult.WrongQR;
-            if (entry != null)
-                entryPoint = entry;
-            var context = CreateContext(entryPoint);
-            // =================
-            // NOTE: Login is performed when the context has established the connection with the router
-            // =================
-            context.SecureStorage.Values.Set("pin", pin);
-            context.SecureStorage.Values.Set("ServerPublicKey", serverPublicKey);
-            if (SpinWait.SpinUntil(() => Sync != null && (Sync.IsLogged || Sync.LoginError), 60000))
-                return Sync.LoginError ? LoginResult.WrongPassword : LoginResult.Successful;
-            else if (context.LicenseExpired)
-                return LoginResult.LicenseExpired;
-            else if (Sync == null)
-                return LoginResult.RemoteHostNotReachable;
-            else if (Sync.RemoteHostReachable)
-                return LoginResult.CloudNotResponding;
-            return LoginResult.RemoteHostNotReachable;
-        }
+        protected Action<bool> OnRouterConnectionChangeEvent;
 
         /// <summary>
         /// The encryption key of the QR code and for the client also the ID of the server useful for communicating with it
         /// </summary>
         public Tuple<ulong, byte[]> EncryptedQR;
 
-#pragma warning disable CS1591
-
-        /// <summary>
-        /// Result of login validation
-        /// </summary>
-        public enum LoginResult
-        {
-            Successful,
-            LicenseExpired,
-            WrongPassword,
-            CloudNotResponding,
-            WrongQR,
-            RemoteHostNotReachable,
-        }
-
-#pragma warning restore CS1591
         /// <summary>
         /// It receives the data of a QR code as input, validates it and if recognized returns true
         /// </summary>
@@ -387,7 +261,7 @@ namespace CloudBox
         /// <param name="serverPublicKey">For type 1 and 2 QR codes, the server's public key is returned</param>
         /// <param name="EncryptedQR">For type 2 QR codes (the encrypted one), it returns the encryption code and the server ID so that it can be queried and given the public key when the connection to the router is established</param>
         /// <returns></returns>
-        internal static bool SolveQRCode(string qrCode, out string entryPoint, out string serverPublicKey, out Tuple<ulong, byte[]> EncryptedQR)
+        public static bool SolveQRCode(string qrCode, out string entryPoint, out string serverPublicKey, out Tuple<ulong, byte[]> EncryptedQR)
         {
             entryPoint = null;
             serverPublicKey = null;
@@ -406,9 +280,9 @@ namespace CloudBox
                 }
                 else if (type == 2)
                 {
-                    var QRKey = qr.Skyp(offset).Take(24);
+                    var QRKey = EncryptedMessaging.Bytes.Skip(qr, offset).Take(24);
                     offset += 24;
-                    var serverId = BitConverter.ToUInt64(qr.Skyp(offset).Take(8), 0);
+                    var serverId = BitConverter.ToUInt64(EncryptedMessaging.Bytes.Skip(qr, offset).Take(8), 0);
                     offset += 8;
                     EncryptedQR = new Tuple<ulong, byte[]>(serverId, QRKey);
                 }
@@ -416,7 +290,7 @@ namespace CloudBox
                     return false;
                 if (type == 0 || type == 1)
                 {
-                    serverPublicKey = qr.Skyp(offset).Take(33).ToBase64();
+                    serverPublicKey = qr.Skip(offset).Take(33).ToBase64();
                     var key = new PubKey(Convert.FromBase64String(serverPublicKey)); // pub key validator (throw error if is wrong)
                     offset += 33;
                 }
@@ -450,7 +324,7 @@ namespace CloudBox
             return true;
         }
 
-        private static readonly string FileLastEntryPoint = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LastEntryPoint");
+        protected static readonly string FileLastEntryPoint = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LastEntryPoint");
 
         /// <summary>
         /// Last client entry. If the application was used as a client and the client was logged in, this function returns the last entry point used. Null if the application was not logged in as a client.
@@ -459,26 +333,6 @@ namespace CloudBox
         public static string LastEntryPoint()
         {
             return File.Exists(FileLastEntryPoint) ? File.ReadAllText(FileLastEntryPoint) : null;
-        }
-
-        /// <summary>
-        /// Close socket connection to the router and stop syncing, stops transmitting with the cloud server, but the connection with the router remains active
-        /// </summary>
-        /// <returns>False if already logged out, true otherwise</returns>
-        public bool Logout()
-        {
-            if (File.Exists(FileLastEntryPoint))
-                File.Delete(FileLastEntryPoint);
-            StopSync();
-            if (Context != null)
-            {
-                Context.SecureStorage.Values.Set("pin", null);
-                Context.SecureStorage.Values.Set("ServerPublicKey", null);
-                Context.Dispose();
-                Context = null;
-                return true;
-            }
-            return false;
         }
 
         /// <summary>
@@ -494,7 +348,7 @@ namespace CloudBox
         /// <param name="isClient">If it is the client, it must provide authentication credentials</param>
         public void StartSync(LoginCredential isClient = null)
         {
-            Sync = new Sync(SendCommand, out OnCommand, Context.SecureStorage, CloudPath, isClient, DoNotCreateSpecialFolders, IsReachable);
+            Sync = new Sync(SendSyncCommand, out OnSyncCommand, Context.SecureStorage, CloudPath, isClient, DoNotCreateSpecialFolders, IsReachable);
             Sync.OnNotification += (fromUserId, notice) => OnNotificationAction?.Invoke(fromUserId, notice);
             Sync.OnLocalSyncStatusChanges += (syncStatus, pendingFiles) =>
             {
@@ -575,19 +429,6 @@ namespace CloudBox
             /// <summary>/// Full path and file name
             /// </summary>
             public string FileName { get; set; }
-        }
-
-        /// <summary>
-        /// Stops transmitting with the cloud server, but the connection with the router remains active
-        /// </summary>
-        private void StopSync()
-        {
-            if (Sync != null)
-            {
-                OnCommand = null;
-                Sync.Dispose();
-                Sync = null;
-            }
         }
 
         public readonly FileTransferList TransferredFiles = new FileTransferList();
@@ -710,11 +551,7 @@ namespace CloudBox
         /// </summary>
         public readonly bool IsServer;
         /// <summary>
-        /// For the cloud instance this contact represents the cloud server and every sync protocol communication is done by communicating to this contact
-        /// </summary>
-        public Contact ServerCloud;
-        /// <summary>
-        /// Securely get the latest instance of the created cloudbox object
+        /// Securely get the latest instance of the created CloudBox object
         /// </summary>
         public static CloudBox LastInstance
         {
@@ -736,6 +573,7 @@ namespace CloudBox
         /// </summary>
         public virtual void Remove()
         {
+            OnCommandEvent = null;
             Instances.Remove(this);
             Context.Dispose();
         }
@@ -745,6 +583,7 @@ namespace CloudBox
         /// </summary>
         public virtual void Destroy()
         {
+            Context.SecureStorage.Destroy();
             var dir = CloudPath;
             Remove();
             Directory.Delete(dir, true);
@@ -779,15 +618,34 @@ namespace CloudBox
         }
 
         private const string CloudDirName = "Cloud";
-
-        private readonly Communication Communication;
+        /// <summary>
+        /// You can set this item to intercept commands addressed to the cloud or server
+        /// </summary>
+        public ClientServerCommandEvent OnCommandEvent;
         /// <summary>
         /// Sync Agent: Offers all the low-level functions to sync the cloud in an encrypted and secure way
         /// </summary>
         public Sync Sync;
-        private Sync.SendCommand OnCommand;
+        /// <summary>
+        /// It is set by Sync and is a reference to the event that is generated when a synchronization protocol command is received remotely
+        /// </summary>
+        protected Sync.SendCommand OnSyncCommand;
+
+        /// <summary>
+        /// Stops transmitting with the cloud server, but the connection with the router remains active
+        /// </summary>
+        protected void StopSync()
+        {
+            if (Sync != null)
+            {
+                OnSyncCommand = null;
+                Sync.Dispose();
+                Sync = null;
+            }
+        }
+
         private static readonly ushort CloudAppId = BitConverter.ToUInt16(Encoding.ASCII.GetBytes("cloud"), 0);
-        private void SendCommand(ulong? toContactId, ushort command, byte[][] values)
+        private void SendSyncCommand(ulong? toContactId, ushort command, byte[][] values)
         {
 #if DEBUG
             if (Context == null)
@@ -802,12 +660,18 @@ namespace CloudBox
             }
         }
 
+        /// <summary>
+        /// For the cloud instance this contact represents the cloud server and every sync protocol communication is done by communicating to this contact
+        /// </summary>
+        public Contact ServerCloud;
+
+
         private readonly string NetworkName = "mainnet";
 
         /// <summary>
         /// Reference to the underlying encrypted communication system between devices (the low-level communication protocol)
         /// </summary>
-        public Context Context { get; private set; }
+        public Context Context { get; protected set; }
 
         /// <summary>
         /// When the remote device (also known by the term contact), sends data to this device, this function is called as if it were an event, and the received data is then passed to the appropriate part of the software for processing
@@ -831,8 +695,8 @@ namespace CloudBox
                 }
                 if (appId == CloudAppId) // The server application that communicates with smartphones
                 {
-                    var answareToCommand = (Communication.Command)command;
-                    Communication.OnCommand(message.AuthorId, answareToCommand, parameters);
+                    var answeredToCommand = (Command)command;
+                    OnCommandEvent?.Invoke(message.AuthorId, answeredToCommand, parameters);
                 }
                 else if (appId == Sync.AppId) // The client application that runs on desktop computers
                 {
@@ -841,7 +705,7 @@ namespace CloudBox
                         var userId = (ulong)message.Contact.UserId;
                         if (!CloudSyncUsers.ContainsKey(userId))
                             CloudSyncUsers.Add(userId, message.Contact);
-                        OnCommand?.Invoke(userId, command, parameters?.ToArray());
+                        OnSyncCommand?.Invoke(userId, command, parameters?.ToArray());
                     }
                 }
             }

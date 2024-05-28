@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
-using System.Text.RegularExpressions;
 using System.Xml.Serialization;
 using static CloudSync.RoleManager;
 
@@ -9,6 +8,45 @@ namespace CloudSync
 {
     public class Client
     {
+        /// <summary>
+        /// This enumerator lists the types of usage expected from cloud clients
+        /// </summary>
+        public enum ClientType
+        {
+            /// <summary>
+            /// Indicates a client interacting via router and encrypted socket connection
+            /// </summary>
+            Socket,
+            /// <summary>
+            /// Indicates a client that interacts according to the full rest API protocol in the variant with encrypted technology with authentication
+            /// </summary>
+            API,
+            /// <summary>
+            /// It is a client that interacts via API and has access only to a group of read-only shared files
+            /// </summary>
+            GroupSharing
+        }
+
+        /// <summary>
+        /// Create a client object to save the values of the client that has access to this machine (This instance is for contacts with whom there is encrypted socket communication)
+        /// </summary>
+        /// <param name="sync"></param>
+        /// <param name="id">The ID of the client</param>
+        /// <param name="authenticationProof"></param>
+        /// <param name="host">Non-TrustLess information as the proxy or whoever generates this data could falsify it. It is logged for access log purposes</param>
+        /// <param name="userAgent">Non-TrustLess information as the proxy or whoever generates this data could falsify it. It is logged for access log purposes</param>
+        /// <param name="generateAesKey">Generate a private key to be sent to the client to encrypt the data</param>
+        public Client(Sync sync, ulong id, ProofOfPin authenticationProof, string host, string userAgent = null, bool generateAesKey = false)
+        {
+            Sync = sync;
+            AddNewAccess(host, userAgent);
+            AuthenticationProof = authenticationProof;
+            Id = id;
+            if (generateAesKey)
+                Aes = Aes.Create();
+            Sync.RoleManager.TmpClients[Id] = this;
+        }
+
         /// <summary>
         /// Create a client object to save the values of the client that has access to this machine (this instance is for clients that use the API via proxy)
         /// </summary>
@@ -35,25 +73,10 @@ namespace CloudSync
         public bool IsConnected => (DateTime.UtcNow - LastInteraction).TotalMinutes <= Sync.CheckSyncEveryMinutes;
 
         /// <summary>
-        /// Create a client object to save the values of the client that has access to this machine (This instance is for contacts with whom there is encrypted socket communication)
+        /// Indicates the type of client, i.e. how it operates and its purpose
         /// </summary>
-        /// <param name="sync"></param>
-        /// <param name="id">The ID of the client</param>
-        /// <param name="authenticationProof"></param>
-        /// <param name="host">Non-TrustLess information as the proxy or whoever generates this data could falsify it. It is logged for access log purposes</param>
-        /// <param name="userAgent">Non-TrustLess information as the proxy or whoever generates this data could falsify it. It is logged for access log purposes</param>
-        /// <param name="generateAesKey">Generate a private key to be sent to the client to encrypt the data</param>
-
-        public Client(Sync sync, ulong id, ProofOfPin authenticationProof, string host, string userAgent = null, bool generateAesKey = false)
-        {
-            Sync = sync;
-            AddNewAccess(host, userAgent);
-            AuthenticationProof = authenticationProof;
-            Id = id;
-            if (generateAesKey)
-                Aes = Aes.Create();
-            Sync.RoleManager.TmpClients[Id] = this;
-        }
+        [XmlIgnore]
+        public ClientType TypeOfClient => GroupForSharing != null ? ClientType.GroupSharing : (PublicKey != null ? ClientType.API : ClientType.Socket);
 
         /// <summary>
         /// If set, it indicates that the client only has access to files shared with a group via an application that uses the encrypted json API
@@ -97,12 +120,12 @@ namespace CloudSync
             }
             LastAttempt = DateTime.UtcNow;
 
-            var passed = AuthenticationProof.Validate(Sync.CloudRoot, authenticationProof, out string pin, out string label, out string group);
+            var passed = AuthenticationProof.Validate(Sync.CloudRoot, authenticationProof, out string pin, out string label, out string groupForSharing);
             if (passed)
             {
                 Label = label;
-                if (group != null)
-                    GroupForSharing = group;
+                if (groupForSharing != null)
+                    GroupForSharing = groupForSharing;
                 else
                     Util.RemoveFromPins(Sync.SecureStorage, pin);
                 Save();
@@ -176,6 +199,7 @@ namespace CloudSync
             roleManager.Clients[Id] = this;
             if (roleManager.TmpClients.ContainsKey(Id))
             {
+                Sync.RaiseOnNewClientIsCreated(this);
                 roleManager.TmpClients.Remove(Id);
             }
             Sync.SecureStorage.ObjectStorage.SaveObject(this, Id.ToString());
@@ -187,7 +211,10 @@ namespace CloudSync
         public void Remove()
         {
             if (Sync.RoleManager.Clients.ContainsKey(Id))
+            {
                 Sync.RoleManager.Clients.Remove(Id);
+                Sync.RaiseOnClientIsRemoved(this);
+            }
             Sync.SecureStorage.ObjectStorage.DeleteObject(typeof(Client), Id.ToString());
         }
 

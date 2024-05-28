@@ -12,7 +12,8 @@ namespace CloudSync
         private void OnNotify(ulong? fromUserId, Notice notice)
         {
             RemoteStatus = notice;
-            new Thread(() => OnNotification?.Invoke(fromUserId, notice)).Start();
+            if (OnNotification != null)
+                new Thread(() => OnNotification?.Invoke(fromUserId, notice)).Start();
         }
 
         public Notice RemoteStatus { get; private set; }
@@ -115,8 +116,33 @@ namespace CloudSync
 
         internal void RaiseOnAntivirus(string warning, string fileName)
         {
-            if (OnFileError != null)
+            if (OnAntivirus != null)
                 new Thread(() => OnAntivirus?.Invoke(warning, fileName)).Start();
+        }
+
+
+        // ===============================================================================
+        // ============================ Events about Client ==============================
+        // ===============================================================================
+
+        /// <summary>
+        /// Represents an event involving a Client
+        /// </summary>
+        /// <param name="newClient">The Customer involved who will be passed when the event occurs</param>
+        public delegate void OnClientEvent(Client newClient);
+        /// <summary>
+        /// Event that fires when a new client is created (the client user logged in successfully the first time)
+        /// </summary>
+        public event OnClientEvent OnNewClientIsCreated;
+        internal void RaiseOnNewClientIsCreated(Client newClient)
+        {
+            OnNewClientIsCreated?.Invoke(newClient);
+        }
+        public event OnClientEvent OnClientIsRemoved;
+
+        internal void RaiseOnClientIsRemoved(Client ClientRemoved)
+        {
+            OnClientIsRemoved?.Invoke(ClientRemoved);
         }
 
     }
