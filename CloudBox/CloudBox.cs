@@ -544,8 +544,10 @@ namespace CloudBox
                 return sb.ToString();
             }
         }
-
-        private static bool ShowEntryPoint = true;
+        /// <summary>
+        /// Indicates whether the status should show the Entry Point;
+        /// </summary>
+        private static bool ShowEntryPoint { get; set; } = true;
         /// <summary>
         /// True if the current instance is a cloud server, otherwise false if it is a cloud client
         /// </summary>
@@ -575,7 +577,7 @@ namespace CloudBox
         {
             OnCommandEvent = null;
             Instances.Remove(this);
-            Context.Dispose();
+            Context?.Dispose();
         }
 
         /// <summary>
@@ -583,7 +585,10 @@ namespace CloudBox
         /// </summary>
         public virtual void Destroy()
         {
-            Context.SecureStorage.Destroy();
+            Context?.SecureStorage.Destroy();
+            var sync = Sync;
+            StopSync();
+            sync?.Destroy();
             var dir = CloudPath;
             Remove();
             Directory.Delete(dir, true);
@@ -639,7 +644,7 @@ namespace CloudBox
             if (Sync != null)
             {
                 OnSyncCommand = null;
-                Sync.Dispose();
+                Sync?.Dispose();
                 Sync = null;
             }
         }

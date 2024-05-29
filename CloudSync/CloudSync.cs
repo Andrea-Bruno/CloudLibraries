@@ -169,6 +169,7 @@ namespace CloudSync
                 RaiseOnStatusChangesEvent(SyncStatus.Undefined);
                 OnNotify(null, Notice.LoggedOut);
                 SecureStorage.Values.Delete("Logged", typeof(bool));
+
                 if (SyncTimeBuffer != null)
                 {
                     SyncTimeBuffer.Change(Timeout.Infinite, Timeout.Infinite);
@@ -190,6 +191,14 @@ namespace CloudSync
                 ReceptionInProgress.Dispose();
                 SendingInProgress.Dispose();
             }
+        }
+
+        /// <summary>
+        /// Delete all sensitive data created by this instance
+        /// </summary>
+        public void Destroy()
+        {
+            SecureStorage?.Destroy();
         }
 
         private FileSystemWatcher pathWatcher;
@@ -346,9 +355,18 @@ namespace CloudSync
                 LastCommandSent = DateTime.UtcNow;
                 Task.Run(() =>
                 {
-                    Debug.WriteLine("OUT " + command);
-                    RaiseOnCommandEvent(contactId, command, infoData, true);
-                    SendCommandDelegate.Invoke(contactId, (ushort)command, values);
+                    try
+                    {
+                        Debug.WriteLine("OUT " + command);
+                        RaiseOnCommandEvent(contactId, command, infoData, true);
+                        SendCommandDelegate.Invoke(contactId, (ushort)command, values);
+                    }
+                    catch (Exception ex)
+                    {
+                        RecordError(ex);
+                        Debugger.Break(); // Error! Investigate the cause of the error!
+                        Debug.WriteLine(ex);
+                    }
                 });
             }
         }
