@@ -29,6 +29,7 @@ namespace CloudSync
         public Sync(SendCommand sendCommand, out SendCommand onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential isClient = null, bool doNotCreateSpecialFolders = false, bool isReachable = true)
         {
             SecureStorage = secureStorage;
+            RoleManager = new RoleManager(this);
             InstanceId = InstanceCounter;
             InstanceCounter++;
             IsServer = isClient == null;
@@ -45,7 +46,6 @@ namespace CloudSync
             Spooler = new Spooler(this);
             ReceptionInProgress = new ProgressFileTransfer(this);
             SendingInProgress = new ProgressFileTransfer(this);
-            RoleManager = new RoleManager(this);
             var task = new Task(() =>
             {
                 HashFileTable(out _); // set cache initial state to check if file is deleted
