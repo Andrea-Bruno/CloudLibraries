@@ -61,9 +61,9 @@ namespace CloudSync
             Busy = 1,
         }
 
-        private void Notification(ulong? toUserId, Notice notice)
+        private void SendNotification(ulong? toUserId, Notice notice)
         {
-            ExecuteCommand(toUserId, Commands.Notification, notice.ToString(), new[] { new[] { (byte)notice } });
+            SendCommand(toUserId, Commands.Notification, notice.ToString(), new[] { new[] { (byte)notice } });
         }
 
         /// <summary>
@@ -78,7 +78,7 @@ namespace CloudSync
             Credential = credential;
             var hostArray = host == null ? new byte[] { } : Encoding.ASCII.GetBytes(host);
             var userAgentArray = userAgent == null ? new byte[] { } : Encoding.ASCII.GetBytes(userAgent);
-            ExecuteCommand(toUserId, Commands.RequestOfAuthentication, host, hostArray, userAgentArray);
+            SendCommand(toUserId, Commands.RequestOfAuthentication, host, hostArray, userAgentArray);
         }
         private LoginCredential Credential;
 
@@ -89,7 +89,7 @@ namespace CloudSync
         /// <param name="randomDataForAuthentication"></param>
         private void Authentication(ulong? toUserId, byte[] randomDataForAuthentication)
         {
-            ExecuteCommand(toUserId, Commands.Authentication, null, new[] { randomDataForAuthentication });
+            SendCommand(toUserId, Commands.Authentication, null, new[] { randomDataForAuthentication });
         }
 
         private void SendHashStructure(ulong? toUserId, BlockRange delimitsRange = null)
@@ -97,25 +97,25 @@ namespace CloudSync
             if (GetLocalHashStructure(out var structure, delimitsRange))
             {
                 if (delimitsRange == null)
-                    ExecuteCommand(toUserId, Commands.SendHashStructure, null, new[] { structure });
+                    SendCommand(toUserId, Commands.SendHashStructure, null, new[] { structure });
                 else
-                    ExecuteCommand(toUserId, Commands.SendHashStructure, null, new[] { structure, delimitsRange.BetweenHasBlockBynary, delimitsRange.BetweenHasBlockIndexBinary, delimitsRange.BetweenReverseHasBlockBynary, delimitsRange.BetweenReverseHasBlockIndexBinary });
+                    SendCommand(toUserId, Commands.SendHashStructure, null, new[] { structure, delimitsRange.BetweenHasBlockBynary, delimitsRange.BetweenHasBlockIndexBinary, delimitsRange.BetweenReverseHasBlockBynary, delimitsRange.BetweenReverseHasBlockIndexBinary });
             }
         }
 
         private void RequestHashStructure(ulong? toUserId, BlockRange delimitsRange = null)
         {
             if (delimitsRange == null)
-                ExecuteCommand(toUserId, Commands.RequestHashStructure, null);
+                SendCommand(toUserId, Commands.RequestHashStructure, null);
             else
-                ExecuteCommand(toUserId, Commands.RequestHashStructure, null, new[] { delimitsRange.BetweenHasBlockBynary, delimitsRange.BetweenHasBlockIndexBinary, delimitsRange.BetweenReverseHasBlockBynary, delimitsRange.BetweenReverseHasBlockIndexBinary });
+                SendCommand(toUserId, Commands.RequestHashStructure, null, new[] { delimitsRange.BetweenHasBlockBynary, delimitsRange.BetweenHasBlockIndexBinary, delimitsRange.BetweenReverseHasBlockBynary, delimitsRange.BetweenReverseHasBlockIndexBinary });
         }
 
         private void SendHashBlocks(ulong? toUserId)
         {
             if (GetHasBlock(out var hashBlock))
             {
-                ExecuteCommand(toUserId, Commands.SendHashBlocks, null, new[] { hashBlock });
+                SendCommand(toUserId, Commands.SendHashBlocks, null, new[] { hashBlock });
             }
         }
 
@@ -123,13 +123,13 @@ namespace CloudSync
         {
             if (GetHasRoot(out var hashRoot, true))
             {
-                ExecuteCommand(toUserId, Commands.SendHashRoot, null, new[] { hashRoot });
+                SendCommand(toUserId, Commands.SendHashRoot, null, new[] { hashRoot });
             }
         }
 
         private void SendHashRoot(byte[] hashRoot, ulong? toUserId = null)
         {
-            ExecuteCommand(toUserId, Commands.SendHashRoot, null, hashRoot);
+            SendCommand(toUserId, Commands.SendHashRoot, null, hashRoot);
         }
 
         private void RequestChunkFile(ulong? toUserId, ulong hash, uint chunkPart, bool isReceptFileCompleted = false)
@@ -138,7 +138,7 @@ namespace CloudSync
                 ReceptionInProgress.Completed(hash, (ulong)toUserId);
             else
                 ReceptionInProgress.SetTimeout(hash);
-            ExecuteCommand(toUserId, Commands.RequestChunkFile, "#" + chunkPart + " " + hash, new[] { hash.GetBytes(), chunkPart.GetBytes() });
+            SendCommand(toUserId, Commands.RequestChunkFile, "#" + chunkPart + " " + hash, new[] { hash.GetBytes(), chunkPart.GetBytes() });
         }
 
         private void ReportReceiptFileCompleted(ulong? toUserId, ulong hash, uint totalParts)
@@ -206,7 +206,7 @@ namespace CloudSync
                     SendingInProgress.SetTimeout(hashFileName, chunk.Length);
                     var info = "#" + chunkPart + "/" + parts + " " + hashFileName;
                     Debug.WriteLine("IN " + info);
-                    ExecuteCommand(toUserId, Commands.SendChunkFile, info, values.ToArray());
+                    SendCommand(toUserId, Commands.SendChunkFile, info, values.ToArray());
                 }
             }
 #if RELEASE
@@ -225,24 +225,24 @@ namespace CloudSync
         private void DeleteFile(ulong? toUserId, ulong hash, FileSystemInfo fileSystemInfo)
         {
             var timestamp = fileSystemInfo.UnixLastWriteTimestamp();
-            ExecuteCommand(toUserId, Commands.DeleteFile, fileSystemInfo.FullName, new[] { hash.GetBytes(), timestamp.GetBytes() });
+            SendCommand(toUserId, Commands.DeleteFile, fileSystemInfo.FullName, new[] { hash.GetBytes(), timestamp.GetBytes() });
         }
 
         private void DeleteFile(ulong? toUserId, ulong hash, uint unixTimestamp, string infoData)
         {
-            ExecuteCommand(toUserId, Commands.DeleteFile, infoData, new[] { hash.GetBytes(), unixTimestamp.GetBytes() });
+            SendCommand(toUserId, Commands.DeleteFile, infoData, new[] { hash.GetBytes(), unixTimestamp.GetBytes() });
         }
 
         private void CreateDirectory(ulong? toUserId, FileSystemInfo fileSystemInfo)
         {
             if (Spooler.RemoteDriveOverLimit)
                 return; // The remote disk is full, do not send any more data
-            ExecuteCommand(toUserId, Commands.CreateDirectory, fileSystemInfo.FullName, new[] { fileSystemInfo.CloudRelativeUnixFullName(this).GetBytes() });
+            SendCommand(toUserId, Commands.CreateDirectory, fileSystemInfo.FullName, new[] { fileSystemInfo.CloudRelativeUnixFullName(this).GetBytes() });
         }
 
         private void DeleteDirectory(ulong? toUserId, FileSystemInfo fileSystemInfo)
         {
-            ExecuteCommand(toUserId, Commands.DeleteDirectory, fileSystemInfo.FullName, new[] { fileSystemInfo.CloudRelativeUnixFullName(this).GetBytes() });
+            SendCommand(toUserId, Commands.DeleteDirectory, fileSystemInfo.FullName, new[] { fileSystemInfo.CloudRelativeUnixFullName(this).GetBytes() });
         }
 
         /// <summary>
@@ -252,7 +252,7 @@ namespace CloudSync
         /// <param name="status">Busy otherwise Ready to request to proceed with the synchronization</param>
         internal void StatusNotification(ulong? toUserId, Status status)
         {
-            ExecuteCommand(toUserId, Commands.StatusNotification, status.ToString(), new[] { (byte)status });
+            SendCommand(toUserId, Commands.StatusNotification, status.ToString(), new[] { (byte)status });
         }
     }
 }

@@ -71,11 +71,11 @@ namespace CloudSync
                             if (isTemp)
                                 Console.WriteLine("New client connected " + fromUserId);
 
-                            Notification(fromUserId, Notice.LoginSuccessful);
+                            SendNotification(fromUserId, Notice.LoginSuccessful);
                         }
                         else
                         {
-                            Notification(fromUserId, Notice.LoginError);
+                            SendNotification(fromUserId, Notice.LoginError);
                         }
                     }
                 }
@@ -111,7 +111,10 @@ namespace CloudSync
                             if (notice == Notice.LoginSuccessful)
                                 IsLogged = true;
                             else if (notice == Notice.LoginError)
+                            {
                                 LoginError = true;
+                                OnLoginCompleted?.Set();
+                            }
                         }
                         if (notice == Notice.Synchronized)
                             RaiseOnStatusChangesEvent(SyncStatus.Monitoring);
@@ -159,7 +162,7 @@ namespace CloudSync
                             if (remoteHash.SequenceEqual(localHash))
                             {
                                 RaiseOnStatusChangesEvent(SyncStatus.Monitoring);
-                                Notification(fromUserId, Notice.Synchronized);
+                                SendNotification(fromUserId, Notice.Synchronized);
                             }
                             else
                             {
@@ -187,7 +190,7 @@ namespace CloudSync
                             else
                             {
                                 RaiseOnStatusChangesEvent(SyncStatus.Monitoring);
-                                Notification(fromUserId, Notice.Synchronized);
+                                SendNotification(fromUserId, Notice.Synchronized);
                             }
                         }
                     }
@@ -224,7 +227,7 @@ namespace CloudSync
                             {
                                 if (!FlagsDriveOverLimit.Contains(fromUserId))
                                     FlagsDriveOverLimit.Add(fromUserId);
-                                Notification(fromUserId, Notice.FullSpace);
+                                SendNotification(fromUserId, Notice.FullSpace);
                                 return;
                             }
                         if (part != 1)
@@ -326,7 +329,7 @@ namespace CloudSync
                                             if (PreserveDriveSpace(CloudRoot))
                                             {
                                                 FlagsDriveOverLimit.Remove(fromUserId);
-                                                Notification(fromUserId, Notice.FullSpaceOff);
+                                                SendNotification(fromUserId, Notice.FullSpaceOff);
                                                 return;
                                             }
                                         }
@@ -344,7 +347,7 @@ namespace CloudSync
                             {
                                 if (!FlagsDriveOverLimit.Contains(fromUserId))
                                     FlagsDriveOverLimit.Add(fromUserId);
-                                Notification(fromUserId, Notice.FullSpace);
+                                SendNotification(fromUserId, Notice.FullSpace);
                                 return;
                             }
                         DirectoryCreate(fullDirectoryName, out Exception exception);

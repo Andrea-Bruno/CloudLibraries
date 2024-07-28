@@ -113,16 +113,17 @@ namespace CloudSync
         }
         public bool Authenticate(uint authenticationProof)
         {
-            if ((DateTime.UtcNow - LastAttempt).TotalSeconds < (Attempts < 3 ? 5 : 600)) // Prevention of brute force attacks (The first 3 attempts at a distance of 5 seconds then wait 10 minutes)
-            {
-                Attempts++;
+            // Prevention of brute force attacks (The first 3 attempts at a distance of 5 seconds then wait 10 minutes)
+            Attempts++;
+            var secFromLastAttempt = (DateTime.UtcNow - LastAttempt).TotalSeconds;
+            if (secFromLastAttempt < (Attempts <= 3 ? 5 : 600)) 
                 return false;
-            }
             LastAttempt = DateTime.UtcNow;
 
             var passed = AuthenticationProof.Validate(Sync.CloudRoot, authenticationProof, out string pin, out string label, out string groupForSharing);
             if (passed)
             {
+                Attempts = 0;
                 Label = label;
                 if (groupForSharing != null)
                     GroupForSharing = groupForSharing;

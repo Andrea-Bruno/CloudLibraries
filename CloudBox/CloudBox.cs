@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using CloudSync;
 using EncryptedMessaging;
 using NBitcoin;
@@ -360,7 +361,13 @@ namespace CloudBox
             Sync.OnCommandEvent += (userId, command, infoData, isOutput) => OnCommands.AddOnCommand(userId, command, infoData, isOutput);
             Sync.OnFileError += (error, fileName) => AddFileError(error.Message, fileName);
             Sync.OnAntivirus += (message, fileName) => AddAntivirusWarning(message, fileName);
+            OnSyncStart?.Set();
         }
+
+        /// <summary>
+        /// Event that can be used to intercept when the synchronization procedure is started
+        /// </summary>
+        public AutoResetEvent OnSyncStart;
 
         /// <summary>
         /// Indicates if the cloud path is an unmounted virtual disk.
@@ -634,7 +641,7 @@ namespace CloudBox
         /// <summary>
         /// It is set by Sync and is a reference to the event that is generated when a synchronization protocol command is received remotely
         /// </summary>
-        protected Sync.SendCommand OnSyncCommand;
+        protected Sync.SendCommandDelegate OnSyncCommand;
 
         /// <summary>
         /// Stops transmitting with the cloud server, but the connection with the router remains active

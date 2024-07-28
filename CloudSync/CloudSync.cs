@@ -26,7 +26,7 @@ namespace CloudSync
         /// <param name="isClient">Initialize this instance with this value set to true if the client machine is the master, if instead it is the server set this value to false to activate slave mode.</param>
         /// <param name="doNotCreateSpecialFolders">Set to true if you want to automatically create sub-folders in the cloud area to save images, photos, documents, etc..</param>
         /// <param name="isReachable">Indicate true if the path to the cloud space is reachable (true), or unmounted virtual disk (false)</param>
-        public Sync(SendCommand sendCommand, out SendCommand onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential isClient = null, bool doNotCreateSpecialFolders = false, bool isReachable = true)
+        public Sync(SendCommandDelegate sendCommand, out SendCommandDelegate onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential isClient = null, bool doNotCreateSpecialFolders = false, bool isReachable = true)
         {
             SecureStorage = secureStorage;
             RoleManager = new RoleManager(this);
@@ -41,7 +41,7 @@ namespace CloudSync
                 rootInfo.Create();
             if (rootInfo.Exists)
                 rootInfo.Attributes |= FileAttributes.Encrypted;
-            SendCommandDelegate = sendCommand;
+            Send = sendCommand;
             onCommand = OnCommand;
             Spooler = new Spooler(this);
             ReceptionInProgress = new ProgressFileTransfer(this);
@@ -49,33 +49,36 @@ namespace CloudSync
             var task = new Task(() =>
             {
                 HashFileTable(out _); // set cache initial state to check if file is deleted
-                if (IsServer)
+            });
+            task.Start();
+
+            if (IsServer)
+            {
+                var pin = GetPin(secureStorage);
+                if (pin == null)
                 {
-                    var pin = GetPin(secureStorage);
-                    if (pin == null)
-                    {
 #if DEBUG
-                        pin = "777777"; // To facilitate testing, in debug mode the pin will always be this: So use debug mode only for software development and testing!
+                    pin = "777777"; // To facilitate testing, in debug mode the pin will always be this: So use debug mode only for software development and testing!
 #else
                         Random rnd = new Random();
                         int pinInt = rnd.Next(0, 1000000);
                         pin =  "000000" + pinInt.ToString(); // the default pin is the 6 random digits
                         pin = pin.Substring(pin.Length - 6);
-#endif                        
-                        SetPin(secureStorage, null, pin);
-                    }
-                    //SetSyncTimeBuffer();
+#endif
+                    SetPin(secureStorage, null, pin);
                 }
+                //SetSyncTimeBuffer();
+            }
+            else
+            {
+                OnNotify(null, Notice.Authentication);
+                if (IsLogged)
+                    ClientStartSync(); // It's already logged in, so start syncing immediately
                 else
-                {
-                    OnNotify(null, Notice.Authentication);
-                    if (IsLogged)
-                        ClientStartSync(); // It's already logged in, so start syncing immediately
-                    else
-                        RequestOfAuthentication(null, isClient, PublicIpAddressInfo(), Environment.MachineName); // Start the login process
-                }
-            });
-            task.Start();
+                    RequestOfAuthentication(null, isClient, PublicIpAddressInfo(), Environment.MachineName); // Start the login process
+            }
+            //});
+            //task.Start();
         }
 
         /// <summary>
@@ -101,9 +104,12 @@ namespace CloudSync
                         CreateUserFolder(CloudRoot, !DontCreateSpecialFolders && !IsServer);
                     }
                     ClientStartSync();
+                    OnLoginCompleted?.Set();
                 }
             }
         }
+
+        public AutoResetEvent OnLoginCompleted;
 
         public bool LoginError { get; private set; }
 
@@ -346,9 +352,9 @@ namespace CloudSync
         public int ConcurrentOperations() { return SendingInProgress == null ? 0 : SendingInProgress.TransferInProgress + ReceptionInProgress.TransferInProgress; }
         public bool IsTransferring() { return ConcurrentOperations() > 0; }
         public static readonly ushort AppId = BitConverter.ToUInt16(Encoding.ASCII.GetBytes("sync"), 0);
-        public delegate void SendCommand(ulong? contactId, ushort command, params byte[][] values);
+        public delegate void SendCommandDelegate(ulong? contactId, ushort command, params byte[][] values);
         public DateTime LastCommandSent { get; private set; }
-        private void ExecuteCommand(ulong? contactId, Commands command, string infoData, params byte[][] values)
+        private void SendCommand(ulong? contactId, Commands command, string infoData, params byte[][] values)
         {
             if (!Disposed)
             {
@@ -359,7 +365,7 @@ namespace CloudSync
                     {
                         Debug.WriteLine("OUT " + command);
                         RaiseOnCommandEvent(contactId, command, infoData, true);
-                        SendCommandDelegate.Invoke(contactId, (ushort)command, values);
+                        Send.Invoke(contactId, (ushort)command, values);
                     }
                     catch (Exception ex)
                     {
@@ -371,7 +377,7 @@ namespace CloudSync
             }
         }
 
-        private readonly SendCommand SendCommandDelegate;
+        private readonly SendCommandDelegate Send;
 
         private bool GetLocalHashStructure(out byte[] localHashStructure, BlockRange delimitsRange)
         {
@@ -491,7 +497,7 @@ namespace CloudSync
                                     if (!DirToExclude((DirectoryInfo)item))
                                     {
                                         AnalyzeDirectory((DirectoryInfo)item, ref hashFileTable);
-                                    }                                
+                                    }
                                 }
                                 else
                                 {
