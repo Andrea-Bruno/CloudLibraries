@@ -281,9 +281,9 @@ namespace CloudBox
                 }
                 else if (type == 2)
                 {
-                    var QRKey = EncryptedMessaging.Bytes.Skip(qr, offset).Take(24);
+                    var QRKey = qr.Skip(offset).Take(24);
                     offset += 24;
-                    var serverId = BitConverter.ToUInt64(EncryptedMessaging.Bytes.Skip(qr, offset).Take(8), 0);
+                    var serverId = BitConverter.ToUInt64(qr.Skip(offset).Take(8), 0);
                     offset += 8;
                     EncryptedQR = new Tuple<ulong, byte[]>(serverId, QRKey);
                 }
