@@ -23,16 +23,26 @@ namespace CloudSync
         /// <param name="onCommand">The command of the underlying library that takes care of sending the commands to the remote machine, in the form of a data packet. The concept is to keep this library free from worrying about data transmission, leaving the pure task of managing the synchronization protocol to a higher layer.</param>
         /// <param name="secureStorage">Library reference for saving local data in an encrypted way (to increase security)</param>
         /// <param name="cloudRoot">The path to the cloud root directory</param>
-        /// <param name="isClient">Initialize this instance with this value set to true if the client machine is the master, if instead it is the server set this value to false to activate slave mode.</param>
+        /// <param name="clientCredential">If the current machine is a client, the first time you need to pass the connection credentials to be able to log in to the server</param>
         /// <param name="doNotCreateSpecialFolders">Set to true if you want to automatically create sub-folders in the cloud area to save images, photos, documents, etc..</param>
         /// <param name="isReachable">Indicate true if the path to the cloud space is reachable (true), or unmounted virtual disk (false)</param>
-        public Sync(SendCommandDelegate sendCommand, out SendCommandDelegate onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential isClient = null, bool doNotCreateSpecialFolders = false, bool isReachable = true)
+        public Sync(SendCommandDelegate sendCommand, out SendCommandDelegate onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential clientCredential = null, bool doNotCreateSpecialFolders = false, bool isReachable = true)
         {
+
             SecureStorage = secureStorage;
             RoleManager = new RoleManager(this);
             InstanceId = InstanceCounter;
             InstanceCounter++;
-            IsServer = isClient == null;
+            var isLogged = IsLogged;
+            IsClient = clientCredential != null;
+            if (IsClient)
+            {
+                secureStorage.Values.Set(nameof(IsClient), IsClient);
+            }
+            else
+            {
+                IsClient = secureStorage.Values.Get(nameof(IsClient), false);
+            }
             DontCreateSpecialFolders = doNotCreateSpecialFolders;
             CloudRoot = cloudRoot;
             IsReachable = isReachable;
@@ -72,10 +82,10 @@ namespace CloudSync
             else
             {
                 OnNotify(null, Notice.Authentication);
-                if (IsLogged)
+                if (isLogged)
                     ClientStartSync(); // It's already logged in, so start syncing immediately
                 else
-                    RequestOfAuthentication(null, isClient, PublicIpAddressInfo(), Environment.MachineName); // Start the login process
+                    RequestOfAuthentication(null, clientCredential, PublicIpAddressInfo(), Environment.MachineName); // Start the login process
             }
             //});
             //task.Start();
@@ -92,11 +102,11 @@ namespace CloudSync
         /// </summary>
         public bool IsLogged
         {
-            get { return SecureStorage != null && SecureStorage.Values.Get("Logged", false); }
+            get { return SecureStorage != null && SecureStorage.Values.Get(nameof(IsLogged), false); }
             internal set
             {
                 LoginError = false;
-                SecureStorage.Values.Set("Logged", value);
+                SecureStorage.Values.Set(nameof(IsLogged), value);
                 if (value)
                 {
                     if (IsReachable)
@@ -174,7 +184,8 @@ namespace CloudSync
                 Disposed = true;
                 RaiseOnStatusChangesEvent(SyncStatus.Undefined);
                 OnNotify(null, Notice.LoggedOut);
-                SecureStorage.Values.Delete("Logged", typeof(bool));
+                SecureStorage.Values.Delete(nameof(IsLogged), typeof(bool));
+                SecureStorage.Values.Delete(nameof(IsClient), typeof(bool));
 
                 if (SyncTimeBuffer != null)
                 {
@@ -215,6 +226,14 @@ namespace CloudSync
                 pathWatcher.EnableRaisingEvents = true;
                 return;
             }
+            try
+            {
+                Directory.CreateDirectory(CloudRoot);
+            }
+            catch (Exception)
+            {
+                throw new Exception("The path provided for the cloud is not valid");
+            }
             pathWatcher = new FileSystemWatcher
             {
                 Path = CloudRoot,
@@ -253,12 +272,19 @@ namespace CloudSync
         internal void RestartCheckSyncTimer()
         {
             // If the client is out of sync, it tries to sync more frequently           
-            var next = SyncIsInPending ? RetrySyncFailedAfterMinutes : CheckSyncEveryMinutes;
-            var timespan = TimeSpan.FromMinutes(next);
+            int nextSyncMinutes;
+            if (!FirstSyncFlag)
+            {
+                FirstSyncFlag = true;
+                nextSyncMinutes = 0;
+            }
+            else
+                nextSyncMinutes = SyncIsInPending ? RetrySyncFailedAfterMinutes : CheckSyncEveryMinutes;
+            var timespan = TimeSpan.FromMinutes(nextSyncMinutes);
             timespan.Add(TimeSpan.FromMilliseconds(CalculationTimeHashFileTableMS));
             ClientCheckSync?.Change(timespan, timespan);
         }
-
+        private bool FirstSyncFlag;
         private bool SyncIsInPending => RemoteStatus != Notice.Synchronized || ConcurrentOperations() != 0 || LocalSyncStatus != SyncStatus.Monitoring || Spooler.InPending != 0;
 
         /// <summary>
@@ -347,7 +373,8 @@ namespace CloudSync
         public int PendingOperations => Spooler.PendingOperations;
         public readonly int InstanceId;
         private static int InstanceCounter;
-        public readonly bool IsServer;
+        public bool IsServer { get { return !IsClient; } }
+        public readonly bool IsClient;
         public readonly string CloudRoot;
         public int ConcurrentOperations() { return SendingInProgress == null ? 0 : SendingInProgress.TransferInProgress + ReceptionInProgress.TransferInProgress; }
         public bool IsTransferring() { return ConcurrentOperations() > 0; }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -35,7 +36,7 @@ namespace CloudSync
         {
             var created = SetSpecialDirectory(userPath, Ico.Cloud, false);
             if (createSubFolder)
-                AddDesktopShortcut(userPath);
+                AddDesktopAndFavoritesShortcut(userPath);
             var createIfNotExists = createSubFolder && new DirectoryInfo(userPath).GetDirectories().FirstOrDefault(x => !x.Attributes.HasFlag(FileAttributes.Hidden) && !x.Name.StartsWith(".")) == default;
             SetSpecialDirectory(userPath, Ico.Documents, createIfNotExists: createIfNotExists);
             SetSpecialDirectory(userPath, Ico.Download, createIfNotExists: createIfNotExists);
@@ -425,15 +426,20 @@ namespace CloudSync
         }
 
         /// <summary>
-        /// Get a path suitable for large temporary files. The result can differ from Path.GetTempPath() because on linux the latter could return a path allocated in the ram, not suitable for large files that could run out of memory.
+        /// Get a path suitable for large temporary files. The result can differ from Path.GetTempPath() because on Linux the latter could return a path allocated in the ram, not suitable for large files that could run out of memory.
         /// </summary>
         /// <returns>Temporary path folder</returns>
         public static string GetTempPath()
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 return Path.GetTempPath();
-            var path = @"/var/tmp/";
-            return Directory.Exists(path) ? path : Path.GetTempPath();
+            var path = @"/var/tmp/"; // Linux
+            if (Directory.Exists(path))
+                return path;
+            path = @"/private/tmp/"; // OSX
+            if (Directory.Exists(path))
+                return path;
+            return Path.GetTempPath();
         }
 
         /// <summary>
@@ -567,13 +573,35 @@ namespace CloudSync
                 File.SetAttributes(pathDirectory, File.GetAttributes(pathDirectory) | FileAttributes.System);
             }
         }
-        public static void AddDesktopShortcut(string fullName, Ico ico = Ico.Cloud)
+        public static void AddDesktopAndFavoritesShortcut(string fullName, Ico ico = Ico.Cloud)
         {
             AddShortcut(fullName, DesktopPath(), ico);
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                string script = $@"
+tell application ""Finder""
+    set targetFolder to POSIX file ""{fullName}"" as alias
+    tell sidebar list of front Finder window
+        make new sidebar item at end of sidebar items with properties {{name:""My Favorite"", target:targetFolder}}
+    end tell
+end tell";
+
+                try
+                {
+                    Process.Start("osascript", $"-e \"{script}\"");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in AddDesktopAndFavoritesShortcut: {ex.Message}");
+                }
+            }
+            else
+                AddShortcut(fullName, Environment.GetFolderPath(Environment.SpecialFolder.Favorites), ico);
         }
+
         public static string DesktopPath()
         {
-            return RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Desktop") : Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            return RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), nameof(Environment.SpecialFolder.Desktop)) : Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
         }
 
         /// <summary>
@@ -637,7 +665,6 @@ namespace CloudSync
                 }
             }
         }
-
 
         public class BlockRange
         {

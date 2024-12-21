@@ -53,7 +53,7 @@ namespace CloudBox
             // RouterEntryPoint = routerEntryPoint;
 
 
-            if (string.IsNullOrEmpty(licenseOEM))
+            if (string.IsNullOrEmpty(licenseOEM) && isServer)
                 licenseOEM = TestNetDefaultLicenseOEM;
             LicenseOEM = licenseOEM;
             IsServer = isServer;
@@ -346,16 +346,18 @@ namespace CloudBox
         /// <summary>
         /// Start sync (connection must be started first)
         /// </summary>
-        /// <param name="isClient">If it is the client, it must provide authentication credentials</param>
-        public void StartSync(LoginCredential isClient = null)
+        /// <param name="credential">At the first synchronization, the credentials for logging in to the server must be passed</param>
+        public void StartSync(LoginCredential credential = null)
         {
-            Sync = new Sync(SendSyncCommand, out OnSyncCommand, Context.SecureStorage, CloudPath, isClient, DoNotCreateSpecialFolders, IsReachable);
-            Sync.OnNotification += (fromUserId, notice) => OnNotificationAction?.Invoke(fromUserId, notice);
+            Sync = new Sync(SendSyncCommand, out OnSyncCommand, Context.SecureStorage, CloudPath, credential, DoNotCreateSpecialFolders, IsReachable);
+            // Sync.OnNotification += (fromUserId, notice) => OnNotificationAction?.Invoke(fromUserId, notice);
+            Sync.OnNotification += (fromUserId, notice) => OnNotificationActionList.Concat(new[] { OnNotificationAction }).ToList().ForEach(x => x?.Invoke(fromUserId, notice));
             Sync.OnLocalSyncStatusChanges += (syncStatus, pendingFiles) =>
             {
                 SyncStatus = syncStatus;
                 PendingFiles = pendingFiles;
-                OnLocalSyncStatusChangesAction?.Invoke(syncStatus, pendingFiles);
+                // OnLocalSyncStatusChangesAction?.Invoke(syncStatus, pendingFiles);
+                OnLocalSyncStatusChangesActionList.Concat(new[] { OnLocalSyncStatusChangesAction }).ToList().ForEach(x => x?.Invoke(syncStatus, pendingFiles));
             };
             Sync.OnFileTransfer += fileTransfer => TransferredFiles.UpdateList(fileTransfer);
             Sync.OnCommandEvent += (userId, command, infoData, isOutput) => OnCommands.AddOnCommand(userId, command, infoData, isOutput);
@@ -444,10 +446,13 @@ namespace CloudBox
         /// Procedure that is performed upon receipt of a notification from the remote machine. Can be used as an event to check the status of the remote machine.
         /// </summary>
         public Sync.OnNotificationEvent OnNotificationAction;
+        protected readonly List<Sync.OnNotificationEvent> OnNotificationActionList = new List<Sync.OnNotificationEvent>();
         /// <summary>
         /// Event that fires when the sync status changes
         /// </summary>
         public Sync.StatusEventHandler OnLocalSyncStatusChangesAction;
+        protected readonly List<Sync.StatusEventHandler> OnLocalSyncStatusChangesActionList = new List<Sync.StatusEventHandler>();
+
         /// <summary>
         /// Event that tracks communication errors that occur with the remote device
         /// </summary>
@@ -499,17 +504,19 @@ namespace CloudBox
                         AddTx("Entry point (router address)", context?.EntryPoint.ToString());
                     AddTx("Keep Alive Failures", context?.KeepAliveFailures);
                 }
-                AddTx("OEM Id", OEM.GetIdOEM(LicenseOEM));
+                if (LicenseOEM != null)
+                    AddTx("OEM Id", OEM.GetIdOEM(LicenseOEM));
                 if (LicenseOEM == TestNetDefaultLicenseOEM)
                 {
-                    if (string.IsNullOrEmpty(LicenseOEM))
-                        AddTx("ERROR!", "Missing license");
-                    else
-                        AddTx("WARNING!", "TestNet license in use");
-#if DEBUG
-                    AddTx("WARNING!", "compiled in debug mode");
-#endif
+                    AddTx("WARNING!", "TestNet license in use");
                 }
+                else if (IsServer && string.IsNullOrEmpty(LicenseOEM))
+                {
+                    AddTx("ERROR!", "Missing license");
+                }
+#if DEBUG
+                AddTx("WARNING!", "compiled in debug mode");
+#endif
                 if (!IsServer)
                 {
                     AddTx("Paired to server", (ServerCloud == null ? "None" : ServerCloud.UserId + " UserId"));
