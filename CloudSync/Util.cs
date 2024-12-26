@@ -27,6 +27,18 @@ namespace CloudSync
                 return Sha256Hash.ComputeHash(data);
         }
 
+
+        /// <summary>
+        /// Wait for directory exists 
+        /// </summary>
+        /// <param name="path">Directory path</param>
+        /// <param name="timeout">Timeout in milliseconds</param>
+        /// <returns></returns>
+        public static bool WaitForDirectory(string path, int timeout = 10000)
+        {
+            return SpinWait.SpinUntil(() => Directory.Exists(path), timeout);
+        }
+
         /// <summary>
         /// Create user subfolders: Documents, Pictures, Movies, etc..
         /// </summary>

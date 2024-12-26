@@ -170,9 +170,14 @@ namespace CloudSync
         {
             if (IsLogged)
             {
-                Spooler?.ExecuteNext();
-                WatchCloudRoot();
-                RequestSynchronization();
+                if (WaitForDirectory(CloudRoot))
+                {
+                    if (WatchCloudRoot())
+                    {
+                        Spooler?.ExecuteNext();
+                        RequestSynchronization();
+                    }
+                }
             }
         }
 
@@ -219,31 +224,37 @@ namespace CloudSync
         }
 
         private FileSystemWatcher pathWatcher;
-        private void WatchCloudRoot()
+        private bool WatchCloudRoot(int maxAttempts = 10)
         {
-            if (pathWatcher != null)
+            int attempts = 0;
+            while (attempts < maxAttempts)
             {
-                pathWatcher.EnableRaisingEvents = true;
-                return;
+                try
+                {
+                    if (pathWatcher != null)
+                    {
+                        pathWatcher.EnableRaisingEvents = true;
+                        return true;
+                    }
+                    pathWatcher = new FileSystemWatcher
+                    {
+                        Path = CloudRoot,
+                        NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.CreationTime,
+                        Filter = "*.*",
+                        EnableRaisingEvents = true,
+                        IncludeSubdirectories = true
+                    };
+                    pathWatcher.Changed += (s, e) => RequestSynchronization();
+                    pathWatcher.Deleted += (s, e) => RequestSynchronization();
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    attempts++;
+                    Thread.Sleep(1000);
+                }
             }
-            try
-            {
-                Directory.CreateDirectory(CloudRoot);
-            }
-            catch (Exception)
-            {
-                throw new Exception("The path provided for the cloud is not valid");
-            }
-            pathWatcher = new FileSystemWatcher
-            {
-                Path = CloudRoot,
-                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.CreationTime,
-                Filter = "*.*",
-                EnableRaisingEvents = true,
-                IncludeSubdirectories = true
-            };
-            pathWatcher.Changed += (s, e) => RequestSynchronization();
-            pathWatcher.Deleted += (s, e) => RequestSynchronization();
+            return false;
         }
 
         private void StopWatchCloudRoot()
