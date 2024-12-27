@@ -129,7 +129,7 @@ namespace CloudSync
                         if (OnNotification != null)
                             OnNotify(fromUserId, notice);
                     }
-                    if (!IsReachable)
+                    if (!SyncIsEnabled)
                     {
                         infoData = "Operation rejected. The cloud path is not mounted";
                         return;

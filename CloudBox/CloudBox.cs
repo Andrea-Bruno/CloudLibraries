@@ -40,10 +40,10 @@ namespace CloudBox
         /// <param name="licenseOEM">The OEM private key for activating licenses.</param>
         /// <param name="name">A label name to assign to this instance (this does not affect how the cloud works)</param>
         /// <param name="doNotCreateSpecialFolders">If instantiated as a server it will automatically create specific subdirectories for documents, photos, etc., unless this parameter is specified</param>
-        /// <param name="isReachable">Indicate true if the path to the cloud space is reachable (true), or unmounted virtual disk (false). Use IsReachableDiskStateIsChanged to notify that access to the cloud path has changed.</param>
-        public CloudBox(string cloudPath = null, bool isServer = false, ulong? id = null, string licenseOEM = null, string name = null, bool doNotCreateSpecialFolders = false, bool isReachable = true)
+        /// <param name="syncIsEnabled"> False to suspend sync, or true. It is important to suspend synchronization if the path is not available (for example when using virtual disks)! Indicate true if the path to the cloud space is reachable (true), or unmounted virtual disk (false). Use IsReachableDiskStateIsChanged to notify that access to the cloud path has changed.</param>
+        public CloudBox(string cloudPath = null, bool isServer = false, ulong? id = null, string licenseOEM = null, string name = null, bool doNotCreateSpecialFolders = false, bool syncIsEnabled = true)
         {
-            IsReachable = isReachable;
+            SyncIsEnabled = syncIsEnabled;
             DoNotCreateSpecialFolders = doNotCreateSpecialFolders; ;
             _Name = name;
             //if (string.IsNullOrEmpty(routerEntryPoint))
@@ -90,7 +90,7 @@ namespace CloudBox
 
             if (saveToCloud)
             {
-                if (CloudPath != null && IsReachable)
+                if (CloudPath != null && SyncIsEnabled)
                 {
                     var n = 0;
                     string signatureDir;
@@ -349,7 +349,7 @@ namespace CloudBox
         /// <param name="credential">At the first synchronization, the credentials for logging in to the server must be passed</param>
         public void StartSync(LoginCredential credential = null)
         {
-            Sync = new Sync(SendSyncCommand, out OnSyncCommand, Context.SecureStorage, CloudPath, credential, DoNotCreateSpecialFolders, IsReachable);
+            Sync = new Sync(SendSyncCommand, out OnSyncCommand, Context.SecureStorage, CloudPath, credential, DoNotCreateSpecialFolders, SyncIsEnabled);
             // Sync.OnNotification += (fromUserId, notice) => OnNotificationAction?.Invoke(fromUserId, notice);
             Sync.OnNotification += (fromUserId, notice) => OnNotificationActionList.Concat(new[] { OnNotificationAction }).ToList().ForEach(x => x?.Invoke(fromUserId, notice));
             Sync.OnLocalSyncStatusChanges += (syncStatus, pendingFiles) =>
@@ -372,18 +372,19 @@ namespace CloudBox
         public AutoResetEvent OnSyncStart;
 
         /// <summary>
-        /// Indicates if the cloud path is an unmounted virtual disk.
+        /// IWhen the value is set to false, a synchronization activity is suspended.
         /// </summary>
-        private bool IsReachable { get { return _IsReachable; } set { _IsReachable = value; Sync?.IsReachableDiskStateIsChanged(value); } }
-        private bool _IsReachable = true;
+        private bool SyncIsEnabled { get { return _IsEnabled; } set { _IsEnabled = value; Sync?.SetSyncState(value); } }
+        private bool _IsEnabled = true;
 
 
         /// <summary>
+        /// Block or enable synchronization. Possible use:
         /// Function that the host app must call if the disk at the root of the cloud is mounted or unmounted.
         /// If you plan not to use a virtual disk for cloud space then this function should not be called.
         /// If you use a virtual disk as a path to the cloud, this feature will suspend synchronization when the disk is unsmounted.
         /// </summary>
-        public void IsReachableDiskStateIsChanged(bool isReachable) => IsReachable = isReachable;
+        public void SetSyncState(bool isEnabled) => SyncIsEnabled = isEnabled;
 
 
         /// <summary>

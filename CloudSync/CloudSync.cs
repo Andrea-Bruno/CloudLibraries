@@ -25,8 +25,8 @@ namespace CloudSync
         /// <param name="cloudRoot">The path to the cloud root directory</param>
         /// <param name="clientCredential">If the current machine is a client, the first time you need to pass the connection credentials to be able to log in to the server</param>
         /// <param name="doNotCreateSpecialFolders">Set to true if you want to automatically create sub-folders in the cloud area to save images, photos, documents, etc..</param>
-        /// <param name="isReachable">Indicate true if the path to the cloud space is reachable (true), or unmounted virtual disk (false)</param>
-        public Sync(SendCommandDelegate sendCommand, out SendCommandDelegate onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential clientCredential = null, bool doNotCreateSpecialFolders = false, bool isReachable = true)
+        /// <param name="syncIsEnabled"> False to suspend sync, or true. It is important to suspend synchronization if the path is not available (for example when using virtual disks)! Indicate true if the path to the cloud space is reachable (true), or unmounted virtual disk (false). Use IsReachableDiskStateIsChanged to notify that access to the cloud path has changed.</param>
+        public Sync(SendCommandDelegate sendCommand, out SendCommandDelegate onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential clientCredential = null, bool doNotCreateSpecialFolders = false, bool syncIsEnabled = true)
         {
 
             SecureStorage = secureStorage;
@@ -45,7 +45,7 @@ namespace CloudSync
             }
             DontCreateSpecialFolders = doNotCreateSpecialFolders;
             CloudRoot = cloudRoot;
-            IsReachable = isReachable;
+            SyncIsEnabled = syncIsEnabled;
             var rootInfo = new DirectoryInfo(cloudRoot);
             if (IsServer)
                 rootInfo.Create();
@@ -109,7 +109,7 @@ namespace CloudSync
                 SecureStorage.Values.Set(nameof(IsLogged), value);
                 if (value)
                 {
-                    if (IsReachable)
+                    if (SyncIsEnabled)
                     {
                         CreateUserFolder(CloudRoot, !DontCreateSpecialFolders && !IsServer);
                     }
@@ -131,42 +131,44 @@ namespace CloudSync
         private bool DontCreateSpecialFolders;
 
         /// <summary>
+        /// Block or enable synchronization. Possible use:
         /// Function that the host app must call if the disk at the root of the cloud is mounted or unmounted.
         /// If you plan not to use a virtual disk for cloud space then this function should not be called.
+        /// If you use a virtual disk as a path to the cloud, this feature will suspend synchronization when the disk is unsmounted.
         /// </summary>
-        public void IsReachableDiskStateIsChanged(bool isMounted) => IsReachable = isMounted;
+        public void SetSyncState(bool isMounted) => SyncIsEnabled = isMounted;
 
         /// <summary>
-        /// Indicate true if the path to the cloud space is reachable (true), or unmounted virtual disk (false).
+        /// If set to false, suspends all sync operations. Useful if you are working with virtual disks and want to unmount a disk (you must suspend sync operations before unmounting the disk).
         /// </summary>
-        internal bool IsReachable
+        protected bool SyncIsEnabled
         {
-            get { return (bool)_IsReachable; }
-            set
+            get { return (bool)_SyncIsEnabled; }
+            private set
             {
-                if (_IsReachable != value)
+                if (_SyncIsEnabled != value)
                 {
-                    _IsReachable = value;
+                    _SyncIsEnabled = value;
                     if (!IsServer)
                     {
                         if (value)
-                            OnMount();
+                            OnEnabledSync();
                         else
-                            OnUnmount();
+                            OnDisableSync();
                     }
                 }
             }
         }
-        private bool? _IsReachable = null;
+        protected bool? _SyncIsEnabled = null;
 
-        private void OnUnmount()
+        private void OnDisableSync()
         {
             StopWatchCloudRoot();
             SendingInProgress?.Stop();
             ReceptionInProgress?.Stop();
         }
 
-        private void OnMount()
+        private void OnEnabledSync()
         {
             if (IsLogged)
             {
@@ -343,7 +345,7 @@ namespace CloudSync
             if (!performingStartSynchronization)
             {
                 performingStartSynchronization = true;
-                if (!IsReachable)
+                if (!SyncIsEnabled)
                     return;
                 if (!IsTransferring())
                 {
@@ -559,7 +561,7 @@ namespace CloudSync
                     {
                         var watch = Stopwatch.StartNew();
                         StartAnalyzeDirectory(CloudRoot, out var newHashFileTable);
-                        if (!IsReachable)
+                        if (!SyncIsEnabled)
                         {
                             hashTable = null;
                             return false;
