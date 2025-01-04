@@ -1,7 +1,10 @@
-﻿using System;
+﻿using SecureStorage;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.NetworkInformation;
+using System.Runtime.CompilerServices;
 using static CloudSync.Util;
 
 namespace CloudSync
@@ -15,6 +18,7 @@ namespace CloudSync
         }
 
         private readonly Sync Sync;
+
         public readonly Dictionary<ulong, Client> Clients = new Dictionary<ulong, Client>();
         public readonly Dictionary<ulong, Client> TmpClients = new Dictionary<ulong, Client>();
         public List<Client> ClientsConnected()
@@ -26,6 +30,41 @@ namespace CloudSync
                     clients.Add(client);
             }
             ; return clients;
+        }
+
+        private bool? _MasterPinEnabled;
+        /// <summary>
+        /// If set to False, disables PIN authentication (temporary file sharing PINs will still work)
+        /// If disabled, authentication is only available via 2FA.
+        /// </summary>
+        public bool MasterPinEnabled
+        {
+            get
+            {
+                if (_MasterPinEnabled == null)
+                    _MasterPinEnabled = Sync.SecureStorage.Values.Get(nameof(MasterPinEnabled), true);
+                return (bool)_MasterPinEnabled;
+            }
+            set { Sync.SecureStorage.Values.Set(nameof(MasterPinEnabled), value); }
+        }
+
+        /// <summary>
+        /// The string to display as a QR code to set up 2FA
+        /// </summary>
+        /// <returns>2FA QR Code setting string</returns>
+        public string QrCode2FA()
+        {
+            var twoFactorAuth = new TwoFactorAuth(Sync.SecureStorage);
+            return twoFactorAuth.QRCodeUri();
+        }
+
+        /// <summary>
+        /// Change 2FA key (you will need to reset a new authentication device via QR code)
+        /// </summary>
+        public void Reset2FA()
+        {
+            var twoFactorAuth = new TwoFactorAuth(Sync.SecureStorage);
+            twoFactorAuth.ResetSecretKey();
         }
 
         /// <summary>
@@ -46,7 +85,6 @@ namespace CloudSync
 
             if (clientPubKey != null && id == null)
                 id = PublicKeyToUserId(clientPubKey);
-
             var pins = GetPins(Sync.SecureStorage);
             if (pins == null || pins.Count == 0)
                 return;
@@ -88,6 +126,7 @@ namespace CloudSync
                 Pins = pins
             };
         }
+
 
         public class ProofOfPin
         {

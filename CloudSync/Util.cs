@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SecureStorage;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -173,11 +174,17 @@ namespace CloudSync
         /// </summary>
         /// <param name="context">Context object</param>
         /// <returns>list of active pins with their expiration</returns>
-        public static List<OneTimeAccess> GetPins(SecureStorage.Storage secureStorage)
+        public static List<OneTimeAccess> GetPins(Storage secureStorage)
         {
             var pinsList = new List<OneTimeAccess>();
-            var pin = GetPin(secureStorage);
-            pinsList.Add(new OneTimeAccess(pin, DateTime.MaxValue, "master"));
+            var twoFactorAuth = new TwoFactorAuth(secureStorage);
+            pinsList.Add(new OneTimeAccess(twoFactorAuth.CurrentTotpCode(), DateTime.MaxValue, "2FA"));
+            if (secureStorage.Values.Get(nameof(RoleManager.MasterPinEnabled), true))
+            {
+                var pin = GetPin(secureStorage);
+                pinsList.Add(new OneTimeAccess(pin, DateTime.MaxValue, "master"));
+            }
+
             string newPins = "";
             var pins = GetPinsFile(secureStorage);
             if (!string.IsNullOrEmpty(pins))

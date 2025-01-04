@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>netstandard2.1</TargetFramework>
     <Configurations>Debug;Test;DEBUG_AND;Release</Configurations>
     <UserSecretsId>8d0a6e5c-7792-4721-9f23-2b58240b121d</UserSecretsId>
   </PropertyGroup>
@@ -20,6 +20,10 @@
 
   <ItemGroup>
     <Compile Remove="CloudBox.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Otp.NET" Version="1.4.0" />
   </ItemGroup>
 
   <ItemGroup>
