@@ -45,8 +45,15 @@ namespace CloudSync
                     _MasterPinEnabled = Sync.SecureStorage.Values.Get(nameof(MasterPinEnabled), true);
                 return (bool)_MasterPinEnabled;
             }
-            set { Sync.SecureStorage.Values.Set(nameof(MasterPinEnabled), value); }
-        }
+            set
+            {
+                if (value != _MasterPinEnabled)
+                {
+                    _MasterPinEnabled = value;
+                    Sync.SecureStorage.Values.Set(nameof(MasterPinEnabled), value);
+                }
+            }
+            }
 
         /// <summary>
         /// The string to display as a QR code to set up 2FA
@@ -55,7 +62,7 @@ namespace CloudSync
         public string QrCode2FA()
         {
             var twoFactorAuth = new TwoFactorAuth(Sync.SecureStorage);
-            return twoFactorAuth.QRCodeUri();
+            return twoFactorAuth.QRCodeUri(Sync.InstanceId.ToString());
         }
 
         /// <summary>

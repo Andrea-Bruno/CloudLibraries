@@ -56,12 +56,14 @@ namespace CloudSync
             Spooler = new Spooler(this);
             ReceptionInProgress = new ProgressFileTransfer(this);
             SendingInProgress = new ProgressFileTransfer(this);
-            var task = new Task(() =>
+            if (syncIsEnabled)
             {
-                HashFileTable(out _); // set cache initial state to check if file is deleted
-            });
-            task.Start();
-
+                var task = new Task(() =>
+                {
+                    HashFileTable(out _); // set cache initial state to check if file is deleted
+                });
+                task.Start();
+            }
             if (IsServer)
             {
                 var pin = GetPin(secureStorage);
