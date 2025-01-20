@@ -21,7 +21,61 @@ namespace CloudSync
             Sha256Hash = SHA256.Create();
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        public struct Passwd
+        {
+            public IntPtr pw_name; // Username
+            public IntPtr pw_passwd; // User password
+            public uint pw_uid; // User ID
+            public uint pw_gid; // Group ID
+            public IntPtr pw_gecos; // Real name
+            public IntPtr pw_dir; // Home directory
+            public IntPtr pw_shell; // Shell program
+        }
+
+        [DllImport("libc", SetLastError = true)]
+        public static extern IntPtr getpwnam(string name);
+
+        static void Main(string[] args)
+        {
+            string username = "yourusername"; // Sostituisci con il nome utente desiderato
+            var (uid, gid) = GetUserIds(username);
+
+            Console.WriteLine($"UID: {uid}, GID: {gid}");
+        }
+
+        internal static (uint, uint) GetUserIds(string username)
+        {
+            uint uid = 0;
+            uint gid = 0;
+
+            try
+            {
+                IntPtr passwdPtr = getpwnam(username);
+
+                if (passwdPtr == IntPtr.Zero)
+                {
+                    throw new Exception("Errore durante l'ottenimento delle informazioni sull'utente.");
+                }
+
+                Passwd passwd = Marshal.PtrToStructure<Passwd>(passwdPtr);
+
+                uid = passwd.pw_uid;
+                gid = passwd.pw_gid;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Errore: {ex.Message}");
+            }
+
+            return (uid, gid);
+        }
+
+        [DllImport("libc", SetLastError = true)]
+        public static extern int chown(string path, uint owner, uint group);
+
         private static readonly SHA256 Sha256Hash;
+
         public static byte[] Hash256(byte[] data)
         {
             lock (Sha256Hash)
@@ -45,18 +99,20 @@ namespace CloudSync
         /// </summary>
         /// <param name="userPath"></param>
         /// <param name="createSubFolder"></param>
-        public static void CreateUserFolder(string userPath, bool createSubFolder = true)
+        public static void CreateUserFolder(string userPath, (uint, uint)? owner, bool createSubFolder = true)
         {
-            var created = SetSpecialDirectory(userPath, Ico.Cloud, false);
+            var created = SetSpecialDirectory(userPath, Ico.Cloud, owner, false);
             if (createSubFolder)
                 AddDesktopAndFavoritesShortcut(userPath);
-            var createIfNotExists = createSubFolder && new DirectoryInfo(userPath).GetDirectories().FirstOrDefault(x => !x.Attributes.HasFlag(FileAttributes.Hidden) && !x.Name.StartsWith(".")) == default;
-            SetSpecialDirectory(userPath, Ico.Documents, createIfNotExists: createIfNotExists);
-            SetSpecialDirectory(userPath, Ico.Download, createIfNotExists: createIfNotExists);
-            SetSpecialDirectory(userPath, Ico.Movies, createIfNotExists: createIfNotExists);
-            SetSpecialDirectory(userPath, Ico.Pictures, createIfNotExists: createIfNotExists);
-            SetSpecialDirectory(userPath, Ico.Photos, createIfNotExists: createIfNotExists);
-            SetSpecialDirectory(userPath, Ico.Settings, createIfNotExists: createIfNotExists);
+            var createIfNotExists = createSubFolder && new DirectoryInfo(userPath).GetDirectories()
+                    .FirstOrDefault(x => !x.Attributes.HasFlag(FileAttributes.Hidden) && !x.Name.StartsWith(".")) ==
+                default;
+            SetSpecialDirectory(userPath, Ico.Documents, owner, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Ico.Download, owner, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Ico.Movies, owner, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Ico.Pictures, owner, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Ico.Photos, owner, createIfNotExists: createIfNotExists);
+            SetSpecialDirectory(userPath, Ico.Settings, owner, createIfNotExists: createIfNotExists);
         }
 
         public static bool CheckConnection(Uri uri)
@@ -74,6 +130,7 @@ namespace CloudSync
             catch (Exception)
             {
             }
+
             return false;
         }
 
@@ -105,6 +162,7 @@ namespace CloudSync
                     return ip;
                 }
             }
+
             return null;
         }
 
@@ -120,8 +178,18 @@ namespace CloudSync
             if (toTest.ToString() == "::1") return false;
             var bytes = toTest.GetAddressBytes();
             if (bytes.Length != 4) return false;
-            uint A(byte[] bts) { Array.Reverse(bts); return BitConverter.ToUInt32(bts, 0); }
-            bool Ir(uint ipReverse, byte[] start, byte[] end) { return (ipReverse >= A(start) && ipReverse <= A(end)); } // Check if is in range
+
+            uint A(byte[] bts)
+            {
+                Array.Reverse(bts);
+                return BitConverter.ToUInt32(bts, 0);
+            }
+
+            bool Ir(uint ipReverse, byte[] start, byte[] end)
+            {
+                return (ipReverse >= A(start) && ipReverse <= A(end));
+            } // Check if is in range
+
             var ip = A(bytes);
             // IP for special use: https://en.wikipedia.org/wiki/Reserved_IP_addresses             
             if (Ir(ip, new byte[] { 0, 0, 0, 0 }, new byte[] { 0, 255, 255, 255 })) return true;
@@ -162,7 +230,8 @@ namespace CloudSync
         /// <param name="pin">Pins to add</param>
         /// <param name="expiresHours">Expires in hours</param>
         /// <param name="label">A tag name indicating who the pin was assigned to (as an optional reminder)</param>
-        public static void AddPin(SecureStorage.Storage secureStorage, string pin, int expiresHours, string label = null)
+        public static void AddPin(SecureStorage.Storage secureStorage, string pin, int expiresHours,
+            string label = null)
         {
             var pins = GetPinsFile(secureStorage);
             pins += pin + "\t" + DateTime.UtcNow.AddHours(expiresHours).ToFileTime() + "\t" + label + "\n";
@@ -201,10 +270,12 @@ namespace CloudSync
                     }
                 }
             }
+
             if (pins != newPins)
             {
                 secureStorage.Values.Set("pins", newPins);
             }
+
             return pinsList;
         }
 
@@ -219,14 +290,17 @@ namespace CloudSync
                 Expires = expires;
                 Label = label;
             }
+
             /// <summary>
             /// Pin
             /// </summary>
             public string Pin;
+
             /// <summary>
             /// Class with properties related to the disposable pin
             /// </summary>
             public DateTime Expires;
+
             /// <summary>
             /// Label describing who was assigned the pin (optional reminder)
             /// </summary>
@@ -253,13 +327,16 @@ namespace CloudSync
                         found = true;
                         continue;
                     }
+
                     newPins += pinParts + '\n';
                 }
             }
+
             if (pins != newPins)
             {
                 secureStorage.Values.Set("pins", newPins);
             }
+
             return found;
         }
 
@@ -286,6 +363,7 @@ namespace CloudSync
             {
                 SetPin(secureStorage, newPin);
             }
+
             return false;
         }
 
@@ -302,6 +380,7 @@ namespace CloudSync
                 secureStorage.Values.Set("pin", newPin);
                 return true;
             }
+
             return false;
         }
 
@@ -315,11 +394,15 @@ namespace CloudSync
         /// <returns>A Boolean value indicating whether the file is subject to synchronization or not</returns>
         public static bool CanBeSeen(FileSystemInfo fileSystemInfo)
         {
+            if (AllowedNames.Contains(fileSystemInfo.Name))
+                return true;
             var name = fileSystemInfo.Name.ToLower();
             var excludeExtension = ExcludeExtension.Find(x => name.EndsWith(x)) != null;
             var excludeFile = ExcludeFile.Contains(name);
-            return !fileSystemInfo.Attributes.HasFlag(FileAttributes.Hidden) && !fileSystemInfo.Name.StartsWith("_") && !fileSystemInfo.Name.StartsWith(".") && fileSystemInfo.Exists && !excludeFile && !excludeExtension;
+            return !fileSystemInfo.Attributes.HasFlag(FileAttributes.Hidden) && !fileSystemInfo.Name.StartsWith("_") &&
+                   !fileSystemInfo.Name.StartsWith(".") && fileSystemInfo.Exists && !excludeFile && !excludeExtension;
         }
+        private static string[] AllowedNames = { HashFileList.CloudCache };
 
         /// <summary>
         /// Convert a date to Unix timestamp format
@@ -388,6 +471,7 @@ namespace CloudSync
         }
 
         private static readonly SHA256 Sha256 = SHA256.Create();
+
         public static ulong ULongHash(ulong startValue, byte[] bytes)
         {
             var add = BitConverter.GetBytes((ulong)bytes.Length ^ startValue);
@@ -421,7 +505,9 @@ namespace CloudSync
 
         public static uint UnixLastWriteTimestamp(this FileSystemInfo fileSystemInfo)
         {
-            return fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory) ? 0 : ToUnixTimestamp(fileSystemInfo.LastWriteTimeUtc);
+            return fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory)
+                ? 0
+                : ToUnixTimestamp(fileSystemInfo.LastWriteTimeUtc);
         }
 
         public static byte[] GetBytes(this uint number)
@@ -470,10 +556,14 @@ namespace CloudSync
         /// <returns></returns>
         public static string GetTmpFile(Sync sync, ulong? userId, ulong hashFileName)
         {
-            return Path.Combine(GetTempPath(), ((ulong)userId).ToString("X") + hashFileName.ToString("X") + sync.InstanceId);
+            return Path.Combine(GetTempPath(),
+                ((ulong)userId).ToString("X") + hashFileName.ToString("X") + sync.InstanceId);
         }
+
         public const int DefaultChunkSize = 1024 * 1000; // 1 mb
-        public static byte[] GetChunk(uint chunkPart, string fullFileName, out uint parts, out long fileLength, int chunkSize = DefaultChunkSize)
+
+        public static byte[] GetChunk(uint chunkPart, string fullFileName, out uint parts, out long fileLength,
+            int chunkSize = DefaultChunkSize)
         {
             if (chunkSize == 0)
                 chunkSize = DefaultChunkSize;
@@ -485,6 +575,7 @@ namespace CloudSync
                 fileLength = 0;
                 return null;
             }
+
             fileLength = fileInfo.Length;
             parts = (uint)Math.Ceiling((double)fileLength / chunkSize);
             parts = parts == 0 ? 1 : parts;
@@ -505,6 +596,7 @@ namespace CloudSync
                             chunk = reader.ReadBytes((int)toTake);
                         }
                     }
+
                     return chunk;
                 }
                 catch (Exception)
@@ -512,6 +604,7 @@ namespace CloudSync
                     Thread.Sleep(1000);
                 }
             }
+
             return null;
         }
 
@@ -537,7 +630,9 @@ namespace CloudSync
         /// <param name="pathIsParent">Specifies whether the path parameter is the parent or the full name</param>
         /// <param name="createIfNotExists">If true, create the directory if it doesn't exist</param>
         /// <returns>Returns true if the directory was created</returns>
-        public static bool SetSpecialDirectory(string path, Ico directoryName, bool pathIsParent = true, bool createIfNotExists = true)
+        public static bool SetSpecialDirectory(string path, Ico directoryName, (uint, uint)? owner,
+            bool pathIsParent = true,
+            bool createIfNotExists = true)
         {
             var created = false;
             var pathDirectory = pathIsParent ? Path.Combine(path, directoryName.ToString()) : path;
@@ -545,24 +640,27 @@ namespace CloudSync
             //    return false;
             if (createIfNotExists && !Directory.Exists(pathDirectory))
             {
-                Directory.CreateDirectory(pathDirectory);
+                DirectoryCreate(pathDirectory, owner, out _);
                 created = true;
             }
+
             if (Directory.Exists(pathDirectory))
             {
                 // new FileInfo(pathDirectory).IsReadOnly = true; NOTE: Removed because it has inheritance problems in Linux
                 var cloudIcoPath = IcoFullName(directoryName);
                 if (File.Exists(cloudIcoPath))
                 {
-                    SetDirectoryIcon(pathDirectory, cloudIcoPath);
+                    SetDirectoryIcon(pathDirectory, cloudIcoPath, owner);
                 }
             }
+
             return created;
         }
 
-        private static string IcoFullName(Ico ico) => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", ico + ".ico");
+        private static string IcoFullName(Ico ico) =>
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", ico + ".ico");
 
-        public static void SetDirectoryIcon(string pathDirectory, string iconFilePath)
+        public static void SetDirectoryIcon(string pathDirectory, string iconFilePath, (uint, uint)? owner)
         {
             if (Environment.OSVersion.Platform == PlatformID.Win32NT)
             {
@@ -580,18 +678,46 @@ namespace CloudSync
                     if (File.Exists(iniPath))
                     {
                         //remove hidden and system attributes to make ini file writable
-                        File.SetAttributes(iniPath, File.GetAttributes(iniPath) & ~(FileAttributes.Hidden | FileAttributes.System));
+                        File.SetAttributes(iniPath,
+                            File.GetAttributes(iniPath) & ~(FileAttributes.Hidden | FileAttributes.System));
                     }
+
                     //create new ini file with the required contents
                     File.WriteAllText(iniPath, iniContents);
 
                     //hide the ini file and set it as system
-                    File.SetAttributes(iniPath, File.GetAttributes(iniPath) | FileAttributes.Hidden | FileAttributes.System);
+                    File.SetAttributes(iniPath,
+                        File.GetAttributes(iniPath) | FileAttributes.Hidden | FileAttributes.System);
                 }
-                //set the folder as system
-                File.SetAttributes(pathDirectory, File.GetAttributes(pathDirectory) | FileAttributes.System);
+            }
+            if (Environment.OSVersion.Platform == PlatformID.Unix)
+            {
+                var iniPath = Path.Combine(pathDirectory, ".directory");
+                var iniContents = new StringBuilder()
+                    .AppendLine("[Desktop Entry]")
+                    .AppendLine($"Icon={iconFilePath}")
+                    .ToString();
+                var iniNow = File.Exists(iniPath) ? File.ReadAllText(iniPath) : string.Empty;
+                if (iniContents != iniNow)
+                {
+                    if (File.Exists(iniPath))
+                    {
+                        //remove hidden and system attributes to make ini file writable
+                        File.SetAttributes(iniPath,
+                            File.GetAttributes(iniPath) & ~(FileAttributes.Hidden | FileAttributes.System));
+                    }
+
+                    //create new ini file with the required contents
+                    File.WriteAllText(iniPath, iniContents);
+
+                    //hide the ini file and set it as system
+                    File.SetAttributes(iniPath,
+                        File.GetAttributes(iniPath) | FileAttributes.Hidden | FileAttributes.System);
+                }
+                SetOwner(owner, pathDirectory);
             }
         }
+
         public static void AddDesktopAndFavoritesShortcut(string fullName, Ico ico = Ico.Cloud)
         {
             AddShortcut(fullName, DesktopPath(), ico);
@@ -620,7 +746,50 @@ end tell";
 
         public static string DesktopPath()
         {
-            return RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), nameof(Environment.SpecialFolder.Desktop)) : Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            else
+            {
+                var desktopUser = GetDesktopEnvironmentUser();
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                {
+                    return $"/Users/{desktopUser}/Desktop";
+                }
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                {
+                    return $"/home/{desktopUser}/Desktop";
+                }
+            }
+            return null; // os not supported
+        }
+
+        /// <summary>
+        /// Get the user logged in to the desktop environment
+        /// </summary>
+        /// <returns></returns>
+        public static string GetDesktopEnvironmentUser()
+        {
+            var desktop = (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) ? "seat" : "console";
+
+            Process process = new Process();
+            process.StartInfo.FileName = "bash";
+            process.StartInfo.Arguments = $"-c \"who\"";
+            process.StartInfo.UseShellExecute = false;
+            process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.CreateNoWindow = true;
+            process.Start();
+            string output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            string[] lines = output.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var line in lines)
+            {
+                string[] parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts[1].StartsWith(desktop))
+                {
+                    return parts[0];
+                }
+            }
+            return null;
         }
 
         /// <summary>
@@ -687,7 +856,8 @@ end tell";
 
         public class BlockRange
         {
-            public BlockRange(ulong? betweenHasBlock, int betweenHasBlockIndex, ulong? betweenReverseHasBlock, int betweenReverseHasBlockIndex)
+            public BlockRange(ulong? betweenHasBlock, int betweenHasBlockIndex, ulong? betweenReverseHasBlock,
+                int betweenReverseHasBlockIndex)
             {
                 BetweenHasBlock = betweenHasBlock;
                 BetweenHasBlockIndex = betweenHasBlockIndex;
@@ -698,28 +868,42 @@ end tell";
                     System.Diagnostics.Debugger.Break(); // wrong !
                 if (BetweenReverseHasBlock == null && BetweenReverseHasBlockIndex != -1)
                     System.Diagnostics.Debugger.Break(); // wrong !
-#endif                      
+#endif
             }
 
-            public BlockRange(byte[] betweenHasBlockBinary, byte[] betweenHasBlockIndex, byte[] betweenReverseHasBlockBinary, byte[] betweenReverseHasBlockPIndex)
+            public BlockRange(byte[] betweenHasBlockBinary, byte[] betweenHasBlockIndex,
+                byte[] betweenReverseHasBlockBinary, byte[] betweenReverseHasBlockPIndex)
             {
-                BetweenHasBlock = betweenHasBlockBinary.Length == 8 ? BitConverter.ToUInt64(betweenHasBlockBinary, 0) : (ulong?)null;
+                BetweenHasBlock = betweenHasBlockBinary.Length == 8
+                    ? BitConverter.ToUInt64(betweenHasBlockBinary, 0)
+                    : (ulong?)null;
                 BetweenHasBlockIndex = BitConverter.ToInt32(betweenHasBlockIndex, 0);
-                BetweenReverseHasBlock = betweenReverseHasBlockBinary.Length == 8 ? BitConverter.ToUInt64(betweenReverseHasBlockBinary, 0) : (ulong?)null;
+                BetweenReverseHasBlock = betweenReverseHasBlockBinary.Length == 8
+                    ? BitConverter.ToUInt64(betweenReverseHasBlockBinary, 0)
+                    : (ulong?)null;
                 BetweenReverseHasBlockIndex = BitConverter.ToInt32(betweenReverseHasBlockPIndex, 0);
 #if (DEBUG)
                 if (BetweenHasBlock == null && BetweenHasBlockIndex != -1)
                     System.Diagnostics.Debugger.Break(); // wrong !
                 if (BetweenReverseHasBlock == null && BetweenReverseHasBlockIndex != -1)
                     System.Diagnostics.Debugger.Break(); // wrong !
-#endif                      
+#endif
             }
+
             public readonly ulong? BetweenHasBlock;
-            public byte[] BetweenHasBlockBynary => BetweenHasBlock == null ? new byte[] { } : BitConverter.GetBytes((ulong)BetweenHasBlock);
+
+            public byte[] BetweenHasBlockBynary => BetweenHasBlock == null
+                ? new byte[] { }
+                : BitConverter.GetBytes((ulong)BetweenHasBlock);
+
             public readonly int BetweenHasBlockIndex;
             public byte[] BetweenHasBlockIndexBinary => BitConverter.GetBytes(BetweenHasBlockIndex);
             public readonly ulong? BetweenReverseHasBlock;
-            public byte[] BetweenReverseHasBlockBynary => BetweenReverseHasBlock == null ? new byte[] { } : BitConverter.GetBytes((ulong)BetweenReverseHasBlock);
+
+            public byte[] BetweenReverseHasBlockBynary => BetweenReverseHasBlock == null
+                ? new byte[] { }
+                : BitConverter.GetBytes((ulong)BetweenReverseHasBlock);
+
             public readonly int BetweenReverseHasBlockIndex;
             public byte[] BetweenReverseHasBlockIndexBinary => BitConverter.GetBytes(BetweenReverseHasBlockIndex);
 
@@ -742,13 +926,16 @@ end tell";
         /// <param name="returnHashBlocks">Return hash block if delimitsRange is null</param>
         /// <param name="delimitsRange">An object that indicates the portion of the FileTable hash to take</param>
         /// <returns></returns>
-        public static HashFileTable GetRestrictedHashFileTable(HashFileTable hashFileTable, out byte[] returnHashBlocks, BlockRange delimitsRange = null)
+        public static HashFileTable GetRestrictedHashFileTable(HashFileTable hashFileTable, out byte[] returnHashBlocks,
+            BlockRange delimitsRange = null)
         {
             var returnValue = delimitsRange == null ? null : new HashFileTable();
             var elementInBlock = delimitsRange == null ? null : new List<KeyValuePair<ulong, HashFileTable>>();
             var elementInBlockReverse = delimitsRange == null ? null : new List<KeyValuePair<ulong, HashFileTable>>();
             var hashList = new List<byte[]>();
-            void hashBlock(IEnumerable<KeyValuePair<ulong, FileSystemInfo>> hashTable, ref List<byte[]> result, ref List<KeyValuePair<ulong, HashFileTable>> outElementInBlock)
+
+            void hashBlock(IEnumerable<KeyValuePair<ulong, FileSystemInfo>> hashTable, ref List<byte[]> result,
+                ref List<KeyValuePair<ulong, HashFileTable>> outElementInBlock)
             {
                 var toAdd = outElementInBlock == null ? null : new HashFileTable();
                 ulong hash1 = 0;
@@ -769,13 +956,16 @@ end tell";
                         hash2 = 0;
                         if (outElementInBlock != null)
                         {
-                            outElementInBlock.Add(new KeyValuePair<ulong, HashFileTable>(BitConverter.ToUInt64(hash, 0), toAdd));
+                            outElementInBlock.Add(
+                                new KeyValuePair<ulong, HashFileTable>(BitConverter.ToUInt64(hash, 0), toAdd));
                             toAdd = new HashFileTable();
                         }
                     }
+
                     n++;
                 }
             }
+
             hashBlock(hashFileTable, ref hashList, ref elementInBlock);
             hashBlock(hashFileTable.Reverse(), ref hashList, ref elementInBlockReverse);
 
@@ -793,22 +983,31 @@ end tell";
             else
             {
                 returnHashBlocks = null;
-                if (!PerformRange(false, ref elementInBlock, ref returnValue, delimitsRange.TakeAll, delimitsRange.BetweenHasBlock, delimitsRange.BetweenHasBlockIndex))
-                    return null; // There is no block in the requested position, the operation must be canceled because there is something wrong
+                if (!PerformRange(false, ref elementInBlock, ref returnValue, delimitsRange.TakeAll,
+                        delimitsRange.BetweenHasBlock, delimitsRange.BetweenHasBlockIndex))
+                    return
+                        null; // There is no block in the requested position, the operation must be canceled because there is something wrong
 
-                if (!PerformRange(true, ref elementInBlock, ref returnValue, delimitsRange.ReverseTakeAll, delimitsRange.BetweenReverseHasBlock, delimitsRange.BetweenReverseHasBlockIndex))
-                    return null; // There is no block in the requested position, the operation must be canceled because there is something wrong
+                if (!PerformRange(true, ref elementInBlock, ref returnValue, delimitsRange.ReverseTakeAll,
+                        delimitsRange.BetweenReverseHasBlock, delimitsRange.BetweenReverseHasBlockIndex))
+                    return
+                        null; // There is no block in the requested position, the operation must be canceled because there is something wrong
             }
+
             return returnValue;
         }
 
-        private static bool PerformRange(bool reverseStep, ref List<KeyValuePair<ulong, HashFileTable>> elementInBlock, ref HashFileTable returnValue, bool takeAll, ulong? betweenHasBlock, int betweenHasBlockIndex)
+        private static bool PerformRange(bool reverseStep, ref List<KeyValuePair<ulong, HashFileTable>> elementInBlock,
+            ref HashFileTable returnValue, bool takeAll, ulong? betweenHasBlock, int betweenHasBlockIndex)
         {
             var startIndex = takeAll ? 0 : betweenHasBlockIndex;
-            if (betweenHasBlockIndex != -1 && (elementInBlock.Count <= betweenHasBlockIndex || elementInBlock[betweenHasBlockIndex].Key != betweenHasBlock))
+            if (betweenHasBlockIndex != -1 && (elementInBlock.Count <= betweenHasBlockIndex ||
+                                               elementInBlock[betweenHasBlockIndex].Key != betweenHasBlock))
             {
-                return false; // There is no block in the requested position, the operation must be canceled because there is something wrong
+                return
+                    false; // There is no block in the requested position, the operation must be canceled because there is something wrong
             }
+
             if (!reverseStep)
             {
                 for (var i = startIndex; i < elementInBlock.Count; i++)
@@ -835,6 +1034,7 @@ end tell";
                     }
                 }
             }
+
             return true;
         }
 
@@ -849,7 +1049,9 @@ end tell";
             HashBlockComparer(reverseRemote, reverseLocal, out var lastHashReverse, out var indexReverse);
             return new BlockRange(lastHashStraight, indexStraight, lastHashReverse, indexReverse);
         }
-        private static void HashBlockComparer(byte[] hashBlocksRemote, byte[] hashBlocksLocal, out ulong? lastHashMatch, out int index)
+
+        private static void HashBlockComparer(byte[] hashBlocksRemote, byte[] hashBlocksLocal, out ulong? lastHashMatch,
+            out int index)
         {
             lastHashMatch = null;
             index = -1;
@@ -896,7 +1098,8 @@ end tell";
         /// <param name="preserveSize">Space limit to preserve, default is one gigabyte. If the free space is less then it will return false, or generate an error if set by parameter throwError. If this value is less than MinimumPreserveDiskSize, then MinimumPreserveDiskSize will still be treated as the value.</param>
         /// <returns>True if space is not running low</returns>
         /// <exception cref="Exception">If set by parameter, an exception can be generated if the space is close to running out</exception>
-        public static bool PreserveDriveSpace(string path, bool throwError = false, long preserveSize = MinimumPreserveDiskSize)
+        public static bool PreserveDriveSpace(string path, bool throwError = false,
+            long preserveSize = MinimumPreserveDiskSize)
         {
             if (preserveSize < MinimumPreserveDiskSize)
                 preserveSize = MinimumPreserveDiskSize;
@@ -912,261 +1115,9 @@ end tell";
         /// </summary>
         private const long MinimumPreserveDiskSize = 1000000000;
 
-        public static Exception DriveFullException { get { return new Exception("Disk full beyond the allowed limit"); } }
-
-        /// <summary>
-        /// Write binary data in append to a file, retrying if the file is busy with other processes.
-        /// </summary>
-        /// <param name="fileName">File name</param>
-        /// <param name="data">Binary data to write</param>
-        /// <param name="exception">Returns any errors encountered in performing the operation</param>
-        /// <param name="attempts">number of attempts</param>
-        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt</param>
-        /// <param name="chunkSize">Set a value different of 0 to check a file size if is consistent with the chunk size size</param>
-        /// <param name="chunkNumber">Chunk number (base 1) if chunk size is different of 0</param>
-        /// <returns>True for successful</returns>
-        public static bool FileAppend(string fileName, byte[] data, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50, int chunkSize = 0, uint chunkNumber = 0)
+        public static Exception DriveFullException
         {
-            if (!PreserveDriveSpace(fileName))
-            {
-                exception = DriveFullException;
-                return false;
-            }
-            exception = null;
-            for (int numTries = 0; numTries < attempts; numTries++)
-            {
-                try
-                {
-                    using (var fs = File.OpenWrite(fileName))
-                    {
-                        if (chunkNumber == 1)
-                        {
-                            fs.SetLength(0);
-                            fs.Position = 0;
-                        }
-                        if (chunkSize > 0)
-                        {
-                            var expectedPart = fs.Length / DefaultChunkSize + 1;
-                            if (expectedPart != chunkNumber)
-                                return false;
-                        }
-                        fs.Position = fs.Length; // append
-                        fs.Write(data, 0, data.Length);
-                        fs.Flush();
-                        return true;
-                    }
-                }
-                catch (IOException ex)
-                {
-                    exception = ex;
-                    Thread.Sleep(pauseBetweenAttempts);
-                }
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Delete a file and retrying if the file is busy with other processes.
-        /// </summary>
-        /// <param name="fileName">The fully qualified name of the file</param>
-        /// <param name="exception">Returns any errors encountered in performing the operation</param>
-        /// <param name="attempts">number of attempts</param>
-        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in milliseconds)</param>
-        /// <returns>True for successful</returns>
-        public static bool FileDelete(string fileName, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
-        {
-            exception = null;
-            var fileInfo = new FileInfo(fileName);
-            if (fileInfo.Exists)
-            {
-                for (int numTries = 0; numTries < attempts; numTries++)
-                {
-                    try
-                    {
-                        DeleteFile(fileInfo);
-                        return true;
-                    }
-                    catch (IOException ex)
-                    {
-                        exception = ex;
-                        Thread.Sleep(pauseBetweenAttempts);
-                    }
-                }
-            }
-            return false;
-        }
-        private static void DeleteFile(FileInfo fileInfo)
-        {
-            if (fileInfo.Attributes != FileAttributes.Normal)
-                fileInfo.Attributes = FileAttributes.Normal;
-            fileInfo.Delete();
-            fileInfo.Refresh();
-            while (fileInfo.Exists)
-            {
-                Thread.Sleep(100);
-                fileInfo.Refresh();
-            }
-        }
-
-        /// <summary>
-        /// Delete a directory and retrying if any error occur.
-        /// </summary>
-        /// <param name="directoryName">The fully qualified name of the directory</param>
-        /// <param name="exception">Returns any errors encountered in performing the operation</param>
-        /// <param name="attempts">number of attempts</param>
-        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in milliseconds)</param>
-        /// <returns>True for successful</returns>
-        public static bool DirectoryDelete(string directoryName, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
-        {
-            exception = null;
-            for (int numTries = 0; numTries < attempts; numTries++)
-            {
-                try
-                {
-                    ForceDeleteDirectory(directoryName);
-                    return true;
-                }
-                catch (IOException ex)
-                {
-                    exception = ex;
-                    Thread.Sleep(pauseBetweenAttempts);
-                }
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// https://stackoverflow.com/questions/611921/how-do-i-delete-a-directory-with-read-only-files-in-c
-        /// </summary>
-        /// <param name="path"></param>
-        private static void ForceDeleteDirectory(string path)
-        {
-            var directory = new DirectoryInfo(path);
-            if (directory.Exists)
-            {
-                directory.Attributes = FileAttributes.Normal;
-                foreach (var info in directory.GetFileSystemInfos("*", SearchOption.AllDirectories))
-                    info.Attributes = FileAttributes.Normal;
-                directory.Delete(true);
-            }
-        }
-
-
-        /// <summary>
-        /// Create a directory and retrying if any error occur.
-        /// </summary>
-        /// <param name="directoryName">The fully qualified name of the directory</param>
-        /// <param name="exception">Returns any errors encountered in performing the operation</param>
-        /// <param name="attempts">number of attempts</param>
-        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in milliseconds)</param>
-        /// <returns>True for successful</returns>
-        public static bool DirectoryCreate(string directoryName, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
-        {
-            if (!PreserveDriveSpace(directoryName))
-            {
-                exception = DriveFullException;
-                return false;
-            }
-            exception = null;
-            for (int numTries = 0; numTries < attempts; numTries++)
-            {
-                try
-                {
-                    var directory = new DirectoryInfo(directoryName);
-                    directory.Create();
-                    return true;
-                }
-                catch (IOException ex)
-                {
-                    exception = ex;
-                    Thread.Sleep(pauseBetweenAttempts);
-                }
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Move a file (copy from source to target and delete source) and retrying if any error occur.
-        /// </summary>
-        /// <param name="source">Source file name</param>
-        /// <param name="target">Target file name</param>
-        /// <param name="exception">Returns any errors encountered in performing the operation</param>
-        /// <param name="attempts">number of attempts</param>
-        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in milliseconds)</param>
-        /// <returns>True for successful</returns>
-        public static bool FileMove(string source, string target, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
-        {
-            if (!PreserveDriveSpace(target))
-            {
-                exception = DriveFullException;
-                return false;
-            }
-            exception = null;
-            if (File.Exists(source))
-            {
-                for (int numTries = 0; numTries < attempts; numTries++)
-                {
-                    try
-                    {
-                        File.Move(source, target);
-                        return true;
-                    }
-                    catch (IOException ex)
-                    {
-                        exception = ex;
-                        Thread.Sleep(pauseBetweenAttempts);
-                    }
-                }
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Copy a file (copy from source to target) and retrying if any error occur.
-        /// </summary>
-        /// <param name="source">Source file name</param>
-        /// <param name="target">Target file name</param>
-        /// <param name="exception">Returns any errors encountered in performing the operation</param>
-        /// <param name="attempts">number of attempts</param>
-        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in milliseconds)</param>
-        /// <returns>True for successful</returns>
-        public static bool FileCopy(string source, string target, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
-        {
-            if (!PreserveDriveSpace(target))
-            {
-                exception = DriveFullException;
-                return false;
-            }
-            exception = null;
-            if (File.Exists(source))
-            {
-                for (int numTries = 0; numTries < attempts; numTries++)
-                {
-                    try
-                    {
-                        FileCopy(source, target);
-                        return true;
-                    }
-                    catch (Exception ex)
-                    {
-                        exception = ex;
-                        Thread.Sleep(pauseBetweenAttempts);
-                    }
-                }
-            }
-            return false;
-        }
-        private static void FileCopy(string source, string target)
-        {
-            if (File.Exists(target))
-                File.Delete(target);
-            using (var outputStream = File.OpenWrite(target))
-            {
-                using (var inputStream = File.OpenRead(source))
-                {
-                    inputStream.CopyTo(outputStream);
-                }
-            }
+            get { return new Exception("Disk full beyond the allowed limit"); }
         }
 
 
@@ -1183,6 +1134,7 @@ end tell";
                 {
                     RecordError(exception);
                 }
+
                 // Restart application after crash
                 Thread.Sleep(600000); // 10 minutes
                 //if (Environment.ProcessPath != null)
@@ -1200,10 +1152,13 @@ end tell";
             {
                 try
                 {
-                    var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, nameof(RecordError)); ;
+                    var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, nameof(RecordError));
+                    ;
                     if (!Directory.Exists(path))
                         Directory.CreateDirectory(path);
-                    File.WriteAllText(Path.Combine(path, DateTime.UtcNow.Ticks.ToString("X") + "_" + error.HResult + ".txt"), error.ToString());
+                    File.WriteAllText(
+                        Path.Combine(path, DateTime.UtcNow.Ticks.ToString("X") + "_" + error.HResult + ".txt"),
+                        error.ToString());
                     var files = (new DirectoryInfo(path)).GetFileSystemInfos("*.txt");
                     var orderedFiles = files.OrderBy(f => f.CreationTime).Reverse().ToArray();
                     // Keep 1024 errors
@@ -1219,8 +1174,5 @@ end tell";
                 }
             }
         }
-
-
-
     }
 }

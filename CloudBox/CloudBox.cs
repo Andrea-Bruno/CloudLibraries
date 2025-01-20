@@ -24,11 +24,16 @@ namespace CloudBox
             AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionEventHandler;
         }
 #if DEBUG
-        protected readonly string TestServerPassphrase = "damage exit piece auto enough mom quantum remain sting crouch little hill";
-        protected readonly string TestClientPassphrase = "enact struggle torch clutch pear maid goose region believe predict tonight oppose";
+        protected readonly string TestServerPassphrase =
+            "damage exit piece auto enough mom quantum remain sting crouch little hill";
+
+        protected readonly string TestClientPassphrase =
+            "enact struggle torch clutch pear maid goose region believe predict tonight oppose";
 #elif DEBUG_AND
-        protected readonly string TestServerPassphrase = "rack bacon scrub mirror code music mad force step laundry boat chronic";
-        protected readonly string TestClientPassphrase = "river hint into tobacco section turn enforce lunch multiply basket police captain";
+        protected readonly string TestServerPassphrase =
+ "rack bacon scrub mirror code music mad force step laundry boat chronic";
+        protected readonly string TestClientPassphrase =
+ "river hint into tobacco section turn enforce lunch multiply basket police captain";
 #endif
 
         /// <summary>
@@ -41,10 +46,12 @@ namespace CloudBox
         /// <param name="name">A label name to assign to this instance (this does not affect how the cloud works)</param>
         /// <param name="doNotCreateSpecialFolders">If instantiated as a server it will automatically create specific subdirectories for documents, photos, etc., unless this parameter is specified</param>
         /// <param name="syncIsEnabled"> False to suspend sync, or true. It is important to suspend synchronization if the path is not available (for example when using virtual disks)! Indicate true if the path to the cloud space is reachable (true), or unmounted virtual disk (false). Use IsReachableDiskStateIsChanged to notify that access to the cloud path has changed.</param>
-        public CloudBox(string cloudPath = null, bool isServer = false, ulong? id = null, string licenseOEM = null, string name = null, bool doNotCreateSpecialFolders = false, bool syncIsEnabled = true)
+        public CloudBox(string cloudPath = null, bool isServer = false, ulong? id = null, string licenseOEM = null,
+            string name = null, bool doNotCreateSpecialFolders = false, bool syncIsEnabled = true)
         {
             SyncIsEnabled = syncIsEnabled;
-            DoNotCreateSpecialFolders = doNotCreateSpecialFolders; ;
+            DoNotCreateSpecialFolders = doNotCreateSpecialFolders;
+            ;
             _Name = name;
             //if (string.IsNullOrEmpty(routerEntryPoint))
             //{
@@ -82,7 +89,8 @@ namespace CloudBox
         /// <param name="document">The file you are signing (in the form of binary data)</param>
         /// <param name="saveToCloud">If true, both the document and the digital signature will be saved in the cloud area</param>
         /// <returns>Digital signature in json format</returns>
-        public string SignDocument(DigitalSignature.Scope scopeOfSignature, out string signatureFileName, string fileName, byte[] document, bool saveToCloud = true)
+        public string SignDocument(DigitalSignature.Scope scopeOfSignature, out string signatureFileName,
+            string fileName, byte[] document, bool saveToCloud = true)
         {
             var sign = new DigitalSignature(Context.My.GetPrivateKeyBinary(), scopeOfSignature, fileName, document);
             var jsonSignature = sign.Save();
@@ -96,14 +104,17 @@ namespace CloudBox
                     string signatureDir;
                     do
                     {
-                        signatureDir = Path.Combine(CloudPath, "Documents", "Signed", Path.GetFileNameWithoutExtension(fileName) + (n == 0 ? "" : n.ToString()));
+                        signatureDir = Path.Combine(CloudPath, "Documents", "Signed",
+                            Path.GetFileNameWithoutExtension(fileName) + (n == 0 ? "" : n.ToString()));
                         if (!Directory.Exists(signatureDir))
                         {
                             Directory.CreateDirectory(signatureDir);
                             break;
                         }
+
                         n++;
                     } while (true);
+
                     File.WriteAllBytes(Path.Combine(signatureDir, fileName), document);
                     File.WriteAllText(Path.Combine(signatureDir, signatureFileName), jsonSignature);
                     if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -128,25 +139,34 @@ namespace CloudBox
         {
             if (e.ExceptionObject is Exception ex)
             {
-                var description = string.Format("Exception: {0}: {1} Source: {2} {3}", ex.GetType(), ex.Message, ex.Source, ex.StackTrace);
+                var description = string.Format("Exception: {0}: {1} Source: {2} {3}", ex.GetType(), ex.Message,
+                    ex.Source, ex.StackTrace);
                 OnAppError?.Invoke(description);
             }
         }
+
         private string _Name;
 
         /// <summary>
         /// A label name to assign to this instance (this does not affect how the cloud works)
         /// </summary>
-        public string Name { get { return Context.SecureStorage.Values.Get("Name", null); } set { Context.SecureStorage.Values.Set("Name", value); } }
+        public string Name
+        {
+            get { return Context.SecureStorage.Values.Get("Name", null); }
+            set { Context.SecureStorage.Values.Set("Name", value); }
+        }
+
         /// <summary>
         /// Delegate for error events
         /// </summary>
         /// <param name="description"></param>
         public delegate void OnAppErrorEventHandler(string description);
+
         /// <summary>
         /// Event that is called when there are errors (useful for creating a log)
         /// </summary>
         public static event OnAppErrorEventHandler OnAppError;
+
         /// <summary>
         /// Unique identifier for this instance
         /// </summary>
@@ -171,8 +191,10 @@ namespace CloudBox
             }
             else
                 id = 0;
+
             return id;
         }
+
         /// <summary>
         /// Returns the list of all cloud IDs mounted under a given path
         /// </summary>
@@ -200,6 +222,7 @@ namespace CloudBox
                     }
                 }
             }
+
             return result;
         }
 
@@ -219,7 +242,7 @@ namespace CloudBox
                 if (SolveQRCode(qrCode, out routerEntryPoint, out serverPublicKey, out EncryptedQR) == false)
                     return null;
             }
-            File.WriteAllText(FileLastEntryPoint, routerEntryPoint);
+            SetStaticValue(nameof(LastEntryPoint), routerEntryPoint);
             if (Context != null)
                 Debugger.Break();
 #if DEBUG || DEBUG_AND
@@ -228,7 +251,8 @@ namespace CloudBox
 #endif
             // Creates a license activator if an OEM license is set during initialization
             var signLicense = string.IsNullOrEmpty(LicenseOEM) ? null : new OEM(LicenseOEM);
-            Context = new Context(routerEntryPoint, NetworkName, modality: Modality.Server, privateKeyOrPassphrase: passphrase, licenseActivator: signLicense, instanceId: ID.ToString())
+            Context = new Context(routerEntryPoint, NetworkName, modality: Modality.Server,
+                privateKeyOrPassphrase: passphrase, licenseActivator: signLicense, instanceId: ID.ToString())
             {
                 OnRouterConnectionChange = OnRouterConnectionChangeEvent,
                 OnCommunicationErrorEvent = OnCommunicationError
@@ -239,6 +263,7 @@ namespace CloudBox
             {
                 Name = _Name;
             }
+
             Context.OnContactEvent += OnContactEvent;
             return Context;
         }
@@ -262,7 +287,8 @@ namespace CloudBox
         /// <param name="serverPublicKey">For type 1 and 2 QR codes, the server's public key is returned</param>
         /// <param name="EncryptedQR">For type 2 QR codes (the encrypted one), it returns the encryption code and the server ID so that it can be queried and given the public key when the connection to the router is established</param>
         /// <returns></returns>
-        public static bool SolveQRCode(string qrCode, out string entryPoint, out string serverPublicKey, out Tuple<ulong, byte[]> EncryptedQR)
+        public static bool SolveQRCode(string qrCode, out string entryPoint, out string serverPublicKey,
+            out Tuple<ulong, byte[]> EncryptedQR)
         {
             entryPoint = null;
             serverPublicKey = null;
@@ -289,17 +315,19 @@ namespace CloudBox
                 }
                 else if (type > 2)
                     return false;
+
                 if (type == 0 || type == 1)
                 {
                     serverPublicKey = qr.Skip(offset).Take(33).ToBase64();
-                    var key = new PubKey(Convert.FromBase64String(serverPublicKey)); // pub key validator (throw error if is wrong)
+                    var key = new PubKey(
+                        Convert.FromBase64String(serverPublicKey)); // pub key validator (throw error if is wrong)
                     offset += 33;
                 }
+
                 var ep = qr.Skip(offset).ToASCII();
                 if (string.IsNullOrEmpty(ep))
                 {
 #if RELEASE
-
                     ShowEntryPoint = false;
                     ep = "server.tc0.it";
 #elif DEBUG
@@ -322,10 +350,9 @@ namespace CloudBox
             {
                 return false;
             }
+
             return true;
         }
-
-        protected static readonly string FileLastEntryPoint = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LastEntryPoint");
 
         /// <summary>
         /// Last client entry. If the application was used as a client and the client was logged in, this function returns the last entry point used. Null if the application was not logged in as a client.
@@ -333,7 +360,7 @@ namespace CloudBox
         /// <returns>Entry point (Url or IP), or null</returns>
         public static string LastEntryPoint()
         {
-            return File.Exists(FileLastEntryPoint) ? File.ReadAllText(FileLastEntryPoint) : null;
+            return GetStaticValue(nameof(LastEntryPoint));
         }
 
         /// <summary>
@@ -349,18 +376,22 @@ namespace CloudBox
         /// <param name="credential">At the first synchronization, the credentials for logging in to the server must be passed</param>
         public void StartSync(LoginCredential credential = null)
         {
-            Sync = new Sync(SendSyncCommand, out OnSyncCommand, Context.SecureStorage, CloudPath, credential, DoNotCreateSpecialFolders, SyncIsEnabled);
+            Sync = new Sync(SendSyncCommand, out OnSyncCommand, Context.SecureStorage, CloudPath, credential,
+                DoNotCreateSpecialFolders, SyncIsEnabled, Owner);
             // Sync.OnNotification += (fromUserId, notice) => OnNotificationAction?.Invoke(fromUserId, notice);
-            Sync.OnNotification += (fromUserId, notice) => OnNotificationActionList.Concat(new[] { OnNotificationAction }).ToList().ForEach(x => x?.Invoke(fromUserId, notice));
+            Sync.OnNotification += (fromUserId, notice) => OnNotificationActionList
+                .Concat(new[] { OnNotificationAction }).ToList().ForEach(x => x?.Invoke(fromUserId, notice));
             Sync.OnLocalSyncStatusChanges += (syncStatus, pendingFiles) =>
             {
                 SyncStatus = syncStatus;
                 PendingFiles = pendingFiles;
                 // OnLocalSyncStatusChangesAction?.Invoke(syncStatus, pendingFiles);
-                OnLocalSyncStatusChangesActionList.Concat(new[] { OnLocalSyncStatusChangesAction }).ToList().ForEach(x => x?.Invoke(syncStatus, pendingFiles));
+                OnLocalSyncStatusChangesActionList.Concat(new[] { OnLocalSyncStatusChangesAction }).ToList()
+                    .ForEach(x => x?.Invoke(syncStatus, pendingFiles));
             };
             Sync.OnFileTransfer += fileTransfer => TransferredFiles.UpdateList(fileTransfer);
-            Sync.OnCommandEvent += (userId, command, infoData, isOutput) => OnCommands.AddOnCommand(userId, command, infoData, isOutput);
+            Sync.OnCommandEvent += (userId, command, infoData, isOutput) =>
+                OnCommands.AddOnCommand(userId, command, infoData, isOutput);
             Sync.OnFileError += (error, fileName) => AddFileError(error.Message, fileName);
             Sync.OnAntivirus += (message, fileName) => AddAntivirusWarning(message, fileName);
             OnSyncStart?.Set();
@@ -374,7 +405,16 @@ namespace CloudBox
         /// <summary>
         /// IWhen the value is set to false, a synchronization activity is suspended.
         /// </summary>
-        private bool SyncIsEnabled { get { return _IsEnabled; } set { _IsEnabled = value; Sync?.SetSyncState(value); } }
+        private bool SyncIsEnabled
+        {
+            get { return _IsEnabled; }
+            set
+            {
+                _IsEnabled = value;
+                Sync?.SetSyncState(value);
+            }
+        }
+
         private bool _IsEnabled = true;
 
 
@@ -412,7 +452,8 @@ namespace CloudBox
         /// <param name="fileName">Filename</param>
         public void AddAntivirusWarning(string message, string fileName)
         {
-            AntivirusWarnings.Insert(0, new FileError() { Time = DateTime.UtcNow, Error = message, FileName = fileName });
+            AntivirusWarnings.Insert(0,
+                new FileError() { Time = DateTime.UtcNow, Error = message, FileName = fileName });
             if (AntivirusWarnings.Count > 100)
                 AntivirusWarnings.RemoveAt(AntivirusWarnings.Count - 1);
         }
@@ -432,10 +473,12 @@ namespace CloudBox
             /// Time of error
             /// </summary>
             public DateTime Time { get; set; }
+
             /// <summary>
             /// Error description
             /// </summary>
             public string Error { get; set; }
+
             /// <summary>/// Full path and file name
             /// </summary>
             public string FileName { get; set; }
@@ -443,25 +486,33 @@ namespace CloudBox
 
         public readonly FileTransferList TransferredFiles = new FileTransferList();
         public readonly OnCommandList OnCommands = new OnCommandList();
+
         /// <summary>
         /// Procedure that is performed upon receipt of a notification from the remote machine. Can be used as an event to check the status of the remote machine.
         /// </summary>
         public Sync.OnNotificationEvent OnNotificationAction;
-        protected readonly List<Sync.OnNotificationEvent> OnNotificationActionList = new List<Sync.OnNotificationEvent>();
+
+        protected readonly List<Sync.OnNotificationEvent> OnNotificationActionList =
+            new List<Sync.OnNotificationEvent>();
+
         /// <summary>
         /// Event that fires when the sync status changes
         /// </summary>
         public Sync.StatusEventHandler OnLocalSyncStatusChangesAction;
-        protected readonly List<Sync.StatusEventHandler> OnLocalSyncStatusChangesActionList = new List<Sync.StatusEventHandler>();
+
+        protected readonly List<Sync.StatusEventHandler> OnLocalSyncStatusChangesActionList =
+            new List<Sync.StatusEventHandler>();
 
         /// <summary>
         /// Event that tracks communication errors that occur with the remote device
         /// </summary>
         public OnErrorEvent OnCommunicationErrorEvent;
+
         /// <summary>
         /// Current status of the sync process. We recommend using the OnSyncStatusChangesAction event to update these values in the UI
         /// </summary>
         public Sync.SyncStatus SyncStatus { get; private set; }
+
         /// <summary>
         /// Number of files that are waiting to be synced. We recommend using the OnSyncStatusChangesAction event to update these values in the UI
         /// </summary>
@@ -476,12 +527,18 @@ namespace CloudBox
             if (CommunicationErrorLog.Count > 10)
                 CommunicationErrorLog.RemoveAt(CommunicationErrorLog.Count - 1);
         }
+
         /// <summary>
         /// Indicates the current status of the connection to the router. If false then the router is not connected, check the internet network, the connection of the cables to the network, etc..
         /// </summary>
         public bool IsConnected => Context != null && Context.IsConnected;
+
         private readonly string LicenseOEM;
-        private const string TestNetDefaultLicenseOEM = "3z66WQrrQnlksDQEcqt7qxABMVBgqexgH/PuY8EmIT4="; // The license activation key on TestNet (for testing)
+
+        private const string
+            TestNetDefaultLicenseOEM =
+                "3z66WQrrQnlksDQEcqt7qxABMVBgqexgH/PuY8EmIT4="; // The license activation key on TestNet (for testing)
+
         /// <summary>
         /// Returns a detailed report of this cloud server or client instance
         /// </summary>
@@ -490,7 +547,10 @@ namespace CloudBox
             get
             {
                 var sb = new StringBuilder();
-                void AddTx(string name, object value = null) => sb.AppendLine(name + ((value == null) ? "" : ": " + value));
+
+                void AddTx(string name, object value = null) =>
+                    sb.AppendLine(name + ((value == null) ? "" : ": " + value));
+
                 var version = Assembly.GetEntryAssembly().GetName().Version.ToString();
                 if (version != "1.0.0.0")
                     AddTx("Version", version);
@@ -505,6 +565,7 @@ namespace CloudBox
                         AddTx("Entry point (router address)", context?.EntryPoint.ToString());
                     AddTx("Keep Alive Failures", context?.KeepAliveFailures);
                 }
+
                 if (LicenseOEM != null)
                     AddTx("OEM Id", OEM.GetIdOEM(LicenseOEM));
                 if (LicenseOEM == TestNetDefaultLicenseOEM)
@@ -523,6 +584,7 @@ namespace CloudBox
                     AddTx("Paired to server", (ServerCloud == null ? "None" : ServerCloud.UserId + " UserId"));
                     AddTx("Logged with server", (Sync != null));
                 }
+
                 AddTx("Connected to the router", context?.IsConnected);
                 AddTx("Cloud path", CloudPath);
                 //addTx("Public IP", Util.PublicIpAddressInfo());
@@ -535,13 +597,17 @@ namespace CloudBox
                     AddTx("Last OUT (UTC)", context?.LastOUT);
                     AddTx("Last command OUT", context?.LastCommandOUT);
                 }
+
                 var sync = Sync;
                 if (sync != null)
                 {
                     AddTx("Pending operations", sync.PendingOperations);
                     // Reception
                     AddTx("# RECEPTION:");
-                    AddTx("Last Command received", sync.LastCommandReceived != default ? (int)((DateTime.UtcNow - sync.LastCommandReceived).TotalSeconds) + " seconds ago" : (IsServer ? "No client connected" : "ERROR! cloud unreachable"));
+                    AddTx("Last Command received",
+                        sync.LastCommandReceived != default
+                            ? (int)((DateTime.UtcNow - sync.LastCommandReceived).TotalSeconds) + " seconds ago"
+                            : (IsServer ? "No client connected" : "ERROR! cloud unreachable"));
                     AddTx("Total files received", sync.TotalFilesReceived);
                     AddTx("Total bytes received", sync.TotalBytesReceived);
                     AddTx("Reception file in progress", sync.ReceptionInProgress.TransferInProgress);
@@ -549,24 +615,31 @@ namespace CloudBox
                     AddTx("Total received failed by timeout", sync.ReceptionInProgress.FailedByTimeout);
                     AddTx("# SENDING:");
                     // Sending
-                    AddTx("Last Command sent", sync.LastCommandSent != default ? (int)((DateTime.UtcNow - sync.LastCommandSent).TotalSeconds) + " seconds ago" : (IsServer ? "No client connected" : "ERROR! cloud unreachable"));
+                    AddTx("Last Command sent",
+                        sync.LastCommandSent != default
+                            ? (int)((DateTime.UtcNow - sync.LastCommandSent).TotalSeconds) + " seconds ago"
+                            : (IsServer ? "No client connected" : "ERROR! cloud unreachable"));
                     AddTx("Total files sent", sync.TotalFilesSent);
                     AddTx("Total bytes sent", sync.TotalBytesSent);
                     AddTx("Sending file in progress", sync.SendingInProgress.TransferInProgress);
                     AddTx("Sending timeout", sync.SendingInProgress.TimeOutInfo());
                     AddTx("Total sent failed by timeout", sync.SendingInProgress.FailedByTimeout);
                 }
+
                 return sb.ToString();
             }
         }
+
         /// <summary>
         /// Indicates whether the status should show the Entry Point;
         /// </summary>
         private static bool ShowEntryPoint { get; set; } = true;
+
         /// <summary>
         /// True if the current instance is a cloud server, otherwise false if it is a cloud client
         /// </summary>
         public readonly bool IsServer;
+
         /// <summary>
         /// Securely get the latest instance of the created CloudBox object
         /// </summary>
@@ -580,6 +653,7 @@ namespace CloudBox
                 }
             }
         }
+
         /// <summary>
         /// List of all currently active instances
         /// </summary>
@@ -621,7 +695,7 @@ namespace CloudBox
         /// </summary>
         /// <param name="defaultPath">Returns the default root path used by the cloud unless another path is specified</param>
         /// <param name="isServer">Indicates whether you want to get the path for a server or client</param>
-        /// <param name="id">If an ID is specified then a sub directory will be added (for server paths only)</param>
+        /// <param name="id">If an ID is specified then a subdirectory will be added (for server paths only)</param>
         /// <returns>Default path of cloud</returns>
         public static string GetCloudPath(string defaultPath, bool isServer = true, ulong? id = null)
         {
@@ -633,19 +707,77 @@ namespace CloudBox
                         defaultPath = Path.Combine(defaultPath, CloudDirName + id);
                 }
                 else
-                    defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), CloudDirName);
+                {
+                    if (Owner == null && (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || RuntimeInformation.IsOSPlatform(OSPlatform.OSX)))
+                    {
+                        Owner = GetStaticValue(nameof(Owner));
+                        if (Owner == null)
+                        {
+                            Owner = Util.GetDesktopEnvironmentUser();
+                            if (String.IsNullOrEmpty(Owner))
+                                throw new Exception("Unable to determine the user associated with the cloud service");
+                            SetStaticValue(nameof(Owner), Owner);
+                        }
+                    }
+                    defaultPath = GetStaticValue(nameof(defaultPath));
+                    if (defaultPath == null)
+                    {
+                        string home;
+                        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                        {
+                            //The application is assumed to run as the root user, but the home folder must be that of the user who knows how to use the desktop environment.   
+                            home = Path.DirectorySeparatorChar +
+                                   Path.Combine(nameof(home), Owner);
+                        }
+                        else
+                        {
+                            home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                        }
+
+                        defaultPath = Path.Combine(home, CloudDirName);
+                        SetStaticValue(nameof(defaultPath), defaultPath);
+                    }
+                }
+
             return defaultPath;
         }
+        static protected void SetStaticValue(string name, string value)
+        {
+            if (value == null)
+                File.Delete(AppData(name));
+            else
+                File.WriteAllText(AppData(name), value);
+        }
+        static protected string GetStaticValue(string name)
+        {
+            var fullName = AppData(name);
+            return File.Exists(fullName) ? File.ReadAllText(fullName) : null;
+        }
+        static protected bool StaticValueExists(string name)
+        {
+            return File.Exists(AppData(name));
+        }
+        static private string AppData(string name)
+        {
+            var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AppData");
+            if (!Directory.Exists(path))
+                Directory.CreateDirectory(path);
+            return Path.Combine(path, name);
+        }
+        private static string Owner;
 
         private const string CloudDirName = "Cloud";
+
         /// <summary>
         /// You can set this item to intercept commands addressed to the cloud or server
         /// </summary>
         public ClientServerCommandEvent OnCommandEvent;
+
         /// <summary>
         /// Sync Agent: Offers all the low-level functions to sync the cloud in an encrypted and secure way
         /// </summary>
         public Sync Sync;
+
         /// <summary>
         /// It is set by Sync and is a reference to the event that is generated when a synchronization protocol command is received remotely
         /// </summary>
@@ -665,6 +797,7 @@ namespace CloudBox
         }
 
         private static readonly ushort CloudAppId = BitConverter.ToUInt16(Encoding.ASCII.GetBytes("cloud"), 0);
+
         private void SendSyncCommand(ulong? toContactId, ushort command, byte[][] values)
         {
 #if DEBUG
@@ -699,7 +832,8 @@ namespace CloudBox
         /// <param name="message">The data package received</param>
         private void OnContactEvent(Message message)
         {
-            if (message.Type == MessageFormat.MessageType.SubApplicationCommandWithParameters || message.Type == MessageFormat.MessageType.SubApplicationCommandWithData)
+            if (message.Type == MessageFormat.MessageType.SubApplicationCommandWithParameters ||
+                message.Type == MessageFormat.MessageType.SubApplicationCommandWithData)
             {
                 ushort appId = default;
                 ushort command = default;
@@ -713,6 +847,7 @@ namespace CloudBox
                     message.GetSubApplicationCommandWithData(out appId, out command, out var data);
                     parameters = new List<byte[]>(new[] { data });
                 }
+
                 if (appId == CloudAppId) // The server application that communicates with smartphones
                 {
                     var answeredToCommand = (Command)command;
@@ -748,6 +883,7 @@ namespace CloudBox
                         text += cloudBox.Status + Environment.NewLine;
                     }
                 }
+
                 return text;
             }
         }

@@ -1,10 +1,6 @@
-﻿using SecureStorage;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Net.NetworkInformation;
-using System.Runtime.CompilerServices;
 using static CloudSync.Util;
 
 namespace CloudSync

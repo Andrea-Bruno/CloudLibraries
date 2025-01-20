@@ -199,6 +199,11 @@ namespace CloudSync
                         if (HashFileTable(out var hashDirTable))
                         {
                             var hash = BitConverter.ToUInt64(values[0], 0);
+                            // Check if the file was intentionally deleted
+                            if (HashFileList.ContainsItem(ScopeType.Deleted, hash, out _))
+                            {
+                                return;
+                            }
                             var chunkPart = BitConverter.ToUInt32(values[1], 0);
                             infoData = "#" + chunkPart + " " + hash;
                             if (hashDirTable.TryGetValue(hash, out var fileSystemInfo))
@@ -214,6 +219,11 @@ namespace CloudSync
                     else if (command == Commands.SendChunkFile)
                     {
                         var hashFileName = BitConverter.ToUInt64(values[0], 0);
+                        // Check if the file was intentionally deleted
+                        if (HashFileList.ContainsItem(ScopeType.Deleted, hashFileName, out _))
+                        {
+                            return;
+                        }
                         var part = BitConverter.ToUInt32(values[1], 0);
                         var total = BitConverter.ToUInt32(values[2], 0);
                         var data = values[3];
@@ -280,11 +290,11 @@ namespace CloudSync
                                     else
                                     {
                                         var targetDirectory = new FileInfo(target).Directory;
-                                        DirectoryCreate(targetDirectory.FullName, out Exception exception1);
+                                        DirectoryCreate(targetDirectory.FullName, Owner, out Exception exception1);
                                         if (exception1 != null)
                                             RaiseOnFileError(exception1, targetDirectory.FullName);
                                     }
-                                    FileMove(tmpFile, target, out Exception exception2);
+                                    FileMove(tmpFile, target, Owner, out Exception exception2);
                                     if (exception2 != null)
                                         RaiseOnFileError(exception2, target);
                                     fileInfo.LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp);
@@ -319,6 +329,7 @@ namespace CloudSync
                             {
                                 if (fileInfo.UnixLastWriteTimestamp() == timestamp)
                                 {
+                                    AddDeletedByRemoteRequest(hash);
                                     FileDelete(fileInfo.FullName, out Exception exception);
                                     if (exception != null)
                                         RaiseOnFileError(exception, fileInfo.FullName);
@@ -350,7 +361,7 @@ namespace CloudSync
                                 SendNotification(fromUserId, Notice.FullSpace);
                                 return;
                             }
-                        DirectoryCreate(fullDirectoryName, out Exception exception);
+                        DirectoryCreate(fullDirectoryName, Owner, out Exception exception);
                         if (exception != null)
                             RaiseOnFileError(exception, fullDirectoryName);
                         var hash = HashFileName(values[0].ToText(), true);

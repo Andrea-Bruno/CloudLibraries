@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
-using System.Threading;
 using static CloudSync.Util;
 
 namespace CloudSync
@@ -134,6 +133,11 @@ namespace CloudSync
 
         private void RequestChunkFile(ulong? toUserId, ulong hash, uint chunkPart, bool isReceptFileCompleted = false)
         {
+            // Check if the file was intentionally deleted
+            if (HashFileList.ContainsItem(ScopeType.Deleted, hash, out _))
+            {
+                return;
+            }
             if (isReceptFileCompleted)
                 ReceptionInProgress.Completed(hash, (ulong)toUserId);
             else
@@ -158,6 +162,12 @@ namespace CloudSync
             try
             {
 #endif
+            var hashFileName = fileSystemInfo.HashFileName(this);
+            // Check if the file was intentionally deleted
+            if (HashFileList.ContainsItem(ScopeType.Deleted, hashFileName, out _))
+            {
+                return;
+            }
             if (Spooler.RemoteDriveOverLimit)
                 return; // The remote disk is full, do not send any more data
             if (fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory))
@@ -166,7 +176,6 @@ namespace CloudSync
             }
             else
             {
-                var hashFileName = fileSystemInfo.HashFileName(this);
                 var tmpFile = GetTmpFile(this, toUserId, hashFileName);
                 if (!File.Exists(tmpFile)) // old if (chunkPart == 1)
                 {
