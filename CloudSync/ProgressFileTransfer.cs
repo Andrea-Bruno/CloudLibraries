@@ -45,8 +45,6 @@ namespace CloudSync
                 {
                     TimeoutChunkFileToTransfer.Remove(hashFileName);
                 }
-            //if (executeNext)
-            //    Context.Spooler.ExecuteNext(userId);
         }
         /// <summary>
         /// When file transfer starts, this method sets the timeout. When the timeout expires, the transfer will be considered failed.

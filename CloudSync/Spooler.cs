@@ -42,10 +42,6 @@ namespace CloudSync
         public void AddOperation(OperationType type, ulong? userId, ulong hashFile)
         {
             // Check if the file was intentionally deleted            
-            if (HashFileList.ContainsItem(ScopeType.Deleted, hashFile, out _))
-            {
-                return;
-            }
 
 #if DEBUG_AND || DEBUG
             if (Context.IsServer)
@@ -124,24 +120,20 @@ namespace CloudSync
                         Executed++;
                         var toDo = ToDoOperations.Values.ToArray()[0];
                         RemoveOperation(toDo.HashFile);
-                        // Check if the file was intentionally deleted            
-                        if (!HashFileList.ContainsItem(ScopeType.Deleted, toDo.HashFile, out _))
+                        if (toDo.Type == OperationType.Send)
                         {
-                            if (toDo.Type == OperationType.Send)
+                            if (Context.HashFileTable(out var localHashes))
                             {
-                                if (Context.HashFileTable(out var localHashes))
+                                if (localHashes.TryGetValue(toDo.HashFile, out var fileSystemInfo))
                                 {
-                                    if (localHashes.TryGetValue(toDo.HashFile, out var fileSystemInfo))
-                                    {
-                                        Context.SendFile(toDo.UserId, fileSystemInfo);
-                                    }
-                                    // the file has been modified or no longer exists
+                                    Context.SendFile(toDo.UserId, fileSystemInfo);
                                 }
+                                // the file has been modified or no longer exists
                             }
-                            else
-                            {
-                                Context.RequestFile(toDo.UserId, toDo.HashFile);
-                            }
+                        }
+                        else
+                        {
+                            Context.RequestFile(toDo.UserId, toDo.HashFile);
                         }
                     }
                 }

@@ -376,8 +376,7 @@ namespace CloudBox
         /// <param name="credential">At the first synchronization, the credentials for logging in to the server must be passed</param>
         public void StartSync(LoginCredential credential = null)
         {
-            Sync = new Sync(SendSyncCommand, out OnSyncCommand, Context.SecureStorage, CloudPath, credential,
-                DoNotCreateSpecialFolders, SyncIsEnabled, Owner);
+            Sync = new Sync(Context.My.Id, SendSyncCommand, out OnSyncCommand, Context.SecureStorage, CloudPath, credential, DoNotCreateSpecialFolders, SyncIsEnabled, Owner);
             // Sync.OnNotification += (fromUserId, notice) => OnNotificationAction?.Invoke(fromUserId, notice);
             Sync.OnNotification += (fromUserId, notice) => OnNotificationActionList
                 .Concat(new[] { OnNotificationAction }).ToList().ForEach(x => x?.Invoke(fromUserId, notice));

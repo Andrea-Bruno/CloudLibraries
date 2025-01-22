@@ -8,6 +8,7 @@ using static CloudSync.Util;
 using HashFileTable = System.Collections.Generic.Dictionary<ulong, System.IO.FileSystemInfo>;
 using System.Linq;
 using System.Collections.Generic;
+using NBitcoin;
 
 namespace CloudSync
 {
@@ -309,8 +310,6 @@ namespace CloudSync
             {
                 SyncTimeBuffer = new Timer((o) => StartSynchronization(), null, SyncTimeBufferMs, Timeout.Infinite);
             }
-            //StartSynchronization();
-            //SyncTimeBuffer.Start();
         }
 
         /// <summary>
@@ -391,28 +390,6 @@ namespace CloudSync
 
         public DateTime LastCommandSent { get; private set; }
 
-        private void SendCommand(ulong? contactId, Commands command, string infoData, params byte[][] values)
-        {
-            if (!Disposed)
-            {
-                LastCommandSent = DateTime.UtcNow;
-                Task.Run(() =>
-                {
-                    try
-                    {
-                        Debug.WriteLine("OUT " + command);
-                        RaiseOnCommandEvent(contactId, command, infoData, true);
-                        Send.Invoke(contactId, (ushort)command, values);
-                    }
-                    catch (Exception ex)
-                    {
-                        RecordError(ex);
-                        Debugger.Break(); // Error! Investigate the cause of the error!
-                        Debug.WriteLine(ex);
-                    }
-                });
-            }
-        }
 
         private readonly SendCommandDelegate Send;
 
@@ -422,9 +399,7 @@ namespace CloudSync
             {
                 if (delimitsRange != null)
                 {
-                    hashFileTable =
-                        GetRestrictedHashFileTable(hashFileTable, out _,
-                            delimitsRange); // Returns null if the delimiterRange is invalid. In this case, all operations must be interrupted!
+                    hashFileTable = GetRestrictedHashFileTable(hashFileTable, out _, delimitsRange); // Returns null if the delimiterRange is invalid. In this case, all operations must be interrupted!
                     if (hashFileTable == null)
                     {
                         localHashStructure = null;
@@ -434,14 +409,21 @@ namespace CloudSync
 
                 var array = new byte[hashFileTable.Count * 12];
                 var offset = 0;
-                foreach (var item in hashFileTable)
-                {
-                    Buffer.BlockCopy(BitConverter.GetBytes(item.Key), 0, array, offset, 8);
-                    offset += 8;
-                    Buffer.BlockCopy(BitConverter.GetBytes(item.Value.UnixLastWriteTimestamp()), 0, array, offset, 4);
-                    offset += 4;
-                }
 
+                for (var phase = 0; phase <= 1; phase++)
+                {
+                    foreach (var item in hashFileTable)
+                    {
+                        var priority = item.Value is FileInfo fileInfo && Util.SpecialDirectories.Contains(fileInfo.DirectoryName);
+                        if ((phase == 0 && priority) || (phase == 1 && !priority))
+                        {
+                            Buffer.BlockCopy(BitConverter.GetBytes(item.Key), 0, array, offset, 8);
+                            offset += 8;
+                            Buffer.BlockCopy(BitConverter.GetBytes(item.Value.UnixLastWriteTimestamp()), 0, array, offset, 4);
+                            offset += 4;
+                        }
+                    }
+                }
                 localHashStructure = array;
                 return true;
             }
@@ -545,11 +527,10 @@ namespace CloudSync
                                         AnalyzeDirectory((DirectoryInfo)item, ref hashFileTable);
                                     }
                                 }
-                                else
+                                else  // Id a FIle
                                 {
                                     hash = item.HashFileName(this);
                                     hashFileTable.Add(hash, item);
-                                    // hashFileTable[hash] = item;
                                 }
                             }
                         }
@@ -619,7 +600,7 @@ namespace CloudSync
 #endif
                     return true;
                 }
-                OnHashFileTableChanged();
+                OnHashFileTableChanged(CacheHashFileTable);
                 hashTable = CacheHashFileTable;
 #if DEBUG && !TEST
                 timer.Stop();
@@ -639,24 +620,30 @@ namespace CloudSync
         }
 
 
-        private void OnHashFileTableChanged()
+        private void OnHashFileTableChanged(HashFileTable newHashFileTable)
         {
-            if (!HashFileList.Initialized)
+            if (!FileIdList.Initialized)
             {
-                HashFileList.Initialize(this);
+                FileIdList.Initialize(this);
+                // Remove from the deleted files list, files that may have been recovered from the recycle bin when the client was turned off
+                foreach (var item in newHashFileTable)
+                {
+                    var fileId = new FileId(item.Key, item.Value.UnixLastWriteTimestamp());
+                    var removed = FileIdList.RemoveItem(this, UserId, ScopeType.Deleted, fileId);
+                }
             }
         }
 
 
-        internal void OnUpdateHashFileList(ScopeType scope, ulong user, List<ulong> hashList)
+        internal void OnUpdateFileIdList(ScopeType scope, ulong user, List<FileId> fileIdList)
         {
             if (scope == ScopeType.Deleted)
             {
-                if (HashFileTable(out var hashFileTable))
+                foreach (var item in fileIdList.ToArray())
                 {
-                    foreach (var item in hashList.ToArray())
+                    if (CacheHashFileTable.TryGetValue(item.HashFile, out var fileSystemInfo))
                     {
-                        if (hashFileTable.TryGetValue(item, out var fileSystemInfo))
+                        if (fileSystemInfo.UnixLastWriteTimestamp() == item.UnixLastWriteTimestamp)
                         {
                             if (fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory))
                             {
@@ -668,7 +655,6 @@ namespace CloudSync
                             }
                         }
                     }
-
                 }
             }
         }

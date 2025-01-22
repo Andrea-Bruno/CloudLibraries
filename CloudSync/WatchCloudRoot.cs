@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -36,15 +37,42 @@ namespace CloudSync
                         EnableRaisingEvents = true,
                         IncludeSubdirectories = true
                     };
+                    pathWatcher.Created += (s, e) =>
+                    {
+                        if (!Util.CanBeSeen(e.FullPath))
+                            return;
+                        OnCreated(e.FullPath);
+                        RequestSynchronization();
+                    };
                     pathWatcher.Changed += (s, e) =>
                     {
+                        if (!Util.CanBeSeen(e.FullPath))
+                            return;
                         OnChanged(e.FullPath);
                         RequestSynchronization();
                     };
                     pathWatcher.Deleted += (s, e) =>
                     {
+                        if (!Util.CanBeSeen(e.FullPath, false))
+                            return;
                         OnDeleted(e.FullPath);
                         RequestSynchronization();
+                    };
+                    pathWatcher.Renamed += (s, e) =>
+                    {
+                        bool sync = false;
+                        if (Util.CanBeSeen(e.OldFullPath, false))
+                        {
+                            OnDeleted(e.OldFullPath);
+                            sync = true;
+                        }
+                        if (Util.CanBeSeen(e.FullPath))
+                        {
+                            OnCreated(e.FullPath);
+                            sync = true;
+                        }
+                        if (sync)
+                            RequestSynchronization();
                     };
                     return true;
                 }
@@ -66,21 +94,21 @@ namespace CloudSync
 
         private void OnDeleted(string fileName)
         {
-            if (HashFileTable(out var hashDirTable))
+            if (CacheHashFileTable != null)
             {
-                foreach (var item in hashDirTable.ToArray())
+                foreach (var item in CacheHashFileTable)
                 {
-                    if (item.Value.Name == fileName)
+                    if (item.Value.FullName == fileName)
                     {
                         var hash = item.Key;
-                        if (DeletedByRemoteRequest.Contains(hash))
+                        if (DeletedByRemoteRequest.Contains(new FileId(hash, item.Value.UnixLastWriteTimestamp())))
                         {
                             // File deleted by remote request
                         }
                         else
                         {
                             // File deleted locally 
-                            HashFileList.AddItem(this, UserId, ScopeType.Deleted, hash);
+                            FileIdList.AddItem(this, UserId, ScopeType.Deleted, new FileId(hash, item.Value.UnixLastWriteTimestamp()));
                         }
                         return;
                     }
@@ -88,24 +116,33 @@ namespace CloudSync
             }
         }
 
+        private void OnCreated(string fileName)
+        {
+            var fileId = new FileId(fileName, this);
+            // The file has been recovered from the recycle bin so there is no need to keep it in the deleted list anymore
+            var removed = FileIdList.RemoveItem(this, UserId, ScopeType.Deleted, fileId);
+            OnChanged(fileName);
+        }
+
         private void OnChanged(string fileName)
         {
             // Check if the file is in the path reserved for HashFileList
-            var cloudCachePath = Path.Combine(CloudRoot, HashFileList.CloudCache);
+            var cloudCachePath = Path.Combine(CloudRoot, FileIdList.CloudCache);
             if (fileName.StartsWith(cloudCachePath))
             {
                 string fileNameWithExtension = Path.GetFileName(fileName);
                 string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fileNameWithExtension);
                 if (ulong.TryParse(fileNameWithoutExtension, NumberStyles.None, CultureInfo.InvariantCulture, out var userId))
                 {
-                    if (UserId!= userId)
+                    if (UserId != userId)
                     {
                         // Use the Load method of HashFileList to update the list with the new one
-                        HashFileList.Load(this, fileName);
+                        FileIdList.Load(this, fileName);
                     }
                 }
             }
         }
+
 
         /// <summary>
         /// This function starts the synchronization request, called this function a timer will shortly launch the synchronization.
@@ -124,11 +161,11 @@ namespace CloudSync
             }
         }
 
-        private List<ulong> DeletedByRemoteRequest = new List<ulong>();
-        private void AddDeletedByRemoteRequest(ulong hashFile)
+        private List<FileId> DeletedByRemoteRequest = new List<FileId>();
+        private void AddDeletedByRemoteRequest(FileId fileId)
         {
-            DeletedByRemoteRequest.Add(hashFile);
-            if (DeletedByRemoteRequest.Count > HashFileList.MaxItems)
+            DeletedByRemoteRequest.Add(fileId);
+            if (DeletedByRemoteRequest.Count > FileIdList.MaxItems)
                 DeletedByRemoteRequest.RemoveAt(0);
         }
     }

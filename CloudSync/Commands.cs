@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using static CloudSync.Util;
 
 namespace CloudSync
@@ -133,11 +134,6 @@ namespace CloudSync
 
         private void RequestChunkFile(ulong? toUserId, ulong hash, uint chunkPart, bool isReceptFileCompleted = false)
         {
-            // Check if the file was intentionally deleted
-            if (HashFileList.ContainsItem(ScopeType.Deleted, hash, out _))
-            {
-                return;
-            }
             if (isReceptFileCompleted)
                 ReceptionInProgress.Completed(hash, (ulong)toUserId);
             else
@@ -162,12 +158,6 @@ namespace CloudSync
             try
             {
 #endif
-            var hashFileName = fileSystemInfo.HashFileName(this);
-            // Check if the file was intentionally deleted
-            if (HashFileList.ContainsItem(ScopeType.Deleted, hashFileName, out _))
-            {
-                return;
-            }
             if (Spooler.RemoteDriveOverLimit)
                 return; // The remote disk is full, do not send any more data
             if (fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory))
@@ -176,6 +166,7 @@ namespace CloudSync
             }
             else
             {
+                var hashFileName = fileSystemInfo.HashFileName(this);
                 var tmpFile = GetTmpFile(this, toUserId, hashFileName);
                 if (!File.Exists(tmpFile)) // old if (chunkPart == 1)
                 {
@@ -263,5 +254,36 @@ namespace CloudSync
         {
             SendCommand(toUserId, Commands.StatusNotification, status.ToString(), new[] { (byte)status });
         }
+
+        /// <summary>
+        /// Send the command to the remote machine which will interpret and execute it
+        /// </summary>
+        /// <param name="contactId">User ID of the machine receiving the command</param>
+        /// <param name="command">Command to execute</param>
+        /// <param name="infoData">A locally used log message containing information about the command sent.</param>
+        /// <param name="values">Parameters associated with the sent command</param>
+        private void SendCommand(ulong? contactId, Commands command, string infoData, params byte[][] values)
+        {
+            if (!Disposed)
+            {
+                LastCommandSent = DateTime.UtcNow;
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        Debug.WriteLine("OUT " + command);
+                        RaiseOnCommandEvent(contactId, command, infoData, true);
+                        Send.Invoke(contactId, (ushort)command, values);
+                    }
+                    catch (Exception ex)
+                    {
+                        RecordError(ex);
+                        Debugger.Break(); // Error! Investigate the cause of the error!
+                        Debug.WriteLine(ex);
+                    }
+                });
+            }
+        }
+
     }
 }

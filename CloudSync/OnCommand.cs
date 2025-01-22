@@ -33,7 +33,7 @@ namespace CloudSync
                     RecordError(ex);
                     Debugger.Break(); // Error! Investigate the cause of the error!
                     Debug.WriteLine(ex);
-                }                
+                }
                 OnCommandRunning--;
             });
         }
@@ -144,7 +144,11 @@ namespace CloudSync
                         {
                             Buffer.BlockCopy(structure, offset, hash8, 0, 8);
                             Buffer.BlockCopy(structure, offset + 8, timestamp4, 0, 4);
-                            remoteHashes.Add(BitConverter.ToUInt64(hash8, 0), BitConverter.ToUInt32(timestamp4, 0));
+                            var hash = BitConverter.ToUInt64(hash8, 0);
+                            var timestamp = BitConverter.ToUInt32(timestamp4, 0);
+                            // ignore files that have been intentionally deleted
+                            if (!FileIdList.ContainsItem(ScopeType.Deleted, new FileId(hash, timestamp), out _))
+                                remoteHashes.Add(hash, timestamp);
                         }
                         var delimitsRange = values.Length == 1 ? null : new BlockRange(values[1], values[2], values[3], values[4]);
                         OnSendHashStructure(fromUserId, remoteHashes, delimitsRange);
@@ -199,11 +203,6 @@ namespace CloudSync
                         if (HashFileTable(out var hashDirTable))
                         {
                             var hash = BitConverter.ToUInt64(values[0], 0);
-                            // Check if the file was intentionally deleted
-                            if (HashFileList.ContainsItem(ScopeType.Deleted, hash, out _))
-                            {
-                                return;
-                            }
                             var chunkPart = BitConverter.ToUInt32(values[1], 0);
                             infoData = "#" + chunkPart + " " + hash;
                             if (hashDirTable.TryGetValue(hash, out var fileSystemInfo))
@@ -219,11 +218,6 @@ namespace CloudSync
                     else if (command == Commands.SendChunkFile)
                     {
                         var hashFileName = BitConverter.ToUInt64(values[0], 0);
-                        // Check if the file was intentionally deleted
-                        if (HashFileList.ContainsItem(ScopeType.Deleted, hashFileName, out _))
-                        {
-                            return;
-                        }
                         var part = BitConverter.ToUInt32(values[1], 0);
                         var total = BitConverter.ToUInt32(values[2], 0);
                         var data = values[3];
@@ -269,6 +263,12 @@ namespace CloudSync
                                     var unixTimestamp = values[4].ToUint32();
                                     TotalFilesReceived++;
                                     TotalBytesReceived += length;
+                                    // Check if the file was intentionally deleted
+                                    if (FileIdList.ContainsItem(ScopeType.Deleted, new FileId(hashFileName, unixTimestamp), out _))
+                                    {
+                                        DeleteFile(fromUserId, hashFileName, unixTimestamp, fileInfo.FullName);
+                                        return;
+                                    }
                                     if (File.Exists(target))
                                     {
                                         if (fileInfo.UnixLastWriteTimestamp() > unixTimestamp)
@@ -329,7 +329,7 @@ namespace CloudSync
                             {
                                 if (fileInfo.UnixLastWriteTimestamp() == timestamp)
                                 {
-                                    AddDeletedByRemoteRequest(hash);
+                                    AddDeletedByRemoteRequest(new FileId(hash, fileInfo.UnixLastWriteTimestamp()));
                                     FileDelete(fileInfo.FullName, out Exception exception);
                                     if (exception != null)
                                         RaiseOnFileError(exception, fileInfo.FullName);

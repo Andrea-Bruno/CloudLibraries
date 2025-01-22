@@ -218,7 +218,7 @@ namespace CloudSync
             return TimeSpan.FromMilliseconds(timeOutMs);
         }
 
-        private static string GetPinsFile(SecureStorage.Storage secureStorage)
+        private static string GetPinsFile(Storage secureStorage)
         {
             var pins = secureStorage.Values.Get("pins", "");
             return pins;
@@ -230,8 +230,7 @@ namespace CloudSync
         /// <param name="pin">Pins to add</param>
         /// <param name="expiresHours">Expires in hours</param>
         /// <param name="label">A tag name indicating who the pin was assigned to (as an optional reminder)</param>
-        public static void AddPin(SecureStorage.Storage secureStorage, string pin, int expiresHours,
-            string label = null)
+        public static void AddPin(Storage secureStorage, string pin, int expiresHours, string label = null)
         {
             var pins = GetPinsFile(secureStorage);
             pins += pin + "\t" + DateTime.UtcNow.AddHours(expiresHours).ToFileTime() + "\t" + label + "\n";
@@ -312,7 +311,7 @@ namespace CloudSync
         /// </summary>
         /// <param name="context">Context object</param>
         /// <param name="pin"></param>
-        public static bool RemoveFromPins(SecureStorage.Storage secureStorage, string pin)
+        public static bool RemoveFromPins(Storage secureStorage, string pin)
         {
             bool found = false;
             string newPins = "";
@@ -345,7 +344,7 @@ namespace CloudSync
         /// </summary>
         /// <param name="context">Context</param>
         /// <returns>Pin in text format</returns>
-        public static string GetPin(SecureStorage.Storage secureStorage)
+        public static string GetPin(Storage secureStorage)
         {
             return secureStorage.Values.Get("pin", null);
         }
@@ -357,7 +356,7 @@ namespace CloudSync
         /// <param name="oldPin">Old pin (for control check)</param>
         /// <param name="newPin">New pin</param>
         /// <returns></returns>
-        public static bool SetPin(SecureStorage.Storage secureStorage, string oldPin, string newPin)
+        public static bool SetPin(Storage secureStorage, string oldPin, string newPin)
         {
             if (oldPin == GetPin(secureStorage))
             {
@@ -373,7 +372,7 @@ namespace CloudSync
         /// <param name="secureStorage">Storage</param>
         /// <param name="newPin">New pin</param>
         /// <returns>True if the pin is accepted</returns>
-        public static bool SetPin(SecureStorage.Storage secureStorage, string newPin)
+        public static bool SetPin(Storage secureStorage, string newPin)
         {
             if (int.TryParse(newPin, out var _) && newPin.Length <= 8)
             {
@@ -392,17 +391,25 @@ namespace CloudSync
         /// </summary>
         /// <param name="fileSystemInfo">System info object of file</param>
         /// <returns>A Boolean value indicating whether the file is subject to synchronization or not</returns>
-        public static bool CanBeSeen(FileSystemInfo fileSystemInfo)
+        public static bool CanBeSeen(FileSystemInfo fileSystemInfo, bool checkAttribute = true)
         {
-            if (AllowedNames.Contains(fileSystemInfo.Name))
+            if (fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory) && SpecialDirectories.Contains(fileSystemInfo.Name))
                 return true;
+            if (checkAttribute && (!fileSystemInfo.Exists || fileSystemInfo.Attributes.HasFlag(FileAttributes.Hidden)))
+                return false;
             var name = fileSystemInfo.Name.ToLower();
             var excludeExtension = ExcludeExtension.Find(x => name.EndsWith(x)) != null;
             var excludeFile = ExcludeFile.Contains(name);
-            return !fileSystemInfo.Attributes.HasFlag(FileAttributes.Hidden) && !fileSystemInfo.Name.StartsWith("_") &&
-                   !fileSystemInfo.Name.StartsWith(".") && fileSystemInfo.Exists && !excludeFile && !excludeExtension;
+            return !fileSystemInfo.Name.StartsWith("_") && !fileSystemInfo.Name.StartsWith(".") && !excludeFile && !excludeExtension;
         }
-        private static string[] AllowedNames = { HashFileList.CloudCache };
+
+        /// <summary>
+        /// Return true if it is a hidden file or not subject to synchronization between cloud client and server
+        /// </summary>
+        /// <param name="fullNameFile">Full name file</param>
+        /// <returns>A Boolean value indicating whether the file is subject to synchronization or not</returns>
+        public static bool CanBeSeen(string fullNameFile, bool checkAttribute = true) => CanBeSeen(new FileInfo(fullNameFile), checkAttribute);
+        internal static readonly string[] SpecialDirectories = { FileIdList.CloudCache };
 
         /// <summary>
         /// Convert a date to Unix timestamp format
@@ -823,14 +830,6 @@ end tell";
                     var icon = icoFullName.Replace('\\', '/');
                     writer.WriteLine("IconFile=" + icon);
                 }
-
-                //var htmlName = HttpUtility.HtmlEncode(source);
-                //using (var writer = new StreamWriter(Path.Combine(target, "cloud info.html")))
-                //{
-                //    writer.WriteLine("<head><link rel='icon' href='file:///" + icoFullName + "'/></head>");
-                //    writer.WriteLine("<body>Your cloud folder is here:");
-                //    writer.WriteLine("<a href='file:///" + htmlName + "'>" + htmlName + "</a></body>");
-                //}
             }
             else if (Environment.OSVersion.Platform == PlatformID.Unix)
             {
@@ -1128,7 +1127,7 @@ end tell";
         /// <param name="e">Unhandled exception event args</param>
         public static void UnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
-            if (!System.Diagnostics.Debugger.IsAttached)
+            if (!Debugger.IsAttached)
             {
                 if (e.ExceptionObject is Exception exception)
                 {
