@@ -36,14 +36,6 @@ namespace CloudSync
         [DllImport("libc", SetLastError = true)]
         public static extern IntPtr getpwnam(string name);
 
-        static void Main(string[] args)
-        {
-            string username = "yourusername"; // Sostituisci con il nome utente desiderato
-            var (uid, gid) = GetUserIds(username);
-
-            Console.WriteLine($"UID: {uid}, GID: {gid}");
-        }
-
         internal static (uint, uint) GetUserIds(string username)
         {
             uint uid = 0;
@@ -55,7 +47,7 @@ namespace CloudSync
 
                 if (passwdPtr == IntPtr.Zero)
                 {
-                    throw new Exception("Errore durante l'ottenimento delle informazioni sull'utente.");
+                    throw new Exception("Error getting user information.");
                 }
 
                 Passwd passwd = Marshal.PtrToStructure<Passwd>(passwdPtr);
@@ -102,10 +94,9 @@ namespace CloudSync
         public static void CreateUserFolder(string userPath, (uint, uint)? owner, bool createSubFolder = true)
         {
             var created = SetSpecialDirectory(userPath, Ico.Cloud, owner, false);
-            if (createSubFolder)
+            if (createSubFolder && DesktopEnvironmentIsStarted)
                 AddDesktopAndFavoritesShortcut(userPath);
-            var createIfNotExists = createSubFolder && new DirectoryInfo(userPath).GetDirectories()
-                    .FirstOrDefault(x => !x.Attributes.HasFlag(FileAttributes.Hidden) && !x.Name.StartsWith(".")) ==
+            var createIfNotExists = createSubFolder && new DirectoryInfo(userPath).GetDirectories().FirstOrDefault(x => !x.Attributes.HasFlag(FileAttributes.Hidden) && !x.Name.StartsWith(".")) ==
                 default;
             SetSpecialDirectory(userPath, Ico.Documents, owner, createIfNotExists: createIfNotExists);
             SetSpecialDirectory(userPath, Ico.Download, owner, createIfNotExists: createIfNotExists);
@@ -114,6 +105,11 @@ namespace CloudSync
             SetSpecialDirectory(userPath, Ico.Photos, owner, createIfNotExists: createIfNotExists);
             SetSpecialDirectory(userPath, Ico.Settings, owner, createIfNotExists: createIfNotExists);
         }
+
+        /// <summary>
+        /// Check if the desktop environment is started
+        /// </summary>
+        public static bool DesktopEnvironmentIsStarted = !RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP"));
 
         public static bool CheckConnection(Uri uri)
         {
@@ -165,7 +161,6 @@ namespace CloudSync
 
             return null;
         }
-
 
         /// <summary>
         /// An extension method to determine if an IP address is internal, as specified in RFC1918
@@ -383,8 +378,8 @@ namespace CloudSync
             return false;
         }
 
-        private static readonly List<string> ExcludeFile = new List<string> { "desktop.ini", "tmp", "temp" };
-        private static readonly List<string> ExcludeExtension = new List<string> { ".desktop" };
+        private static readonly List<string> ExcludeName = new List<string> { "desktop.ini", "tmp", "temp", "cache", "bin", "obj" };
+        private static readonly List<string> ExcludeExtension = new List<string> { ".desktop", ".tmp", ".cache" };
 
         /// <summary>
         /// Return true if it is a hidden file or not subject to synchronization between cloud client and server
@@ -399,8 +394,8 @@ namespace CloudSync
                 return false;
             var name = fileSystemInfo.Name.ToLower();
             var excludeExtension = ExcludeExtension.Find(x => name.EndsWith(x)) != null;
-            var excludeFile = ExcludeFile.Contains(name);
-            return !fileSystemInfo.Name.StartsWith("_") && !fileSystemInfo.Name.StartsWith(".") && !excludeFile && !excludeExtension;
+            var excludeName = ExcludeName.Contains(name);
+            return !fileSystemInfo.Name.StartsWith("~") && !fileSystemInfo.Name.StartsWith(".") && !fileSystemInfo.Name.EndsWith("_") && !excludeName && !excludeExtension;
         }
 
         /// <summary>
@@ -835,21 +830,69 @@ end tell";
             {
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
                 {
-                    System.Diagnostics.Process.Start("ln", "-s " + sourceFile + " " + targetDir);
+                    Process.Start("ln", "-s " + sourceFile + " " + targetDir);
                 }
-                else
+                else // Linux
                 {
                     var targetFile = Path.Combine(targetDir, fileName + ".desktop");
                     using (var writer = new StreamWriter(targetFile))
                     {
                         writer.WriteLine(@"[Desktop Entry]");
-                        writer.WriteLine(@"Type=Link");
+                        writer.WriteLine(@"Type=Application");
                         writer.WriteLine(@"Terminal=false");
                         writer.WriteLine(@"Icon=" + icoFullName);
                         writer.WriteLine(@"Name=" + fileName);
-                        writer.WriteLine(@"URL=file:///" + sourceFile);
+                        writer.WriteLine(@"Exec=xdg-open " + sourceFile);
                     }
+                    Thread.Sleep(500);
+                    SetExecutable(targetFile);
+                    AllowLaunching(targetFile);
                 }
+            }
+        }
+
+
+        // Funzione per modificare i permessi del file
+        [DllImport("libc", SetLastError = true)]
+        private static extern int chmod(string path, uint mode);
+
+        // Funzione per impostare il file come trusted (GNOME)
+        [DllImport("libgio-2.0.so.0", SetLastError = true)]
+        private static extern int g_file_set_attribute(
+            IntPtr file,
+            string attribute,
+            IntPtr valueP,
+            IntPtr cancellable,
+            out IntPtr error
+        );
+
+        const uint S_IXUSR = 0x40; // User execute permission
+
+        private static void SetExecutable(string filePath)
+        {
+            if (chmod(filePath, S_IXUSR) != 0)
+            {
+                int errno = Marshal.GetLastWin32Error();
+                Debugger.Break(); // error
+            }
+        }
+
+        private static void AllowLaunching(string filePath)
+        {
+            IntPtr file = IntPtr.Zero; // Inizializza il puntatore del file
+            IntPtr error;
+            string attribute = "metadata::trusted";
+            IntPtr valueP = Marshal.StringToHGlobalAnsi("true");
+
+            if (g_file_set_attribute(file, attribute, valueP, IntPtr.Zero, out error) != 0)
+            {
+                int errno = Marshal.GetLastWin32Error();
+                Marshal.FreeHGlobal(valueP); // Libera la memoria
+                Debugger.Break(); // error
+            }
+            else
+            {
+                Marshal.FreeHGlobal(valueP); // Libera la memoria
             }
         }
 
@@ -1131,15 +1174,26 @@ end tell";
             {
                 if (e.ExceptionObject is Exception exception)
                 {
+                    File.WriteAllText("x.txt", DateTime.Now.ToString());
                     RecordError(exception);
+                    Thread.Sleep(60000); // 1 minute
+                    RestartApplication(sender, e);
                 }
-
-                // Restart application after crash
-                Thread.Sleep(600000); // 10 minutes
-                //if (Environment.ProcessPath != null)
-                //    System.Diagnostics.Process.Start(Environment.ProcessPath);
             }
         }
+
+        public static void RestartApplication(object sender, EventArgs e)
+        {
+            Debugger.Break();
+            if (Debugger.IsAttached)
+                return;
+            if (DisallowRestartApplicationOnEnd)
+            {
+                Process.Start(Process.GetCurrentProcess().MainModule.FileName);
+            }
+        }
+
+        public static bool DisallowRestartApplicationOnEnd;
 
         /// <summary>
         /// Record an error in the local log (thus creating an error log useful for diagnostics)

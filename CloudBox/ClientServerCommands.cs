@@ -25,10 +25,25 @@ namespace CloudBox
         /// </summary>
         public enum Command : ushort // 2 byte - the names must start with Get or Set
         {
+            /// <summary>
+            /// Save data command
+            /// </summary>
             SaveData,
+            /// <summary>
+            /// Load data command
+            /// </summary>
             LoadData,
+            /// <summary>
+            /// Load all data command
+            /// </summary>
             LoadAllData,
+            /// <summary>
+            /// Delete data command
+            /// </summary>
             DeleteData,
+            /// <summary>
+            /// Push notification command
+            /// </summary>
             PushNotification,
             /// <summary>
             /// Implementation of the type 2 QR code, it is used to complete the QR code by sending part of it via proxy (in order to create a smaller QR code)
@@ -50,9 +65,9 @@ namespace CloudBox
         /// <summary>
         /// Send commands between client and server
         /// </summary>
-        /// <param name="contact"></param>
-        /// <param name="command"></param>
-        /// <param name="data"></param>
+        /// <param name="contact">Contact to send the command to</param>
+        /// <param name="command">Command to send</param>
+        /// <param name="data">Data to send</param>
         /// <returns>Returns true if the command has been forwarded, false if the connection between client and server has not been established.</returns>
         public bool SendCommand(Contact contact, Command command, byte[][] data)
         {
@@ -74,9 +89,9 @@ namespace CloudBox
         /// <summary>
         /// Send commands between client and server
         /// </summary>
-        /// <param name="ToIdUser"></param>
-        /// <param name="command"></param>
-        /// <param name="data"></param>
+        /// <param name="ToIdUser">User ID to send the command to</param>
+        /// <param name="command">Command to send</param>
+        /// <param name="data">Data to send</param>
         /// <returns>Returns true if the command has been forwarded, false if the connection between client and server has not been established.</returns>
         public bool SendCommand(ulong ToIdUser, Command command, byte[][] data)
         {

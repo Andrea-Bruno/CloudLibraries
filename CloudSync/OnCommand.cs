@@ -101,7 +101,7 @@ namespace CloudSync
                 }
                 else
                 {
-                    RestartCheckSyncTimer(); // Reset the timer that checks the synchronization (This is an additional verification check)
+                    RestartTimerClientRequestSynchronization(); // Reset the timer that checks the synchronization (This is an additional verification check)
                     if (command == Commands.Notification)
                     {
                         var notice = (Notice)values[0][0];
@@ -147,7 +147,7 @@ namespace CloudSync
                             var hash = BitConverter.ToUInt64(hash8, 0);
                             var timestamp = BitConverter.ToUInt32(timestamp4, 0);
                             // ignore files that have been intentionally deleted
-                            if (!FileIdList.ContainsItem(ScopeType.Deleted, new FileId(hash, timestamp), out _))
+                            if (!FileIdList.ContainsItem(ScopeType.Deleted, FileId.GetFileId(hash, timestamp), out _))
                                 remoteHashes.Add(hash, timestamp);
                         }
                         var delimitsRange = values.Length == 1 ? null : new BlockRange(values[1], values[2], values[3], values[4]);
@@ -264,7 +264,7 @@ namespace CloudSync
                                     TotalFilesReceived++;
                                     TotalBytesReceived += length;
                                     // Check if the file was intentionally deleted
-                                    if (FileIdList.ContainsItem(ScopeType.Deleted, new FileId(hashFileName, unixTimestamp), out _))
+                                    if (FileIdList.ContainsItem(ScopeType.Deleted, FileId.GetFileId(hashFileName, unixTimestamp), out _))
                                     {
                                         DeleteFile(fromUserId, hashFileName, unixTimestamp, fileInfo.FullName);
                                         return;
@@ -329,7 +329,7 @@ namespace CloudSync
                             {
                                 if (fileInfo.UnixLastWriteTimestamp() == timestamp)
                                 {
-                                    AddDeletedByRemoteRequest(new FileId(hash, fileInfo.UnixLastWriteTimestamp()));
+                                    AddDeletedByRemoteRequest(FileId.GetFileId(hash, fileInfo.UnixLastWriteTimestamp()));
                                     FileDelete(fileInfo.FullName, out Exception exception);
                                     if (exception != null)
                                         RaiseOnFileError(exception, fileInfo.FullName);

@@ -42,21 +42,21 @@ namespace CloudSync
                         if (!Util.CanBeSeen(e.FullPath))
                             return;
                         OnCreated(e.FullPath);
-                        RequestSynchronization();
+                        ClientRequestSynchronization();
                     };
                     pathWatcher.Changed += (s, e) =>
                     {
                         if (!Util.CanBeSeen(e.FullPath))
                             return;
                         OnChanged(e.FullPath);
-                        RequestSynchronization();
+                        ClientRequestSynchronization();
                     };
                     pathWatcher.Deleted += (s, e) =>
                     {
                         if (!Util.CanBeSeen(e.FullPath, false))
                             return;
                         OnDeleted(e.FullPath);
-                        RequestSynchronization();
+                        ClientRequestSynchronization();
                     };
                     pathWatcher.Renamed += (s, e) =>
                     {
@@ -72,7 +72,7 @@ namespace CloudSync
                             sync = true;
                         }
                         if (sync)
-                            RequestSynchronization();
+                            ClientRequestSynchronization();
                     };
                     return true;
                 }
@@ -97,18 +97,21 @@ namespace CloudSync
             if (CacheHashFileTable != null)
             {
                 foreach (var item in CacheHashFileTable)
-                {
+                {             
                     if (item.Value.FullName == fileName)
                     {
-                        var hash = item.Key;
-                        if (DeletedByRemoteRequest.Contains(new FileId(hash, item.Value.UnixLastWriteTimestamp())))
+                        if (!item.Value.Attributes.HasFlag(FileAttributes.Directory))
                         {
-                            // File deleted by remote request
-                        }
-                        else
-                        {
-                            // File deleted locally 
-                            FileIdList.AddItem(this, UserId, ScopeType.Deleted, new FileId(hash, item.Value.UnixLastWriteTimestamp()));
+                            var hash = item.Key;
+                            if (DeletedByRemoteRequest.Contains(FileId.GetFileId(hash, item.Value.UnixLastWriteTimestamp())))
+                            {
+                                // File deleted by remote request
+                            }
+                            else
+                            {
+                                // File deleted locally 
+                                FileIdList.AddItem(this, UserId, ScopeType.Deleted, FileId.GetFileId(hash, item.Value.UnixLastWriteTimestamp()));
+                            }
                         }
                         return;
                     }
@@ -118,9 +121,13 @@ namespace CloudSync
 
         private void OnCreated(string fileName)
         {
-            var fileId = new FileId(fileName, this);
-            // The file has been recovered from the recycle bin so there is no need to keep it in the deleted list anymore
-            var removed = FileIdList.RemoveItem(this, UserId, ScopeType.Deleted, fileId);
+            var file = new FileInfo(fileName);
+            if (!file.Attributes.HasFlag(FileAttributes.Directory))
+            {
+                var fileId = FileId.GetFileId(file, this);
+                // The file has been recovered from the recycle bin so there is no need to keep it in the deleted list anymore
+                var removed = FileIdList.RemoveItem(this, UserId, ScopeType.Deleted, fileId);
+            }
             OnChanged(fileName);
         }
 
@@ -148,12 +155,12 @@ namespace CloudSync
         /// This function starts the synchronization request, called this function a timer will shortly launch the synchronization.
         /// Synchronization requests are called whenever the system detects a file change, at regular times very far from a timer(the first method is assumed to be sufficient and this is just a check to make sure everything is in sync), or if the previous sync failed the timer with more frequent intervals will try to start the sync periodically.
         /// </summary>
-        public void RequestSynchronization()
+        public void ClientRequestSynchronization()
         {
-            RestartCheckSyncTimer();
+            RestartTimerClientRequestSynchronization();
             try
             {
-                SyncTimeBuffer?.Change(SyncTimeBufferMs, Timeout.Infinite);
+                TimerStartClientSynchronization?.Change(PauseBeforeSyncing, Timeout.Infinite);
             }
             catch
             {

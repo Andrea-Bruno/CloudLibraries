@@ -1,9 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
-using System.Linq;
-using System.Text;
 
 namespace CloudSync
 {
@@ -12,8 +8,8 @@ namespace CloudSync
     {
         public byte[] Bytes { get; }
 
-        public ulong HashFile => BitConverter.ToUInt64(Bytes, 0);
-        public uint UnixLastWriteTimestamp => BitConverter.ToUInt32(Bytes, 8);
+        public readonly ulong HashFile => BitConverter.ToUInt64(Bytes, 0);
+        public readonly uint UnixLastWriteTimestamp => BitConverter.ToUInt32(Bytes, 8);
        
         public FileId(byte[] bytes)
         {
@@ -22,18 +18,20 @@ namespace CloudSync
 
             Bytes = bytes;
         }
+        public static FileId GetFileId(byte[] bytes) => new FileId(bytes); 
         public FileId(ulong hash, uint unixLastWriteTimestamp)
         {
             Bytes = BitConverter.GetBytes(hash).Concat(BitConverter.GetBytes(unixLastWriteTimestamp));
         }
+        public static FileId GetFileId(ulong hash, uint unixLastWriteTimestamp) => new FileId(hash, unixLastWriteTimestamp);
 
-        public FileId(string fullFileName, Sync context)
+        public FileId(FileSystemInfo file, Sync context)
         {
-            var file = new FileInfo(fullFileName);
             var hash =  Util.HashFileName(file, context);
             uint unixLastWriteTimestamp = file.UnixLastWriteTimestamp();
             Bytes = BitConverter.GetBytes(hash).Concat(BitConverter.GetBytes(unixLastWriteTimestamp));
         }
+        public static FileId GetFileId(FileSystemInfo file, Sync context) => new FileId(file, context);
 
         public bool Equals(FileId other)
         {

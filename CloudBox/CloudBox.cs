@@ -491,6 +491,9 @@ namespace CloudBox
         /// </summary>
         public Sync.OnNotificationEvent OnNotificationAction;
 
+        /// <summary>
+        /// List of notification events
+        /// </summary>
         protected readonly List<Sync.OnNotificationEvent> OnNotificationActionList =
             new List<Sync.OnNotificationEvent>();
 
@@ -499,6 +502,9 @@ namespace CloudBox
         /// </summary>
         public Sync.StatusEventHandler OnLocalSyncStatusChangesAction;
 
+        /// <summary>
+        /// List of sync status change events
+        /// </summary>
         protected readonly List<Sync.StatusEventHandler> OnLocalSyncStatusChangesActionList =
             new List<Sync.StatusEventHandler>();
 
@@ -714,19 +720,26 @@ namespace CloudBox
                         {
                             Owner = Util.GetDesktopEnvironmentUser();
                             if (String.IsNullOrEmpty(Owner))
-                                throw new Exception("Unable to determine the user associated with the cloud service");
+                            {
+                                Debug.WriteLine("Unable to determine the desktop user associated with the cloud service");
+                                Debugger.Break();
+                                Owner = Environment.UserName;
+                            }
                             SetStaticValue(nameof(Owner), Owner);
                         }
                     }
                     defaultPath = GetStaticValue(nameof(defaultPath));
-                    if (defaultPath == null)
+                    if (string.IsNullOrEmpty(defaultPath))
                     {
                         string home;
                         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
                         {
                             //The application is assumed to run as the root user, but the home folder must be that of the user who knows how to use the desktop environment.   
-                            home = Path.DirectorySeparatorChar +
-                                   Path.Combine(nameof(home), Owner);
+                            home = Path.DirectorySeparatorChar + Path.Combine(nameof(home), Owner);
+                            if (!Directory.Exists(home))
+                            {
+                                home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                            }
                         }
                         else
                         {

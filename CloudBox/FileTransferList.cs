@@ -5,6 +5,9 @@ using CloudSync;
 
 namespace CloudBox
 {
+    /// <summary>
+    /// Class to manage a list of file transfers, providing functionality to update and limit the preserved elements.
+    /// </summary>
     public class FileTransferList : ObservableCollection<FileTransferList.FileTransfer>
     {
         /// <summary>
@@ -15,6 +18,11 @@ namespace CloudBox
         {
             PreservedElements = preservedElements;
         }
+
+        /// <summary>
+        /// Update the list with a new file transfer operation
+        /// </summary>
+        /// <param name="fileTransfer">File transfer operation</param>
         public void UpdateList(Sync.FileTransfer fileTransfer)
         {
             var file = new FileTransfer(fileTransfer);
@@ -57,6 +65,7 @@ namespace CloudBox
                 }
             }
         }
+
         /// <summary>
         /// Puts a limit on the preserved elements
         /// </summary>
@@ -68,9 +77,15 @@ namespace CloudBox
         /// </summary>
         public Action<int> OnUpdated;
 
-
+        /// <summary>
+        /// Class representing a file transfer operation
+        /// </summary>
         public class FileTransfer : Sync.FileTransfer, INotifyPropertyChanged
         {
+            /// <summary>
+            /// Initialize a new instance of the FileTransfer class
+            /// </summary>
+            /// <param name="fileTransfer">File transfer operation</param>
             public FileTransfer(Sync.FileTransfer fileTransfer)
             {
                 IsUpload = fileTransfer.IsUpload;
@@ -80,14 +95,22 @@ namespace CloudBox
                 Name = fileTransfer.Name;
                 Length = fileTransfer.Length;
             }
+
+            /// <summary>
+            /// Label indicating whether the transfer is an upload or download
+            /// </summary>
             public string TransferLaberl => IsUpload ? "Upload" : "Download";
 
             /// <summary>
-            /// Represents the method that will handle the proporty changed event raised when a property when a property is changed on a component.
+            /// Represents the method that will handle the property changed event raised when a property is changed on a component.
             /// </summary>
             public event PropertyChangedEventHandler PropertyChanged;
-            internal void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
+            /// <summary>
+            /// Method to raise the property changed event
+            /// </summary>
+            /// <param name="propertyName">Name of the property that changed</param>
+            internal void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }
 }

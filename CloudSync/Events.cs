@@ -45,8 +45,8 @@ namespace CloudSync
                 if (OnLocalSyncStatusChanges != null)
                     new Thread(() => OnLocalSyncStatusChanges?.Invoke(LocalSyncStatus, PendingFiles)).Start();
                 if (!SyncIsInPending)
-                    RequestSynchronization(); //when synced, try syncing again to verify that no files changed while running commands in the spooler
-                RestartCheckSyncTimer();
+                    ClientRequestSynchronization(); //when synced, try syncing again to verify that no files changed while running commands in the spooler
+                RestartTimerClientRequestSynchronization();
             }
         }
 

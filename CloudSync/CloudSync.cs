@@ -98,7 +98,7 @@ namespace CloudSync
             {
                 OnNotify(null, Notice.Authentication);
                 if (isLogged)
-                    ClientStartSync(); // It's already logged in, so start syncing immediately
+                    InitializeClientSynchronization(); // It's already logged in, so start syncing immediately
                 else
                     RequestOfAuthentication(null, clientCredential, PublicIpAddressInfo(),
                         Environment.MachineName); // Start the login process
@@ -132,7 +132,7 @@ namespace CloudSync
                         CreateUserFolder(CloudRoot, Owner, !DontCreateSpecialFolders && !IsServer);
                     }
 
-                    ClientStartSync();
+                    InitializeClientSynchronization();
                     OnLoginCompleted?.Set();
                 }
             }
@@ -197,7 +197,7 @@ namespace CloudSync
                     if (WatchCloudRoot())
                     {
                         Spooler?.ExecuteNext();
-                        RequestSynchronization();
+                        ClientRequestSynchronization();
                     }
                 }
             }
@@ -215,18 +215,18 @@ namespace CloudSync
                 SecureStorage.Values.Delete(nameof(IsLogged), typeof(bool));
                 SecureStorage.Values.Delete(nameof(IsClient), typeof(bool));
 
-                if (SyncTimeBuffer != null)
+                if (TimerStartClientSynchronization != null)
                 {
-                    SyncTimeBuffer.Change(Timeout.Infinite, Timeout.Infinite);
-                    SyncTimeBuffer.Dispose();
-                    SyncTimeBuffer = null;
+                    TimerStartClientSynchronization.Change(Timeout.Infinite, Timeout.Infinite);
+                    TimerStartClientSynchronization.Dispose();
+                    TimerStartClientSynchronization = null;
                 }
 
-                if (ClientCheckSync != null)
+                if (TimerClientRequestSynchronization != null)
                 {
-                    ClientCheckSync.Change(Timeout.Infinite, Timeout.Infinite);
-                    ClientCheckSync.Dispose();
-                    ClientCheckSync = null;
+                    TimerClientRequestSynchronization.Change(Timeout.Infinite, Timeout.Infinite);
+                    TimerClientRequestSynchronization.Dispose();
+                    TimerClientRequestSynchronization = null;
                 }
 
                 if (pathWatcher != null)
@@ -254,7 +254,7 @@ namespace CloudSync
         /// It is a timer that gives extra security on the status of the synchronization. Rarely activating it does not weigh on the status of data transmission in the network.
         /// This check does not have to be performed frequently, the system already monitors the changes, both on the client and server side, and the synchronization is started automatically every time there has been a change.
         /// </summary>
-        internal Timer ClientCheckSync;
+        internal Timer TimerClientRequestSynchronization;
 
         /// <summary>
         /// After how much idle time, a check on the synchronization status is required
@@ -269,53 +269,54 @@ namespace CloudSync
         /// <summary>
         /// CheckSync timer trigger. Each time called it resets the timer time.
         /// </summary>
-        internal void RestartCheckSyncTimer()
+        internal void RestartTimerClientRequestSynchronization()
         {
-            // If the client is out of sync, it tries to sync more frequently           
-            int nextSyncMinutes;
-            if (!FirstSyncFlag)
+            if (TimerClientRequestSynchronization != null)
             {
-                FirstSyncFlag = true;
-                nextSyncMinutes = 0;
-            }
-            else
-                nextSyncMinutes = SyncIsInPending ? RetrySyncFailedAfterMinutes : CheckSyncEveryMinutes;
 
-            var timespan = TimeSpan.FromMinutes(nextSyncMinutes);
-            timespan.Add(TimeSpan.FromMilliseconds(CalculationTimeHashFileTableMS));
-            ClientCheckSync?.Change(timespan, timespan);
+                // If the client is out of sync, it tries to sync more frequently           
+                int nextSyncMinutes;
+                if (!FirstSyncFlag)
+                {
+                    FirstSyncFlag = true;
+                    nextSyncMinutes = 0;
+                }
+                else
+                    nextSyncMinutes = SyncIsInPending ? RetrySyncFailedAfterMinutes : CheckSyncEveryMinutes;
+
+                var timespan = TimeSpan.FromMinutes(nextSyncMinutes);
+                timespan.Add(TimeSpan.FromMilliseconds(CalculationTimeHashFileTableMS));
+                TimerClientRequestSynchronization?.Change(timespan, timespan);
+            }
         }
 
         private bool FirstSyncFlag;
 
-        private bool SyncIsInPending => RemoteStatus != Notice.Synchronized || ConcurrentOperations() != 0 ||
-                                        LocalSyncStatus != SyncStatus.Monitoring || Spooler.InPending != 0;
+        private bool SyncIsInPending => RemoteStatus != Notice.Synchronized || ConcurrentOperations() != 0 || LocalSyncStatus != SyncStatus.Monitoring || Spooler.InPending != 0;
 
         /// <summary>
         /// Timer that starts the synchronization procedure when something in the cloud path has changed. The timer delays the synchronization of a few seconds because multiple changes may be in progress on the files and it is convenient to wait for the end of the operations.
         /// </summary>
-        internal Timer SyncTimeBuffer;
+        internal Timer TimerStartClientSynchronization;
+        internal int PauseBeforeSyncing = 10000;
 
-        internal int SyncTimeBufferMs = 10000;
-
-        private void ClientStartSync()
+        private void InitializeClientSynchronization()
         {
-            if (ClientCheckSync == null)
+            if (TimerClientRequestSynchronization == null)
             {
-                ClientCheckSync = new Timer((o) => RequestSynchronization());
-                RestartCheckSyncTimer();
+                TimerClientRequestSynchronization = new Timer((o) => ClientRequestSynchronization());
+                RestartTimerClientRequestSynchronization();
             }
-
-            if (SyncTimeBuffer == null)
+            if (TimerStartClientSynchronization == null)
             {
-                SyncTimeBuffer = new Timer((o) => StartSynchronization(), null, SyncTimeBufferMs, Timeout.Infinite);
+                TimerStartClientSynchronization = new Timer((o) => StartClientSynchronization(), null, PauseBeforeSyncing, Timeout.Infinite);
             }
         }
 
         /// <summary>
         /// Start file synchronization between client and server, it is recommended not to use this command directly since starting synchronization via call RequestSynchronization()
         /// </summary>
-        private void StartSynchronization()
+        private void StartClientSynchronization()
         {
             if (!performingStartSynchronization)
             {
@@ -340,7 +341,6 @@ namespace CloudSync
                         }
                     }
                 }
-
                 performingStartSynchronization = false;
             }
         }
@@ -628,8 +628,11 @@ namespace CloudSync
                 // Remove from the deleted files list, files that may have been recovered from the recycle bin when the client was turned off
                 foreach (var item in newHashFileTable)
                 {
-                    var fileId = new FileId(item.Key, item.Value.UnixLastWriteTimestamp());
-                    var removed = FileIdList.RemoveItem(this, UserId, ScopeType.Deleted, fileId);
+                    if (!item.Value.Attributes.HasFlag(FileAttributes.Directory))
+                    {
+                        var fileId = FileId.GetFileId(item.Key, item.Value.UnixLastWriteTimestamp());
+                        var removed = FileIdList.RemoveItem(this, UserId, ScopeType.Deleted, fileId);
+                    }
                 }
             }
         }

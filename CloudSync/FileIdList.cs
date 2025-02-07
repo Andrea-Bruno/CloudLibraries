@@ -132,7 +132,7 @@ namespace CloudSync
                     while (fileStream.Position < fileStream.Length)
                     {
                         var fileIdBytes = binaryReader.ReadBytes(12);
-                        var fileId = new FileId(fileIdBytes);
+                        var fileId =  FileId.GetFileId(fileIdBytes);
                         fileIdList.fileIdList.Add(fileId);
                     }
                 }
