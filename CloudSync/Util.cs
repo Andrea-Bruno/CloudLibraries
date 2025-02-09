@@ -162,51 +162,6 @@ namespace CloudSync
             return null;
         }
 
-        /// <summary>
-        /// An extension method to determine if an IP address is internal, as specified in RFC1918
-        /// </summary>
-        /// <param name="toTest">The IP address that will be tested</param>
-        /// <returns>Returns true if the IP is internal, false if it is external</returns>
-        public static bool IsLocalIPAddress(this IPAddress toTest)
-        {
-            if (IPAddress.IsLoopback(toTest)) return true;
-            if (toTest.ToString() == "::1") return false;
-            var bytes = toTest.GetAddressBytes();
-            if (bytes.Length != 4) return false;
-
-            uint A(byte[] bts)
-            {
-                Array.Reverse(bts);
-                return BitConverter.ToUInt32(bts, 0);
-            }
-
-            bool Ir(uint ipReverse, byte[] start, byte[] end)
-            {
-                return (ipReverse >= A(start) && ipReverse <= A(end));
-            } // Check if is in range
-
-            var ip = A(bytes);
-            // IP for special use: https://en.wikipedia.org/wiki/Reserved_IP_addresses             
-            if (Ir(ip, new byte[] { 0, 0, 0, 0 }, new byte[] { 0, 255, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 10, 0, 0, 0 }, new byte[] { 10, 255, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 100, 64, 0, 0 }, new byte[] { 100, 127, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 127, 0, 0, 0 }, new byte[] { 127, 255, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 169, 254, 0, 0 }, new byte[] { 169, 254, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 172, 16, 0, 0 }, new byte[] { 172, 31, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 192, 0, 0, 0 }, new byte[] { 192, 0, 0, 255 })) return true;
-            if (Ir(ip, new byte[] { 192, 0, 2, 0 }, new byte[] { 192, 0, 2, 255 })) return true;
-            if (Ir(ip, new byte[] { 192, 88, 99, 0 }, new byte[] { 192, 88, 99, 255 })) return true;
-            if (Ir(ip, new byte[] { 192, 168, 0, 0 }, new byte[] { 192, 168, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 198, 18, 0, 0 }, new byte[] { 198, 19, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 198, 51, 100, 0 }, new byte[] { 198, 51, 100, 255 })) return true;
-            if (Ir(ip, new byte[] { 203, 0, 113, 0 }, new byte[] { 203, 0, 113, 255 })) return true;
-            if (Ir(ip, new byte[] { 224, 0, 0, 0 }, new byte[] { 239, 255, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 233, 252, 0, 0 }, new byte[] { 233, 252, 0, 255 })) return true;
-            if (Ir(ip, new byte[] { 240, 0, 0, 0 }, new byte[] { 255, 255, 255, 254 })) return true;
-            return false;
-        }
-
-
         public static TimeSpan DataTransferTimeOut(int dataSize)
         {
             var timeOutMs = (dataSize / 10) * Spooler.MaxConcurrentOperations + 20000;
@@ -429,42 +384,6 @@ namespace CloudSync
             return dateTime;
         }
 
-        public static string CloudRelativeUnixFullName(this FileSystemInfo fileSystemInfo, Sync cloudSync)
-        {
-            var name = fileSystemInfo.FullName.Substring(cloudSync.CloudRoot.Length);
-            name = name.Replace('\\', '/');
-            if (name.Length != 0 && name[0] == '/')
-                name = name.Substring(1);
-            return name;
-        }
-
-        /// <summary>
-        /// the first 32 bits from the right are the unicode timestamp, the rest the hash on the full file name
-        /// </summary>
-        /// <param name="fileSystemInfo"></param>
-        /// <returns></returns>
-        public static ulong HashFileName(this FileSystemInfo fileSystemInfo, Sync cloudSync)
-        {
-            var relativeName = CloudRelativeUnixFullName(fileSystemInfo, cloudSync);
-            return HashFileName(relativeName, fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory));
-        }
-
-        /// <summary>
-        /// Compare two bytes arrays.
-        /// </summary>
-        /// <param name="source">source byte array</param>
-        /// <param name="compareTo"> byte array to compare</param>
-        /// <returns>Boolean</returns>
-        public static bool SequenceEqual(this byte[] source, byte[] compareTo)
-        {
-            if (compareTo.Length != source.Length)
-                return false;
-            for (var i = 0; i < source.Length; i++)
-                if (source[i] != compareTo[i])
-                    return false;
-            return true;
-        }
-
         public static ulong HashFileName(string relativeName, bool isDirectory)
         {
             var bytes = relativeName.GetBytes();
@@ -472,7 +391,7 @@ namespace CloudSync
             return ULongHash(startValue, bytes);
         }
 
-        private static readonly SHA256 Sha256 = SHA256.Create();
+        internal static readonly SHA256 Sha256 = SHA256.Create();
 
         public static ulong ULongHash(ulong startValue, byte[] bytes)
         {
@@ -480,56 +399,11 @@ namespace CloudSync
             var concat = new byte[add.Length + bytes.Length];
             Buffer.BlockCopy(bytes, 0, concat, 0, bytes.Length);
             Buffer.BlockCopy(add, 0, concat, bytes.Length, add.Length);
-            lock (Sha256) // ComputeHash in one case has generate StackOverFlow error, i try to fyx by lock te instance
+            lock (Sha256) // ComputeHash in one case has generate StackOverFlow error, i try to fix by lock the instance
             {
                 var hash = Sha256.ComputeHash(concat);
                 return BitConverter.ToUInt64(hash, 0);
             }
-        }
-
-        public static byte[] GetBytes(this string text)
-        {
-            return Encoding.Unicode.GetBytes(text);
-        }
-
-        public static string ToText(this byte[] bytes)
-        {
-            return Encoding.Unicode.GetString(bytes);
-        }
-
-        public static byte[] Concat(this byte[] thisArray, byte[] array)
-        {
-            var result = new byte[thisArray.Length + array.Length];
-            Buffer.BlockCopy(thisArray, 0, result, 0, thisArray.Length);
-            Buffer.BlockCopy(array, 0, result, thisArray.Length, array.Length);
-            return result;
-        }
-
-        public static uint UnixLastWriteTimestamp(this FileSystemInfo fileSystemInfo)
-        {
-            return fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory)
-                ? 0
-                : ToUnixTimestamp(fileSystemInfo.LastWriteTimeUtc);
-        }
-
-        public static byte[] GetBytes(this uint number)
-        {
-            return BitConverter.GetBytes(number);
-        }
-
-        public static byte[] GetBytes(this ulong number)
-        {
-            return BitConverter.GetBytes(number);
-        }
-
-        public static uint ToUint32(this byte[] array)
-        {
-            return BitConverter.ToUInt32(array, 0);
-        }
-
-        public static ulong ToUint64(this byte[] array)
-        {
-            return BitConverter.ToUInt64(array, 0);
         }
 
         /// <summary>
@@ -798,7 +672,7 @@ end tell";
         /// Add a link (Shortcut) to a file
         /// </summary>
         /// <param name="sourceFile">The file to link</param>
-        /// <param name="targetDir">The directory (phat location) where to put the link</param>
+        /// <param name="targetDir">The directory (path location) where to put the link</param>
         /// <param name="ico">The icon to use</param>
         public static void AddShortcut(string sourceFile, string targetDir, Ico ico)
         {
@@ -810,7 +684,7 @@ end tell";
         /// Add a link (Shortcut) to a file
         /// </summary>
         /// <param name="sourceFile">The file to link</param>
-        /// <param name="targetDir">The directory (phat location) where to put the link</param>
+        /// <param name="targetDir">The directory (path location) where to put the link</param>
         /// <param name="icoFullName">The icon full file name to use</param>
         public static void AddShortcut(string sourceFile, string targetDir, string icoFullName)
         {
@@ -852,11 +726,11 @@ end tell";
         }
 
 
-        // Funzione per modificare i permessi del file
+        // Change file permission
         [DllImport("libc", SetLastError = true)]
         private static extern int chmod(string path, uint mode);
 
-        // Funzione per impostare il file come trusted (GNOME)
+        // Set file like trusted (GNOME)
         [DllImport("libgio-2.0.so.0", SetLastError = true)]
         private static extern int g_file_set_attribute(
             IntPtr file,
@@ -879,20 +753,28 @@ end tell";
 
         private static void AllowLaunching(string filePath)
         {
-            IntPtr file = IntPtr.Zero; // Inizializza il puntatore del file
-            IntPtr error;
-            string attribute = "metadata::trusted";
-            IntPtr valueP = Marshal.StringToHGlobalAnsi("true");
+            try
+            {
+                IntPtr file = IntPtr.Zero;
+                IntPtr error;
+                string attribute = "metadata::trusted";
+                IntPtr valueP = Marshal.StringToHGlobalAnsi("true");
 
-            if (g_file_set_attribute(file, attribute, valueP, IntPtr.Zero, out error) != 0)
-            {
-                int errno = Marshal.GetLastWin32Error();
-                Marshal.FreeHGlobal(valueP); // Libera la memoria
-                Debugger.Break(); // error
+                if (g_file_set_attribute(file, attribute, valueP, IntPtr.Zero, out error) != 0)
+                {
+                    int errno = Marshal.GetLastWin32Error();
+                    Marshal.FreeHGlobal(valueP);
+                    Debugger.Break(); // error
+                }
+                else
+                {
+                    Marshal.FreeHGlobal(valueP);
+                }
             }
-            else
+            catch (Exception)
             {
-                Marshal.FreeHGlobal(valueP); // Libera la memoria
+
+                throw;
             }
         }
 
@@ -942,7 +824,7 @@ end tell";
             public byte[] BetweenHasBlockIndexBinary => BitConverter.GetBytes(BetweenHasBlockIndex);
             public readonly ulong? BetweenReverseHasBlock;
 
-            public byte[] BetweenReverseHasBlockBynary => BetweenReverseHasBlock == null
+            public byte[] BetweenReverseHasBlockBinary => BetweenReverseHasBlock == null
                 ? new byte[] { }
                 : BitConverter.GetBytes((ulong)BetweenReverseHasBlock);
 

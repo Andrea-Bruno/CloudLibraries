@@ -29,13 +29,16 @@ namespace CloudSync
         /// <param name="doNotCreateSpecialFolders">Set to true if you want to automatically create sub-folders in the cloud area to save images, photos, documents, etc..</param>
         /// <param name="syncIsEnabled"> False to suspend sync, or true. It is important to suspend synchronization if the path is not available (for example when using virtual disks)! Indicate true if the path to the cloud space is reachable (true), or unmounted virtual disk (false). Use IsReachableDiskStateIsChanged to notify that access to the cloud path has changed.</param>
         /// <param name="owner">If set, during synchronization operations (creating files and directories), the owner will be the one specified here</param>
-        public Sync(ulong userId, SendCommandDelegate sendCommand, out SendCommandDelegate onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential clientCredential = null, bool doNotCreateSpecialFolders = false, bool syncIsEnabled = true, string owner = null)
+        /// <param name="encryptionMasterKey">If set, zero knowledge proof is enabled, meaning files will be sent encrypted with keys derived from this, and once received, if encrypted, they will be decrypted.</param>
+        public Sync(ulong userId, SendCommandDelegate sendCommand, out SendCommandDelegate onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential clientCredential = null, bool doNotCreateSpecialFolders = false, bool syncIsEnabled = true, string owner = null, byte[] encryptionMasterKey = null)
         {
             UserId = userId;
             if (owner != null)
             {
                 Owner = GetUserIds(owner);
             }
+            if (encryptionMasterKey != null) ;
+            ZeroKnowledgeProof = new ZeroKnowledgeProof(this, encryptionMasterKey);
             SecureStorage = secureStorage;
             RoleManager = new RoleManager(this);
             InstanceId = InstanceCounter;
@@ -85,10 +88,10 @@ namespace CloudSync
 #if DEBUG
                     pin = "777777"; // To facilitate testing, in debug mode the pin will always be this: So use debug mode only for software development and testing!
 #else
-                        Random rnd = new Random();
-                        int pinInt = rnd.Next(0, 1000000);
-                        pin = "000000" + pinInt.ToString(); // the default pin is the 6 random digits
-                        pin = pin.Substring(pin.Length - 6);
+                    Random rnd = new Random();
+                    int pinInt = rnd.Next(0, 1000000);
+                    pin = "000000" + pinInt.ToString(); // the default pin is the 6 random digits
+                    pin = pin.Substring(pin.Length - 6);
 #endif
                     SetPin(secureStorage, null, pin);
                 }
@@ -106,6 +109,8 @@ namespace CloudSync
             //});
             //task.Start();
         }
+
+        internal ZeroKnowledgeProof ZeroKnowledgeProof;
         private ulong UserId;
         private (uint, uint)? Owner;
 
@@ -356,7 +361,7 @@ namespace CloudSync
 
         internal readonly SecureStorage.Storage SecureStorage;
 
-        //internal readonly Context Context;
+        //internal readonly Context;
 
         public readonly RoleManager RoleManager;
         internal readonly Spooler Spooler;

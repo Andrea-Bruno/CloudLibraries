@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <PackageReference Include="Otp.NET" Version="1.4.0" />
+    <PackageReference Include="SauceControl.Blake2Fast" Version="2.0.0" />
   </ItemGroup>
 
   <ItemGroup>

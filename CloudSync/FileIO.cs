@@ -245,8 +245,22 @@ namespace CloudSync
         /// <param name="attempts">number of attempts</param>
         /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in milliseconds)</param>
         /// <returns>True for successful</returns>
-        public static bool FileCopy(string source, string target, out Exception exception, int attempts = 10,
-            int pauseBetweenAttempts = 50)
+        public static bool FileCopy(string source, string target, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50, Sync context = null)
+        {
+           return FileCopy(new FileInfo(source), target, out exception, attempts, pauseBetweenAttempts, context);
+        }
+
+
+        /// <summary>
+        /// Copy a file (copy from source to target) and retrying if any error occur.
+        /// </summary>
+        /// <param name="source">Source file name</param>
+        /// <param name="target">Target file name</param>
+        /// <param name="exception">Returns any errors encountered in performing the operation</param>
+        /// <param name="attempts">number of attempts</param>
+        /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in milliseconds)</param>
+        /// <returns>True for successful</returns>
+        public static bool FileCopy(FileSystemInfo source, string target, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50, Sync context = null)
         {
             if (!PreserveDriveSpace(target))
             {
@@ -255,13 +269,13 @@ namespace CloudSync
             }
 
             exception = null;
-            if (File.Exists(source))
+            if (source.Exists)
             {
                 for (int numTries = 0; numTries < attempts; numTries++)
                 {
                     try
                     {
-                        FileCopy(source, target);
+                        FileCopy(context, source, target);
                         return true;
                     }
                     catch (Exception ex)
@@ -271,20 +285,23 @@ namespace CloudSync
                     }
                 }
             }
-
             return false;
         }
 
-        private static void FileCopy(string source, string target)
+        private static void FileCopy(Sync context, FileSystemInfo source, string target)
         {
-            if (File.Exists(target))
-                File.Delete(target);
-            using (var outputStream = File.OpenWrite(target))
+            if (context?.ZeroKnowledgeProof == null)
             {
-                using (var inputStream = File.OpenRead(source))
-                {
-                    inputStream.CopyTo(outputStream);
-                }
+
+                if (File.Exists(target))
+                    File.Delete(target);
+                using var outputStream = File.OpenWrite(target);
+                using var inputStream = File.OpenRead(source.FullName);
+                inputStream.CopyTo(outputStream);
+            }
+            else
+            {
+                ZeroKnowledgeProof.EncryptFile(source, target, context.ZeroKnowledgeProof.DerivedEncryptionKey(source));
             }
         }
     }

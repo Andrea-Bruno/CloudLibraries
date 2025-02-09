@@ -99,7 +99,7 @@ namespace CloudSync
                 if (delimitsRange == null)
                     SendCommand(toUserId, Commands.SendHashStructure, null, new[] { structure });
                 else
-                    SendCommand(toUserId, Commands.SendHashStructure, null, new[] { structure, delimitsRange.BetweenHasBlockBynary, delimitsRange.BetweenHasBlockIndexBinary, delimitsRange.BetweenReverseHasBlockBynary, delimitsRange.BetweenReverseHasBlockIndexBinary });
+                    SendCommand(toUserId, Commands.SendHashStructure, null, new[] { structure, delimitsRange.BetweenHasBlockBynary, delimitsRange.BetweenHasBlockIndexBinary, delimitsRange.BetweenReverseHasBlockBinary, delimitsRange.BetweenReverseHasBlockIndexBinary });
             }
         }
 
@@ -108,7 +108,7 @@ namespace CloudSync
             if (delimitsRange == null)
                 SendCommand(toUserId, Commands.RequestHashStructure, null);
             else
-                SendCommand(toUserId, Commands.RequestHashStructure, null, new[] { delimitsRange.BetweenHasBlockBynary, delimitsRange.BetweenHasBlockIndexBinary, delimitsRange.BetweenReverseHasBlockBynary, delimitsRange.BetweenReverseHasBlockIndexBinary });
+                SendCommand(toUserId, Commands.RequestHashStructure, null, new[] { delimitsRange.BetweenHasBlockBynary, delimitsRange.BetweenHasBlockIndexBinary, delimitsRange.BetweenReverseHasBlockBinary, delimitsRange.BetweenReverseHasBlockIndexBinary });
         }
 
         private void SendHashBlocks(ulong? toUserId)
@@ -170,7 +170,7 @@ namespace CloudSync
                 var tmpFile = GetTmpFile(this, toUserId, hashFileName);
                 if (!File.Exists(tmpFile)) // old if (chunkPart == 1)
                 {
-                    FileCopy(fileSystemInfo.FullName, tmpFile, out Exception exception);
+                    FileCopy(fileSystemInfo, tmpFile, out Exception exception);
                     if (exception != null)
                         RaiseOnFileError(exception, fileSystemInfo.FullName);
                 }
