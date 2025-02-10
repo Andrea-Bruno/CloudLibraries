@@ -719,7 +719,7 @@ namespace CloudBox
                         if (Owner == null)
                         {
                             Owner = Util.GetDesktopEnvironmentUser();
-                            if (String.IsNullOrEmpty(Owner))
+                            if (string.IsNullOrEmpty(Owner))
                             {
                                 Debug.WriteLine("Unable to determine the desktop user associated with the cloud service");
                                 Debugger.Break();
@@ -753,6 +753,16 @@ namespace CloudBox
 
             return defaultPath;
         }
+
+        /// <summary>
+        /// Delete data in app data (works only in debug mode as it is intended for testing purposes)
+        /// </summary>
+        static public void ResetAppData()
+        {
+            if (Debugger.IsAttached)
+                Directory.Delete(AppDataPath, true);
+        }
+
         static protected void SetStaticValue(string name, string value)
         {
             if (value == null)
@@ -771,11 +781,13 @@ namespace CloudBox
         }
         static private string AppData(string name)
         {
-            var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AppData");
+            var path = AppDataPath;
             if (!Directory.Exists(path))
                 Directory.CreateDirectory(path);
             return Path.Combine(path, name);
         }
+        static private string AppDataPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AppData");
+
         private static string Owner;
 
         private const string CloudDirName = "Cloud";

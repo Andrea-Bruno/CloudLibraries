@@ -1,5 +1,7 @@
+using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 
 namespace CloudSync
@@ -205,8 +207,7 @@ namespace CloudSync
         /// <param name="attempts">number of attempts</param>
         /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in milliseconds)</param>
         /// <returns>True for successful</returns>
-        public static bool FileMove(string source, string target, (uint, uint)? owner, out Exception exception, int attempts = 10,
-            int pauseBetweenAttempts = 50)
+        public static bool FileMove(string source, string target, bool decrypt, (uint, uint)? owner, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50, Sync context = null)
         {
             if (!PreserveDriveSpace(target))
             {
@@ -221,7 +222,13 @@ namespace CloudSync
                 {
                     try
                     {
-                        File.Move(source, target);
+                        if (decrypt)
+                        {
+                            File.Delete(target);
+                            new FileInfo(source).Decrypt(target, context);
+                        }
+                        else
+                            File.Move(source, target);
                         SetOwner(owner, target);
                         return true;
                     }
@@ -247,7 +254,7 @@ namespace CloudSync
         /// <returns>True for successful</returns>
         public static bool FileCopy(string source, string target, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50, Sync context = null)
         {
-           return FileCopy(new FileInfo(source), target, out exception, attempts, pauseBetweenAttempts, context);
+            return FileCopy(new FileInfo(source), target, out exception, attempts, pauseBetweenAttempts, context);
         }
 
 
@@ -290,7 +297,8 @@ namespace CloudSync
 
         private static void FileCopy(Sync context, FileSystemInfo source, string target)
         {
-            if (context?.ZeroKnowledgeProof == null)
+            var pathParts = source.CloudRelativeUnixFullName(context).Split('/');
+            if (context?.ZeroKnowledgeProof == null || pathParts.Intersect(SpecialDirectories).Any())
             {
 
                 if (File.Exists(target))
@@ -301,7 +309,7 @@ namespace CloudSync
             }
             else
             {
-                ZeroKnowledgeProof.EncryptFile(source, target, context.ZeroKnowledgeProof.DerivedEncryptionKey(source));
+                context.ZeroKnowledgeProof.EncryptFile((FileInfo)source, target);
             }
         }
     }

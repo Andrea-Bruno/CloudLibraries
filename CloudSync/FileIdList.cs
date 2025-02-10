@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net.WebSockets;
 using System.Threading;
 
 namespace CloudSync
@@ -132,7 +131,7 @@ namespace CloudSync
                     while (fileStream.Position < fileStream.Length)
                     {
                         var fileIdBytes = binaryReader.ReadBytes(12);
-                        var fileId =  FileId.GetFileId(fileIdBytes);
+                        var fileId = FileId.GetFileId(fileIdBytes);
                         fileIdList.fileIdList.Add(fileId);
                     }
                 }
@@ -153,14 +152,14 @@ namespace CloudSync
                 return;
             Initialized = true;
             OnLoad = context.OnUpdateFileIdList;
-            var cloudCachePath = Path.Combine(context.CloudRoot, CloudCache);
-            if (!Directory.Exists(cloudCachePath))
+            var cloudCachePath = new DirectoryInfo(Path.Combine(context.CloudRoot, CloudCache));
+            if (!cloudCachePath.Exists)
                 return;
 
-            var files = Directory.GetFiles(cloudCachePath, "*.*");
+            var files = cloudCachePath.GetFiles("*.*");
             foreach (var file in files)
             {
-                Load(context, file);
+                Load(context, file.FullName);
             }
         }
 
@@ -187,12 +186,11 @@ namespace CloudSync
         /// <summary>
         /// Removes a FileId from a FileIdList specified by userId and scope.
         /// </summary>
-        /// <param name="context">The synchronization context.</param>
         /// <param name="userId">The user ID.</param>
         /// <param name="scope">The type of scope.</param>
         /// <param name="fileId">The FileId to remove.</param>
         /// <returns>True if the FileId was removed, otherwise false.</returns>
-        public static bool RemoveItem(Sync context, ulong userId, ScopeType scope, FileId fileId)
+        public static bool RemoveItem(ulong userId, ScopeType scope, FileId fileId)
         {
             var key = GetKey(userId, scope);
 

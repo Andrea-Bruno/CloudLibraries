@@ -31,8 +31,7 @@ namespace CloudSync
                     pathWatcher = new FileSystemWatcher
                     {
                         Path = CloudRoot,
-                        NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName |
-                                       NotifyFilters.CreationTime,
+                        NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.CreationTime,
                         Filter = "*.*",
                         EnableRaisingEvents = true,
                         IncludeSubdirectories = true
@@ -97,7 +96,7 @@ namespace CloudSync
             if (CacheHashFileTable != null)
             {
                 foreach (var item in CacheHashFileTable)
-                {             
+                {
                     if (item.Value.FullName == fileName)
                     {
                         if (!item.Value.Attributes.HasFlag(FileAttributes.Directory))
@@ -126,7 +125,7 @@ namespace CloudSync
             {
                 var fileId = FileId.GetFileId(file, this);
                 // The file has been recovered from the recycle bin so there is no need to keep it in the deleted list anymore
-                var removed = FileIdList.RemoveItem(this, UserId, ScopeType.Deleted, fileId);
+                var removed = FileIdList.RemoveItem(UserId, ScopeType.Deleted, fileId);
             }
             OnChanged(fileName);
         }

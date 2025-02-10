@@ -66,7 +66,7 @@ namespace CloudSync
             name = name.Replace('\\', '/');
             if (name.Length != 0 && name[0] == '/')
                 name = name.Substring(1);
-            return context.ZeroKnowledgeProof == null ? name : ZeroKnowledgeProof.EncryptFullFileName(name, context.ZeroKnowledgeProof.FilenameObfuscationKey) ;
+            return context.ZeroKnowledgeProof == null ? name : context.ZeroKnowledgeProof.EncryptFullFileName(name);
         }
 
         public static uint UnixLastWriteTimestamp(this FileSystemInfo fileSystemInfo)
@@ -81,19 +81,24 @@ namespace CloudSync
         /// <returns>Virtual or real name</returns>
         public static string Name(this FileSystemInfo fileSystemInfo, Sync context)
         {
-            return context.ZeroKnowledgeProof == null ? fileSystemInfo.Name : ZeroKnowledgeProof.EncryptFileName(fileSystemInfo.Name, context.ZeroKnowledgeProof.FilenameObfuscationKey);
+            return context.ZeroKnowledgeProof == null ? fileSystemInfo.Name : context.ZeroKnowledgeProof.EncryptFileName(fileSystemInfo.Name);
         }
 
 
         /// <summary>
-        /// the first 32 bits from the right are the unicode timestamp, the rest the hash on the full file name
+        /// the first 32 bits from the right are the Unicode timestamp, the rest the hash on the full file name
         /// </summary>
         /// <param name="fileSystemInfo"></param>
         /// <returns></returns>
-        public static ulong HashFileName(this FileSystemInfo fileSystemInfo, Sync cloudSync)
+        public static ulong HashFileName(this FileSystemInfo fileSystemInfo, Sync context)
         {
-            var relativeName = CloudRelativeUnixFullName(fileSystemInfo, cloudSync);
+            var relativeName = CloudRelativeUnixFullName(fileSystemInfo, context);
             return HashFileName(relativeName, fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory));
+        }
+
+        public static void Decrypt(this FileInfo encryptedFile, string outputFile, Sync context)
+        {
+            context.ZeroKnowledgeProof.DecryptFile(encryptedFile, outputFile);
         }
 
         // =============== END   FileSystemInfo extension ===============

@@ -359,6 +359,7 @@ namespace CloudSync
         /// <param name="fullNameFile">Full name file</param>
         /// <returns>A Boolean value indicating whether the file is subject to synchronization or not</returns>
         public static bool CanBeSeen(string fullNameFile, bool checkAttribute = true) => CanBeSeen(new FileInfo(fullNameFile), checkAttribute);
+
         internal static readonly string[] SpecialDirectories = { FileIdList.CloudCache };
 
         /// <summary>
@@ -432,8 +433,7 @@ namespace CloudSync
         /// <returns></returns>
         public static string GetTmpFile(Sync sync, ulong? userId, ulong hashFileName)
         {
-            return Path.Combine(GetTempPath(),
-                ((ulong)userId).ToString("X") + hashFileName.ToString("X") + sync.InstanceId);
+            return Path.Combine(GetTempPath(), ((ulong)userId).ToString("X") + hashFileName.ToString("X") + sync.InstanceId);
         }
 
         public const int DefaultChunkSize = 1024 * 1000; // 1 mb

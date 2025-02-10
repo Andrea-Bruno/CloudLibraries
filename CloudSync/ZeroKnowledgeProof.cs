@@ -1,5 +1,5 @@
 ﻿using Blake2Fast;
-using NBitcoin.Crypto;
+using NBitcoin;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -118,7 +118,6 @@ namespace CloudSync
             }
         }
 
-
         /// <summary>
         /// Decrypts a file using a key derived from recursive hashing and XOR.
         /// This method processes data in 8-byte (64-bit) blocks and computes the hash every 8 cycles.
@@ -128,20 +127,59 @@ namespace CloudSync
         /// <param name="key">The encryption/decryption key.</param>
         public static void DecryptFile(FileInfo inputFile, string outputFile, byte[] key) => EncryptFile(inputFile, outputFile, key);
 
+        /// <summary>
+        /// Encrypts or decrypts a file using a key derived from recursive hashing and XOR.
+        /// This method processes data in 8-byte (64-bit) blocks and computes the hash every 8 cycles.
+        /// </summary>
+        /// <param name="inputFile">The input file to process.</param>
+        /// <param name="outputFile">The output file to store the result.</param>
+        public void EncryptFile(FileInfo inputFile, string outputFile) => EncryptFile(inputFile, outputFile, DerivedEncryptionKey(inputFile));
+
+        /// <summary>
+        /// Decrypts a file using a key derived from recursive hashing and XOR.
+        /// This method processes data in 8-byte (64-bit) blocks and computes the hash every 8 cycles.
+        /// </summary>
+        /// <param name="inputFile">The encrypted file to decrypt.</param>
+        /// <param name="outputFile">The output file to store the decrypted file.</param>
+        public void DecryptFile(FileInfo inputFile, string outputFile) => EncryptFile(inputFile, outputFile, DerivedEncryptionKey(inputFile));
 
         private const int IvSize = 16; // AES block size (128 bits)
         private const CipherMode EncryptionMode = CipherMode.CFB;
+
+        public string EncryptFullFileName(string fullFileName) => EncryptFullFileName(fullFileName, FilenameObfuscationKey);
 
         public static string EncryptFullFileName(string fullFileName, byte[] key)
         {
             var result = new List<string>();
             var parts = fullFileName.Split(new char[] { '/', '\\' });
+            var clearFolder = false;
             foreach (var part in parts)
             {
-                result.Add(EncryptFullFileName(part, key));
+                if (Util.SpecialDirectories.Contains(part))
+                    clearFolder = true;
+                result.Add(clearFolder ? part : EncryptFileName(part, key));
             }
             return string.Join('/', result);
         }
+
+        public string DecryptFullFileName(string fullFileName) => DecryptFullFileName(fullFileName, FilenameObfuscationKey);
+
+        public static string DecryptFullFileName(string fullFileName, byte[] key)
+        {
+            var result = new List<string>();
+            var parts = fullFileName.Split(new char[] { '/', '\\' });
+            var clearFolder = false;
+            foreach (var part in parts)
+            {
+                if (Util.SpecialDirectories.Contains(part))
+                    clearFolder = true;
+                result.Add(clearFolder ? part : DecryptFileName(part, key));
+            }
+            return string.Join('/', result);
+        }
+
+        public string EncryptFileName(string fullFileName) => EncryptFileName(fullFileName, FilenameObfuscationKey);
+
 
         /// <summary>
         /// Encrypts a filename while preserving format constraints
@@ -161,8 +199,11 @@ namespace CloudSync
             byte[] encryptedBytes = PerformEncryption(nameBytes, key, iv);
 
             string encoded = Base64UrlEncode(iv.Concat(encryptedBytes).ToArray());
-            return FormatEncryptedFilename(encoded, hasLeadingDot);
+            return FormatEncryptedFilename(encoded, hasLeadingDot) + EncryptFileNameEndChar;
         }
+
+        public string DecryptFileName(string fullFileName) => DecryptFileName(fullFileName, FilenameObfuscationKey);
+
 
         /// <summary>
         /// Decrypts an encrypted filename back to original
@@ -172,6 +213,10 @@ namespace CloudSync
         /// <returns>Original decrypted filename</returns>
         public static string DecryptFileName(string encryptedFileName, byte[] key)
         {
+            if (!encryptedFileName.EndsWith(EncryptFileNameEndChar))
+                return encryptedFileName;
+            else
+                encryptedFileName = encryptedFileName[..^1]; // Remove last char
             if (string.IsNullOrEmpty(encryptedFileName))
                 return encryptedFileName;
             bool hasLeadingDot = encryptedFileName.StartsWith('.');
@@ -186,6 +231,8 @@ namespace CloudSync
             byte[] decryptedBytes = PerformDecryption(ciphertext, key, iv);
             return FormatDecryptedFilename(decryptedBytes, hasLeadingDot);
         }
+
+        public const char EncryptFileNameEndChar = '!';
 
         private static byte[] GenerateSecureIV()
         {

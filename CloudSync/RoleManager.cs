@@ -7,13 +7,13 @@ namespace CloudSync
 {
     public class RoleManager
     {
-        public RoleManager(Sync sync)
+        public RoleManager(Sync context)
         {
-            Sync = sync;
+            Context = context;
             LoadAll();
         }
 
-        private readonly Sync Sync;
+        private readonly Sync Context;
 
         public readonly Dictionary<ulong, Client> Clients = new Dictionary<ulong, Client>();
         public readonly Dictionary<ulong, Client> TmpClients = new Dictionary<ulong, Client>();
@@ -38,7 +38,7 @@ namespace CloudSync
             get
             {
                 if (_MasterPinEnabled == null)
-                    _MasterPinEnabled = Sync.SecureStorage.Values.Get(nameof(MasterPinEnabled), true);
+                    _MasterPinEnabled = Context.SecureStorage.Values.Get(nameof(MasterPinEnabled), true);
                 return (bool)_MasterPinEnabled;
             }
             set
@@ -46,10 +46,10 @@ namespace CloudSync
                 if (value != _MasterPinEnabled)
                 {
                     _MasterPinEnabled = value;
-                    Sync.SecureStorage.Values.Set(nameof(MasterPinEnabled), value);
+                    Context.SecureStorage.Values.Set(nameof(MasterPinEnabled), value);
                 }
             }
-            }
+        }
 
         /// <summary>
         /// The string to display as a QR code to set up 2FA
@@ -57,8 +57,8 @@ namespace CloudSync
         /// <returns>2FA QR Code setting string</returns>
         public string QrCode2FA()
         {
-            var twoFactorAuth = new TwoFactorAuth(Sync.SecureStorage);
-            return twoFactorAuth.QRCodeUri(Sync.InstanceId.ToString());
+            var twoFactorAuth = new TwoFactorAuth(Context.SecureStorage);
+            return twoFactorAuth.QRCodeUri(Context.InstanceId.ToString());
         }
 
         /// <summary>
@@ -66,7 +66,7 @@ namespace CloudSync
         /// </summary>
         public void Reset2FA()
         {
-            var twoFactorAuth = new TwoFactorAuth(Sync.SecureStorage);
+            var twoFactorAuth = new TwoFactorAuth(Context.SecureStorage);
             twoFactorAuth.ResetSecretKey();
         }
 
@@ -80,7 +80,7 @@ namespace CloudSync
         public void LoginRequest(Action<Client, byte[]> sendRequestOfValidationToClient, byte[] clientPubKey = null, ulong? id = null, string host = null, string userAgent = null, int? chunkSizeSetting = null, short thumbnailSize = 0)
         {
 #if DEBUG
-            if (!Sync.IsServer)
+            if (!Context.IsServer)
                 System.Diagnostics.Debugger.Break();
 #endif 
 
@@ -88,7 +88,7 @@ namespace CloudSync
 
             if (clientPubKey != null && id == null)
                 id = PublicKeyToUserId(clientPubKey);
-            var pins = GetPins(Sync.SecureStorage);
+            var pins = GetPins(Context.SecureStorage);
             if (pins == null || pins.Count == 0)
                 return;
             var randomBitesForAuthenticationProof = new byte[32];
@@ -110,19 +110,19 @@ namespace CloudSync
                                                                                                 // =====================
                                                                                                 // generateAesKey = false;
                                                                                                 // =====================
-                    client = new Client(Sync, clientPubKey, authenticationProof, host, userAgent, generateAesKey);
+                    client = new Client(Context, clientPubKey, authenticationProof, host, userAgent, generateAesKey);
                 }
                 else
-                    client = new Client(Sync, (ulong)id, authenticationProof, host, userAgent);
+                    client = new Client(Context, (ulong)id, authenticationProof, host, userAgent);
             }
             client.ChunkSize = chunkSizeSetting == 0 ? null : chunkSizeSetting;
             client.ThumbnailSize = thumbnailSize;
             sendRequestOfValidationToClient(client, randomBitesForAuthenticationProof);
         }
 
-        internal static ProofOfPin CryptographicProofOfPinKnowledge(byte[] randomBitesForAuthenticationProof, IEnumerable<OneTimeAccess> pins, bool isRestApiClient)
+        internal ProofOfPin CryptographicProofOfPinKnowledge(byte[] randomBitesForAuthenticationProof, IEnumerable<OneTimeAccess> pins, bool isRestApiClient)
         {
-            return new ProofOfPin()
+            return new ProofOfPin(Context)
             {
                 IsRestApiClient = isRestApiClient,
                 RandomBitesForAuthenticationProof = randomBitesForAuthenticationProof,
@@ -133,6 +133,11 @@ namespace CloudSync
 
         public class ProofOfPin
         {
+            public ProofOfPin(Sync context)
+            {
+                Context = context;
+            }
+            private Sync Context;
             internal bool IsRestApiClient;
             internal byte[] RandomBitesForAuthenticationProof;
             internal IEnumerable<OneTimeAccess> Pins;
@@ -152,9 +157,9 @@ namespace CloudSync
                 // Check if the pin is for a file sharing group
                 if (IsRestApiClient)
                 {
-                    foreach (var g in Share.GetGroups(cloudRoot))
+                    foreach (var g in Context.Share.GetGroups())
                     {
-                        foreach (var p in Share.GetPins(cloudRoot, g))
+                        foreach (var p in Context.Share.GetPins(g))
                         {
                             var Proof = CryptographicProofOfPinKnowledge(RandomBitesForAuthenticationProof, p);
                             if (Proof == ProofOfPinKnowledge)
@@ -212,11 +217,11 @@ namespace CloudSync
 
         public void LoadAll()
         {
-            var objs = Sync.SecureStorage.ObjectStorage.GetAllObjects(typeof(Client));
+            var objs = Context.SecureStorage.ObjectStorage.GetAllObjects(typeof(Client));
             foreach (var obj in objs)
             {
                 var client = obj as Client;
-                client.Sync = Sync;
+                client.Sync = Context;
                 Clients[client.Id] = client;
             }
         }

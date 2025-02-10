@@ -37,8 +37,9 @@ namespace CloudSync
             {
                 Owner = GetUserIds(owner);
             }
-            if (encryptionMasterKey != null) ;
-            ZeroKnowledgeProof = new ZeroKnowledgeProof(this, encryptionMasterKey);
+            if (encryptionMasterKey != null)
+                ZeroKnowledgeProof = new ZeroKnowledgeProof(this, encryptionMasterKey);
+            Share = new Share(this);
             SecureStorage = secureStorage;
             RoleManager = new RoleManager(this);
             InstanceId = InstanceCounter;
@@ -113,6 +114,7 @@ namespace CloudSync
         internal ZeroKnowledgeProof ZeroKnowledgeProof;
         private ulong UserId;
         private (uint, uint)? Owner;
+        public readonly Share Share;
 
         /// <summary>
         /// Approximate value of the end of synchronization (calculated in a statistical way)
@@ -376,6 +378,7 @@ namespace CloudSync
 
         public readonly bool IsClient;
         public readonly string CloudRoot;
+        public string AppDataPath => Path.Combine(CloudRoot, FileIdList.CloudCache);
 
         public int ConcurrentOperations()
         {
@@ -636,7 +639,7 @@ namespace CloudSync
                     if (!item.Value.Attributes.HasFlag(FileAttributes.Directory))
                     {
                         var fileId = FileId.GetFileId(item.Key, item.Value.UnixLastWriteTimestamp());
-                        var removed = FileIdList.RemoveItem(this, UserId, ScopeType.Deleted, fileId);
+                        var removed = FileIdList.RemoveItem(UserId, ScopeType.Deleted, fileId);
                     }
                 }
             }

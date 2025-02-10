@@ -1,4 +1,5 @@
-﻿using System;
+﻿using NBitcoin;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -253,7 +254,7 @@ namespace CloudSync
                                 var expectedCrc = BitConverter.ToUInt64(values[7], 0);
                                 if (expectedCrc == CRC.GetCRC(fromUserId, hashFileName, part) && new FileInfo(tmpFile).Length.Equals(length)) // Use the length to check if the file was received correctly
                                 {
-                                    var target = FullName(values[6]);
+                                    var target = FullName(values[6], out bool isEncrypted);
                                     var fileInfo = new FileInfo(target);
                                     if (hashFileName != HashFileName(values[6].ToText(), false))
                                     {
@@ -294,7 +295,7 @@ namespace CloudSync
                                         if (exception1 != null)
                                             RaiseOnFileError(exception1, targetDirectory.FullName);
                                     }
-                                    FileMove(tmpFile, target, Owner, out Exception exception2);
+                                    FileMove(tmpFile, target, isEncrypted, Owner, out Exception exception2, context: this);
                                     if (exception2 != null)
                                         RaiseOnFileError(exception2, target);
                                     fileInfo.LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp);
@@ -394,7 +395,7 @@ namespace CloudSync
         private Task TaskOnSendHashStructure;
         /// <summary>
         /// Add the operations to be performed for file synchronization to the spooler.
-        /// This task with many files may take a long time, so it runs in baskground!
+        /// This task with many files may take a long time, so it runs in background!
         /// </summary>
         /// <param name="fromUserId">User who sent the data required for synchronization</param>
         /// <param name="remoteHashes">The structure of the remote files used to calculate the synchronization</param>
@@ -462,10 +463,18 @@ namespace CloudSync
         public uint TotalFilesReceived;
         public uint TotalBytesReceived;
         public readonly ProgressFileTransfer ReceptionInProgress;
-        private string FullName(byte[] unixRelativeName)
+        private string FullName(byte[] unixRelativeName, out bool isEncrypted)
         {
-            var text = unixRelativeName.ToText();
-            return Path.Combine(CloudRoot, text.Replace('/', Path.DirectorySeparatorChar));
+            var fileName = unixRelativeName.ToText();
+            if (ZeroKnowledgeProof != null)
+            {
+                isEncrypted = fileName.EndsWith(ZeroKnowledgeProof.EncryptFileNameEndChar);
+                fileName = ZeroKnowledgeProof.DecryptFullFileName(fileName);
+            }
+            isEncrypted = false;
+            return Path.Combine(CloudRoot, fileName.Replace('/', Path.DirectorySeparatorChar));
         }
+        private string FullName(byte[] unixRelativeName) => FullName(unixRelativeName);
+
     }
 }
