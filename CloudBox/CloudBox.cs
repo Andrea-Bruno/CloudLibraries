@@ -374,9 +374,10 @@ namespace CloudBox
         /// Start sync (connection must be started first)
         /// </summary>
         /// <param name="credential">At the first synchronization, the credentials for logging in to the server must be passed</param>
-        public void StartSync(LoginCredential credential = null)
+        /// <param name="zeroKnowledgeEncryptionMasterKey">If set, zero knowledge proof is enabled, meaning files will be sent encrypted with keys derived from this, and once received, if encrypted, they will be decrypted.</param>
+        public void StartSync(LoginCredential credential = null, byte[] zeroKnowledgeEncryptionMasterKey = null)
         {
-            Sync = new Sync(Context.My.Id, SendSyncCommand, out OnSyncCommand, Context.SecureStorage, CloudPath, credential, DoNotCreateSpecialFolders, SyncIsEnabled, Owner);
+            Sync = new Sync(Context.My.Id, SendSyncCommand, out OnSyncCommand, Context.SecureStorage, CloudPath, credential, DoNotCreateSpecialFolders, SyncIsEnabled, Owner, zeroKnowledgeEncryptionMasterKey);
             // Sync.OnNotification += (fromUserId, notice) => OnNotificationAction?.Invoke(fromUserId, notice);
             Sync.OnNotification += (fromUserId, notice) => OnNotificationActionList
                 .Concat(new[] { OnNotificationAction }).ToList().ForEach(x => x?.Invoke(fromUserId, notice));
