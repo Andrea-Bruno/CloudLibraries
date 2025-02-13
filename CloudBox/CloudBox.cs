@@ -239,7 +239,7 @@ namespace CloudBox
             if (isQRCode)
             {
                 var qrCode = routerEntryPoint;
-                if (SolveQRCode(qrCode, out routerEntryPoint, out serverPublicKey, out EncryptedQR) == false)
+                if (!SolveQRCode(qrCode, out routerEntryPoint, out serverPublicKey, out _))
                     return null;
             }
             SetStaticValue(nameof(LastEntryPoint), routerEntryPoint);
