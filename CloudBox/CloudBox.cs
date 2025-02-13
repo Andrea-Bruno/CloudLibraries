@@ -277,7 +277,22 @@ namespace CloudBox
         /// <summary>
         /// The encryption key of the QR code and for the client also the ID of the server useful for communicating with it
         /// </summary>
-        public Tuple<ulong, byte[]> EncryptedQR;
+        // public ServerIdAndEncryptionKey EncryptedQR;
+
+        /// <summary>
+        /// Id and Key
+        /// </summary>
+        public class ServerIdAndEncryptionKey
+        {
+            /// <summary>
+            /// Server Id
+            /// </summary>
+            public ulong ServerId;
+            /// <summary>
+            /// Encryption Key
+            /// </summary>
+            public byte[] EncryptionKey;
+        }
 
         /// <summary>
         /// It receives the data of a QR code as input, validates it and if recognized returns true
@@ -287,8 +302,7 @@ namespace CloudBox
         /// <param name="serverPublicKey">For type 1 and 2 QR codes, the server's public key is returned</param>
         /// <param name="EncryptedQR">For type 2 QR codes (the encrypted one), it returns the encryption code and the server ID so that it can be queried and given the public key when the connection to the router is established</param>
         /// <returns></returns>
-        public static bool SolveQRCode(string qrCode, out string entryPoint, out string serverPublicKey,
-            out Tuple<ulong, byte[]> EncryptedQR)
+        public static bool SolveQRCode(string qrCode, out string entryPoint, out string serverPublicKey, out ServerIdAndEncryptionKey EncryptedQR)
         {
             entryPoint = null;
             serverPublicKey = null;
@@ -311,7 +325,7 @@ namespace CloudBox
                     offset += 24;
                     var serverId = BitConverter.ToUInt64(qr.Skip(offset).Take(8), 0);
                     offset += 8;
-                    EncryptedQR = new Tuple<ulong, byte[]>(serverId, QRKey);
+                    EncryptedQR = new ServerIdAndEncryptionKey() { ServerId = serverId, EncryptionKey = QRKey };
                 }
                 else if (type > 2)
                     return false;
