@@ -275,11 +275,6 @@ namespace CloudBox
         protected Action<bool> OnRouterConnectionChangeEvent;
 
         /// <summary>
-        /// The encryption key of the QR code and for the client also the ID of the server useful for communicating with it
-        /// </summary>
-        // public ServerIdAndEncryptionKey EncryptedQR;
-
-        /// <summary>
         /// Id and Key
         /// </summary>
         public class ServerIdAndEncryptionKey
