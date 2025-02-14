@@ -11,9 +11,104 @@ namespace CloudSync
     public static partial class Util
     {
 
-        // Change file permission
+        // Change file permission using the Unix chmod system call
         [DllImport("libc", SetLastError = true)]
         private static extern int chmod(string path, uint mode);
+
+        /// <summary>
+        /// Simulate a Unix chmod terminal command
+        /// </summary>
+        /// <param name="permissionMode">Permission mode to set (e.g., "755", "644", "+x", "u=rw")</param>
+        /// <param name="filePath">Full file name to set</param>
+        /// <returns>True if the operation was successful, otherwise false</returns>
+        public static bool Chmod(string permissionMode, string filePath)
+        {
+            uint uintMode = PermissionModeToUint(permissionMode);
+            // Check if the operating system is Unix-like
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return false; // OS not supported
+            }
+
+            // Change the file permissions
+            int result = chmod(filePath, uintMode);
+            return result == 0;
+        }
+
+        /// <summary>
+        /// Convert a Unix permission mode string to a uint representation
+        /// </summary>
+        /// <param name="permissionMode">Permission mode string (e.g., "755", "644", "+x", "u=rw")</param>
+        /// <returns>uint representation of the permission mode</returns>
+        private static uint PermissionModeToUint(string permissionMode)
+        {
+            if (string.IsNullOrEmpty(permissionMode))
+            {
+                throw new ArgumentException("Permission mode cannot be null or empty.");
+            }
+
+            // If the mode is numeric (3 or 4 digits)
+            if (permissionMode.All(char.IsDigit) && (permissionMode.Length == 3 || permissionMode.Length == 4))
+            {
+                return ParseNumericMode(permissionMode);
+            }
+
+            // If the mode is a symbolic command (e.g., "+x", "u=rw")
+            return ParseSymbolicMode(permissionMode);
+        }
+
+        /// <summary>
+        /// Parse a numeric permission mode (e.g., "755", "0640")
+        /// </summary>
+        /// <param name="permissionMode">Numeric permission mode string</param>
+        /// <returns>uint representation of the permission mode</returns>
+        private static uint ParseNumericMode(string permissionMode)
+        {
+            uint mode = 0;
+
+            // If the mode is 4 digits, the first digit represents special flags
+            if (permissionMode.Length == 4)
+            {
+                mode |= (uint)(permissionMode[0] - '0') << 9; // Special flags (setuid, setgid, sticky bit)
+            }
+
+            // Convert the last 3 digits into standard permissions
+            int offset = permissionMode.Length == 4 ? 1 : 0;
+            mode |= (uint)(permissionMode[offset + 0] - '0') << 6; // Owner permissions
+            mode |= (uint)(permissionMode[offset + 1] - '0') << 3; // Group permissions
+            mode |= (uint)(permissionMode[offset + 2] - '0');      // Others permissions
+
+            return mode;
+        }
+
+        /// <summary>
+        /// Parse a symbolic permission mode (e.g., "+x", "u=rw")
+        /// </summary>
+        /// <param name="permissionMode">Symbolic permission mode string</param>
+        /// <returns>uint representation of the permission mode</returns>
+        private static uint ParseSymbolicMode(string permissionMode)
+        {
+            uint mode = 0;
+
+            // Example support for "+x" (add execute permission for all)
+            if (permissionMode == "+x")
+            {
+                mode |= 0x49; // Set execute bits for owner, group, and others (--x--x--x)
+            }
+            // Example support for "u=rw" (set read and write permissions for owner)
+            else if (permissionMode == "u=rw")
+            {
+                mode |= 0x180; // Set read and write bits for owner (rw-------)
+            }
+            // Add more cases here...
+            else
+            {
+                throw new ArgumentException($"Unsupported permission mode: {permissionMode}");
+            }
+
+            return mode;
+        }
+
 
         // Set file like trusted (GNOME)
         [DllImport("libgio-2.0.so.0", SetLastError = true)]
@@ -94,27 +189,6 @@ namespace CloudSync
             catch (Exception)
             {
                 return false;
-            }
-        }
-
-        internal static void Chmod(string filePath, uint mode)
-        {
-            // Check if the operating system is Unix-like
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                Console.WriteLine("This function is not supported on Windows.");
-                return;
-            }
-
-            // Change the file permissions
-            int result = chmod(filePath, mode);
-            if (result != 0)
-            {
-                Console.WriteLine("Failed to change file permissions");
-            }
-            else
-            {
-                Console.WriteLine("File permissions changed successfully");
             }
         }
 
@@ -289,7 +363,7 @@ namespace CloudSync
                     var directory = new DirectoryInfo(directoryName);
                     directory.Create();
                     SetOwner(owner, directoryName);
-                    Chmod(directoryName, 640);
+                    Chmod("0640", directoryName);
                     return true;
                 }
                 catch (IOException ex)
@@ -333,7 +407,7 @@ namespace CloudSync
                         else
                             File.Move(source, target);
                         SetOwner(owner, target);
-                        Chmod(target, 640);
+                        Chmod("640", target);
                         return true;
                     }
                     catch (IOException ex)
