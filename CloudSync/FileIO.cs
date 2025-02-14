@@ -1,20 +1,123 @@
 using Newtonsoft.Json.Linq;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace CloudSync
 {
     public static partial class Util
     {
+
+        // Change file permission
+        [DllImport("libc", SetLastError = true)]
+        private static extern int chmod(string path, uint mode);
+
+        // Set file like trusted (GNOME)
+        [DllImport("libgio-2.0.so.0", SetLastError = true)]
+        private static extern int g_file_set_attribute(
+            IntPtr file,
+            string attribute,
+            IntPtr valueP,
+            IntPtr cancellable,
+            out IntPtr error
+        );
+
+        const uint S_IXUSR = 0x40; // User execute permission
+
+        private static void SetExecutable(string filePath)
+        {
+            if (chmod(filePath, S_IXUSR) != 0)
+            {
+                int errno = Marshal.GetLastWin32Error();
+                Debugger.Break(); // error
+            }
+        }
+
+        private static void AllowLaunching(string filePath)
+        {
+            try
+            {
+                IntPtr file = IntPtr.Zero;
+                IntPtr error;
+                string attribute = "metadata::trusted";
+                IntPtr valueP = Marshal.StringToHGlobalAnsi("true");
+
+                if (g_file_set_attribute(file, attribute, valueP, IntPtr.Zero, out error) != 0)
+                {
+                    int errno = Marshal.GetLastWin32Error();
+                    Marshal.FreeHGlobal(valueP);
+                    Debugger.Break(); // error
+                }
+                else
+                {
+                    Marshal.FreeHGlobal(valueP);
+                }
+            }
+            catch (Exception)
+            {
+
+                throw;
+            }
+        }
+
+        [DllImport("libc", SetLastError = true)]
+        private static extern int chown(string path, uint owner, uint group);
+
         internal static void SetOwner((uint, uint)? owner, string path)
         {
             if (owner != null)
             {
-                chown(path, owner.Value.Item1, owner.Value.Item2);
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                    chown(path, owner.Value.Item1, owner.Value.Item2);
             }
         }
+
+
+        /// <summary>
+        /// Change ownership
+        /// </summary>
+        /// <param name="path">Full path name file or directory</param>
+        /// <param name="owner">Owner name</param>
+        /// <param name="group">Group name</param>
+        /// <returns></returns>
+        public static bool Chown(string path, uint owner, uint group)
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return false;
+            try
+            {
+                return chown(path, owner, group) == 0;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        internal static void Chmod(string filePath, uint mode)
+        {
+            // Check if the operating system is Unix-like
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                Console.WriteLine("This function is not supported on Windows.");
+                return;
+            }
+
+            // Change the file permissions
+            int result = chmod(filePath, mode);
+            if (result != 0)
+            {
+                Console.WriteLine("Failed to change file permissions");
+            }
+            else
+            {
+                Console.WriteLine("File permissions changed successfully");
+            }
+        }
+
 
         /// <summary>
         /// Write binary data in append to a file, retrying if the file is busy with other processes.
@@ -186,6 +289,7 @@ namespace CloudSync
                     var directory = new DirectoryInfo(directoryName);
                     directory.Create();
                     SetOwner(owner, directoryName);
+                    Chmod(directoryName, 640);
                     return true;
                 }
                 catch (IOException ex)
@@ -194,7 +298,6 @@ namespace CloudSync
                     Thread.Sleep(pauseBetweenAttempts);
                 }
             }
-
             return false;
         }
 
@@ -230,6 +333,7 @@ namespace CloudSync
                         else
                             File.Move(source, target);
                         SetOwner(owner, target);
+                        Chmod(target, 640);
                         return true;
                     }
                     catch (IOException ex)

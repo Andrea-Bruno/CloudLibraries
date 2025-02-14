@@ -64,7 +64,7 @@ namespace CloudSync
             if (rootInfo.Exists)
             {
                 rootInfo.Attributes |= FileAttributes.Encrypted;
-                SetOwner(Owner, cloudRoot);
+                SetOwner(Owner, cloudRoot);                
             }
 
             Send = sendCommand;

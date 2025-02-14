@@ -63,9 +63,6 @@ namespace CloudSync
             return (uid, gid);
         }
 
-        [DllImport("libc", SetLastError = true)]
-        public static extern int chown(string path, uint owner, uint group);
-
         private static readonly SHA256 Sha256Hash;
 
         public static byte[] Hash256(byte[] data)
@@ -609,7 +606,7 @@ end tell";
 
                 try
                 {
-                    Process.Start("osascript", $"-e \"{script}\"");
+                    Process.Start("osascript", $"-e '{script}'");
                 }
                 catch (Exception ex)
                 {
@@ -722,59 +719,6 @@ end tell";
                     SetExecutable(targetFile);
                     AllowLaunching(targetFile);
                 }
-            }
-        }
-
-
-        // Change file permission
-        [DllImport("libc", SetLastError = true)]
-        private static extern int chmod(string path, uint mode);
-
-        // Set file like trusted (GNOME)
-        [DllImport("libgio-2.0.so.0", SetLastError = true)]
-        private static extern int g_file_set_attribute(
-            IntPtr file,
-            string attribute,
-            IntPtr valueP,
-            IntPtr cancellable,
-            out IntPtr error
-        );
-
-        const uint S_IXUSR = 0x40; // User execute permission
-
-        private static void SetExecutable(string filePath)
-        {
-            if (chmod(filePath, S_IXUSR) != 0)
-            {
-                int errno = Marshal.GetLastWin32Error();
-                Debugger.Break(); // error
-            }
-        }
-
-        private static void AllowLaunching(string filePath)
-        {
-            try
-            {
-                IntPtr file = IntPtr.Zero;
-                IntPtr error;
-                string attribute = "metadata::trusted";
-                IntPtr valueP = Marshal.StringToHGlobalAnsi("true");
-
-                if (g_file_set_attribute(file, attribute, valueP, IntPtr.Zero, out error) != 0)
-                {
-                    int errno = Marshal.GetLastWin32Error();
-                    Marshal.FreeHGlobal(valueP);
-                    Debugger.Break(); // error
-                }
-                else
-                {
-                    Marshal.FreeHGlobal(valueP);
-                }
-            }
-            catch (Exception)
-            {
-
-                throw;
             }
         }
 
