@@ -1,3 +1,4 @@
+using NBitcoin;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Diagnostics;
@@ -170,6 +171,18 @@ namespace CloudSync
             }
         }
 
+        static private void SetDefaultPermission(bool isDirectory, string path, (uint, uint)? owner)
+        {
+            SetOwner(owner, path);
+            if (isDirectory)
+            {
+                Chmod("0750", path);
+            }
+            else
+            {
+                Chmod("0640", path);
+            }
+        }
 
         /// <summary>
         /// Change ownership
@@ -362,8 +375,7 @@ namespace CloudSync
                 {
                     var directory = new DirectoryInfo(directoryName);
                     directory.Create();
-                    SetOwner(owner, directoryName);
-                    Chmod("0640", directoryName);
+                    SetDefaultPermission(true, directoryName, owner);
                     return true;
                 }
                 catch (IOException ex)
@@ -406,8 +418,7 @@ namespace CloudSync
                         }
                         else
                             File.Move(source, target);
-                        SetOwner(owner, target);
-                        Chmod("640", target);
+                        SetDefaultPermission(false, target, owner);
                         return true;
                     }
                     catch (IOException ex)
@@ -417,7 +428,6 @@ namespace CloudSync
                     }
                 }
             }
-
             return false;
         }
 
