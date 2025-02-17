@@ -259,6 +259,13 @@ namespace CloudSync
                     TimerClientRequestSynchronization = null;
                 }
 
+                if (CheckSyncStatusChanged != null)
+                {
+                    CheckSyncStatusChanged.Change(Timeout.Infinite, Timeout.Infinite);
+                    CheckSyncStatusChanged.Dispose();
+                    CheckSyncStatusChanged = null;
+                }
+               
                 if (pathWatcher != null)
                 {
                     pathWatcher.EnableRaisingEvents = false;
