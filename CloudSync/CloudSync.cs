@@ -154,27 +154,26 @@ namespace CloudSync
         {
             get
             {
-                var isEnabled = !IsMountingPoint(CloudRoot);
-                if (!IsServer)
+                if (IsServer)
                 {
-                    CheckSyncStatusChanged ??= new Timer((o) => { var check = SyncIsEnabled; });
-                    if (_SyncIsEnabled != isEnabled)
-                    {
-                        _SyncIsEnabled = isEnabled;
-                        if (!IsServer)
+                    Directory.Exists(CloudRoot); // Enable this code line is the server can disconnect the cloud path location
+                    return true;
+                }
+                var isEnabled = !IsMountingPoint(CloudRoot);
+                CheckSyncStatusChanged ??= new Timer((o) => { var check = SyncIsEnabled; });
+                if (_SyncIsEnabled != isEnabled)
+                {
+                    _SyncIsEnabled = isEnabled;
+                        if (isEnabled)
                         {
-                            if (isEnabled)
-                            {
-                                CheckSyncStatusChanged.Change(Timeout.Infinite, Timeout.Infinite);
-                                OnEnabledSync();
-                            }
-                            else
-                            {
-                                CheckSyncStatusChanged.Change(30000, 30000); //30 sec.
-                                OnDisableSync();
-                            }
+                            CheckSyncStatusChanged.Change(Timeout.Infinite, Timeout.Infinite);
+                            OnEnabledSync();
                         }
-                    }
+                        else
+                        {
+                            CheckSyncStatusChanged.Change(30000, 30000); //30 sec.
+                            OnDisableSync();
+                        }
                 }
                 return _SyncIsEnabled == true;
             }
