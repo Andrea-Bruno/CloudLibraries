@@ -471,10 +471,11 @@ namespace CloudSync
                 isEncrypted = fileName.EndsWith(ZeroKnowledgeProof.EncryptFileNameEndChar);
                 fileName = ZeroKnowledgeProof.DecryptFullFileName(fileName);
             }
-            isEncrypted = false;
+            else
+                isEncrypted = false;
             return Path.Combine(CloudRoot, fileName.Replace('/', Path.DirectorySeparatorChar));
         }
-        private string FullName(byte[] unixRelativeName) => FullName(unixRelativeName);
+        private string FullName(byte[] unixRelativeName) => FullName(unixRelativeName, out _);
 
     }
 }
