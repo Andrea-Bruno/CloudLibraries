@@ -27,10 +27,9 @@ namespace CloudSync
         /// <param name="cloudRoot">The path to the cloud root directory</param>
         /// <param name="clientCredential">If the current machine is a client, the first time you need to pass the connection credentials to be able to log in to the server</param>
         /// <param name="doNotCreateSpecialFolders">Set to true if you want to automatically create sub-folders in the cloud area to save images, photos, documents, etc..</param>
-        /// <param name="syncIsEnabled"> False to suspend sync, or true. It is important to suspend synchronization if the path is not available (for example when using virtual disks)! Indicate true if the path to the cloud space is reachable (true), or unmounted virtual disk (false). Use IsReachableDiskStateIsChanged to notify that access to the cloud path has changed.</param>
         /// <param name="owner">If set, during synchronization operations (creating files and directories), the owner will be the one specified here</param>
         /// <param name="encryptionMasterKey">If set, zero knowledge proof is enabled, meaning files will be sent encrypted with keys derived from this, and once received, if encrypted, they will be decrypted.</param>
-        public Sync(ulong userId, SendCommandDelegate sendCommand, out SendCommandDelegate onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential clientCredential = null, bool doNotCreateSpecialFolders = false, bool syncIsEnabled = true, string owner = null, byte[] encryptionMasterKey = null)
+        public Sync(ulong userId, SendCommandDelegate sendCommand, out SendCommandDelegate onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential clientCredential = null, bool doNotCreateSpecialFolders = false, string owner = null, byte[] encryptionMasterKey = null)
         {
             UserId = userId;
             if (owner != null)
@@ -57,14 +56,13 @@ namespace CloudSync
 
             DontCreateSpecialFolders = doNotCreateSpecialFolders;
             CloudRoot = cloudRoot;
-            SyncIsEnabled = syncIsEnabled;
             var rootInfo = new DirectoryInfo(cloudRoot);
             if (IsServer)
                 DirectoryCreate(cloudRoot, Owner, out _);
             if (rootInfo.Exists)
             {
                 rootInfo.Attributes |= FileAttributes.Encrypted;
-                SetOwner(Owner, cloudRoot);                
+                SetOwner(Owner, cloudRoot);
             }
 
             Send = sendCommand;
@@ -72,15 +70,10 @@ namespace CloudSync
             Spooler = new Spooler(this);
             ReceptionInProgress = new ProgressFileTransfer(this);
             SendingInProgress = new ProgressFileTransfer(this);
-            if (syncIsEnabled)
+            if (SyncIsEnabled)
             {
-                var task = new Task(() =>
-                {
-                    HashFileTable(out _); // set cache initial state to check if file is deleted
-                });
-                task.Start();
+                Task.Run(() => HashFileTable(out _)); // set cache initial state to check if file is deleted
             }
-
             if (IsServer)
             {
                 var pin = GetPin(secureStorage);
@@ -96,7 +89,6 @@ namespace CloudSync
 #endif
                     SetPin(secureStorage, null, pin);
                 }
-                //SetSyncTimeBuffer();
             }
             else
             {
@@ -107,8 +99,6 @@ namespace CloudSync
                     RequestOfAuthentication(null, clientCredential, PublicIpAddressInfo(),
                         Environment.MachineName); // Start the login process
             }
-            //});
-            //task.Start();
         }
 
         internal ZeroKnowledgeProof ZeroKnowledgeProof;
@@ -156,37 +146,71 @@ namespace CloudSync
 
         private bool DontCreateSpecialFolders;
 
-        /// <summary>
-        /// Block or enable synchronization. Possible use:
-        /// Function that the host app must call if the disk at the root of the cloud is mounted or unmounted.
-        /// If you plan not to use a virtual disk for cloud space then this function should not be called.
-        /// If you use a virtual disk as a path to the cloud, this feature will suspend synchronization when the disk is unsmounted.
-        /// </summary>
-        public void SetSyncState(bool isMounted) => SyncIsEnabled = isMounted;
 
         /// <summary>
-        /// If set to false, suspends all sync operations. Useful if you are working with virtual disks and want to unmount a disk (you must suspend sync operations before unmounting the disk).
+        /// If you are using a virtual disk as storage and it is synchronized, this function will return false, which indicates that synchronization is suspended.
         /// </summary>
-        protected bool SyncIsEnabled
+        public bool SyncIsEnabled
         {
-            get { return (bool)_SyncIsEnabled; }
-            private set
+            get
             {
-                if (_SyncIsEnabled != value)
+                var isEnabled = !IsMountingPoint(CloudRoot);
+                if (!IsServer)
                 {
-                    _SyncIsEnabled = value;
-                    if (!IsServer)
+                    CheckSyncStatusChanged ??= new Timer((o) => { var check = SyncIsEnabled; });
+                    if (_SyncIsEnabled != isEnabled)
                     {
-                        if (value)
-                            OnEnabledSync();
-                        else
-                            OnDisableSync();
+                        _SyncIsEnabled = isEnabled;
+                        if (!IsServer)
+                        {
+                            if (isEnabled)
+                            {
+                                CheckSyncStatusChanged.Change(Timeout.Infinite, Timeout.Infinite);
+                                OnEnabledSync();
+                            }
+                            else
+                            {
+                                CheckSyncStatusChanged.Change(30000, 30000); //30 sec.
+                                OnDisableSync();
+                            }
+                        }
                     }
                 }
+                return _SyncIsEnabled == true;
             }
         }
+        private Timer CheckSyncStatusChanged;
 
-        protected bool? _SyncIsEnabled = null;
+
+        private bool? _SyncIsEnabled = null;
+
+        ///// <summary>
+        ///// Block or enable synchronization. Possible use:
+        ///// Function that the host app must call if the disk at the root of the cloud is mounted or unmounted.
+        ///// If you plan not to use a virtual disk for cloud space then this function should not be called.
+        ///// If you use a virtual disk as a path to the cloud, this feature will suspend synchronization when the disk is unsmounted.
+        ///// </summary>
+        //public void SetSyncState(bool isMounted) => SyncIsEnabled = isMounted;
+
+        //protected bool SyncIsEnabled
+        //{
+        //    get { return (bool)_SyncIsEnabled; }
+        //    private set
+        //    {
+        //        if (_SyncIsEnabled != value)
+        //        {
+        //            _SyncIsEnabled = value;
+        //            if (!IsServer)
+        //            {
+        //                if (value)
+        //                    OnEnabledSync();
+        //                else
+        //                    OnDisableSync();
+        //            }
+        //        }
+        //    }
+        //}
+
 
         private void OnDisableSync()
         {

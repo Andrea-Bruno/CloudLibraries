@@ -10,6 +10,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
+using Mono.Unix.Native;
 using HashFileTable = System.Collections.Generic.Dictionary<ulong, System.IO.FileSystemInfo>;
 
 namespace CloudSync
@@ -44,12 +45,10 @@ namespace CloudSync
             try
             {
                 IntPtr passwdPtr = getpwnam(username);
-
                 if (passwdPtr == IntPtr.Zero)
                 {
                     throw new Exception("Error getting user information.");
                 }
-
                 Passwd passwd = Marshal.PtrToStructure<Passwd>(passwdPtr);
 
                 uid = passwd.pw_uid;
@@ -59,7 +58,6 @@ namespace CloudSync
             {
                 Console.WriteLine($"Errore: {ex.Message}");
             }
-
             return (uid, gid);
         }
 
@@ -106,7 +104,7 @@ namespace CloudSync
         /// <summary>
         /// Check if the desktop environment is started
         /// </summary>
-        public static bool DesktopEnvironmentIsStarted = !RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP"));
+        public static readonly bool DesktopEnvironmentIsStarted = !RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP"));
 
         public static bool CheckConnection(Uri uri)
         {
@@ -240,7 +238,7 @@ namespace CloudSync
             /// <summary>
             /// Pin
             /// </summary>
-            public string Pin;
+            public readonly string Pin;
 
             /// <summary>
             /// Class with properties related to the disposable pin
@@ -250,13 +248,12 @@ namespace CloudSync
             /// <summary>
             /// Label describing who was assigned the pin (optional reminder)
             /// </summary>
-            public string Label;
+            public readonly string Label;
         }
 
         /// <summary>
         /// Remove a disposable pin
         /// </summary>
-        /// <param name="context">Context object</param>
         /// <param name="pin"></param>
         public static bool RemoveFromPins(Storage secureStorage, string pin)
         {
@@ -714,6 +711,7 @@ end tell";
                         writer.WriteLine(@"Icon=" + icoFullName);
                         writer.WriteLine(@"Name=" + fileName);
                         writer.WriteLine(@"Exec=xdg-open " + sourceFile);
+                        writer.Flush();
                     }
                     Thread.Sleep(500);
                     SetExecutable(targetFile);
@@ -1051,6 +1049,46 @@ end tell";
                 {
                     // ignored
                 }
+            }
+        }
+
+        /// <summary>
+        /// If you use a virtual disk you need to mark the mount point with this function so that the synchronization is automatically suspended if the disk is unmounted and restarts when it is remounted.
+        /// </summary>
+        /// <param name="path"></param>
+        public static void SetMountPointFlag(string path)
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                var dir = new DirectoryInfo(path);
+                dir.Attributes |= (FileAttributes.Hidden | FileAttributes.ReadOnly | FileAttributes.System);
+            }
+            else
+            {
+                Chmod(640, path);
+            }
+        }
+
+        /// <summary>
+        /// This function indicates whether a path has been marked as a mount point when there is no disk mounted on it. Used internally to suspend and resume synchronization when disks are unmounted at the cloud path location.
+        /// </summary>
+        /// <param name="path"></param>
+        /// <returns></returns>
+        public static bool IsMountingPoint(string path)
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                var dir = new DirectoryInfo(path);
+                return dir.Attributes.HasFlag(FileAttributes.ReadOnly) && dir.Attributes.HasFlag(FileAttributes.System);
+            }
+            else
+            {
+                var permission = GetOctalFilePermissions(path);
+                var EXECUTE_OWNER = 64; // 0100 in octal
+                // Check if the execute permission for the owner is enabled
+                bool isExecuteOwnerEnabled = (permission & EXECUTE_OWNER) != 0;
+
+                return !isExecuteOwnerEnabled;
             }
         }
     }

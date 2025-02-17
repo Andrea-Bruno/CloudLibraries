@@ -1,5 +1,4 @@
-using NBitcoin;
-using Newtonsoft.Json.Linq;
+using Mono.Unix.Native;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -11,105 +10,48 @@ namespace CloudSync
 {
     public static partial class Util
     {
-
-        // Change file permission using the Unix chmod system call
-        [DllImport("libc", SetLastError = true)]
-        private static extern int chmod(string path, uint mode);
-
         /// <summary>
         /// Simulate a Unix chmod terminal command
         /// </summary>
-        /// <param name="permissionMode">Permission mode to set (e.g., "755", "644", "+x", "u=rw")</param>
+        /// <param name="permissionsMode">Permissions mode to set (e.g., 755, 644)</param>
         /// <param name="filePath">Full file name to set</param>
         /// <returns>True if the operation was successful, otherwise false</returns>
-        public static bool Chmod(string permissionMode, string filePath)
+        public static bool Chmod(int permissionsMode, string filePath)
         {
-            uint uintMode = PermissionModeToUint(permissionMode);
+            uint uintMode = PermissionsBase10ToUnixOctal(permissionsMode);
             // Check if the operating system is Unix-like
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
                 return false; // OS not supported
-            }
-
+            var permission = (FilePermissions)uintMode;
             // Change the file permissions
-            int result = chmod(filePath, uintMode);
+            int result = Syscall.chmod(filePath, permission);
             return result == 0;
         }
 
-        /// <summary>
-        /// Convert a Unix permission mode string to a uint representation
-        /// </summary>
-        /// <param name="permissionMode">Permission mode string (e.g., "755", "644", "+x", "u=rw")</param>
-        /// <returns>uint representation of the permission mode</returns>
-        private static uint PermissionModeToUint(string permissionMode)
+        private static int GetOctalFilePermissions(string filePath)
         {
-            if (string.IsNullOrEmpty(permissionMode))
-            {
-                throw new ArgumentException("Permission mode cannot be null or empty.");
-            }
-
-            // If the mode is numeric (3 or 4 digits)
-            if (permissionMode.All(char.IsDigit) && (permissionMode.Length == 3 || permissionMode.Length == 4))
-            {
-                return ParseNumericMode(permissionMode);
-            }
-
-            // If the mode is a symbolic command (e.g., "+x", "u=rw")
-            return ParseSymbolicMode(permissionMode);
+            if (Syscall.stat(filePath, out Stat statBuf) != 0)
+                return -1; // Error while reading file information
+            // Convert permissions to a human-readable string
+            var mode = statBuf.st_mode;
+            return (int)mode;
         }
 
         /// <summary>
-        /// Parse a numeric permission mode (e.g., "755", "0640")
+        /// Converts Unix permissions from decimal (base 10) to their octal (base 8) representation.
         /// </summary>
-        /// <param name="permissionMode">Numeric permission mode string</param>
-        /// <returns>uint representation of the permission mode</returns>
-        private static uint ParseNumericMode(string permissionMode)
+        /// <param name="base10Permissions">Permissions in decimal format (e.g., 511, 420).</param>
+        /// <returns>The octal representation of the permissions as a uint (e.g., 777, 644).</returns>
+        private static uint PermissionsBase10ToUnixOctal(int base10Permissions)
         {
-            uint mode = 0;
-
-            // If the mode is 4 digits, the first digit represents special flags
-            if (permissionMode.Length == 4)
-            {
-                mode |= (uint)(permissionMode[0] - '0') << 9; // Special flags (setuid, setgid, sticky bit)
-            }
-
-            // Convert the last 3 digits into standard permissions
-            int offset = permissionMode.Length == 4 ? 1 : 0;
-            mode |= (uint)(permissionMode[offset + 0] - '0') << 6; // Owner permissions
-            mode |= (uint)(permissionMode[offset + 1] - '0') << 3; // Group permissions
-            mode |= (uint)(permissionMode[offset + 2] - '0');      // Others permissions
-
-            return mode;
+            var o = base10Permissions % 10;
+            base10Permissions /= 10;
+            var g = base10Permissions % 10;
+            base10Permissions /= 10;
+            var a = base10Permissions % 10;
+            var result = o | g << 3 | a << 6;
+            return (uint)result;
         }
-
-        /// <summary>
-        /// Parse a symbolic permission mode (e.g., "+x", "u=rw")
-        /// </summary>
-        /// <param name="permissionMode">Symbolic permission mode string</param>
-        /// <returns>uint representation of the permission mode</returns>
-        private static uint ParseSymbolicMode(string permissionMode)
-        {
-            uint mode = 0;
-
-            // Example support for "+x" (add execute permission for all)
-            if (permissionMode == "+x")
-            {
-                mode |= 0x49; // Set execute bits for owner, group, and others (--x--x--x)
-            }
-            // Example support for "u=rw" (set read and write permissions for owner)
-            else if (permissionMode == "u=rw")
-            {
-                mode |= 0x180; // Set read and write bits for owner (rw-------)
-            }
-            // Add more cases here...
-            else
-            {
-                throw new ArgumentException($"Unsupported permission mode: {permissionMode}");
-            }
-
-            return mode;
-        }
-
 
         // Set file like trusted (GNOME)
         [DllImport("libgio-2.0.so.0", SetLastError = true)]
@@ -121,11 +63,11 @@ namespace CloudSync
             out IntPtr error
         );
 
-        const uint S_IXUSR = 0x40; // User execute permission
+        const FilePermissions S_IXUSR = (FilePermissions)0x40; // User execute permission
 
         private static void SetExecutable(string filePath)
         {
-            if (chmod(filePath, S_IXUSR) != 0)
+            if (Syscall.chmod(filePath, S_IXUSR) != 0)
             {
                 int errno = Marshal.GetLastWin32Error();
                 Debugger.Break(); // error
@@ -159,15 +101,13 @@ namespace CloudSync
             }
         }
 
-        [DllImport("libc", SetLastError = true)]
-        private static extern int chown(string path, uint owner, uint group);
 
         internal static void SetOwner((uint, uint)? owner, string path)
         {
             if (owner != null)
             {
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                    chown(path, owner.Value.Item1, owner.Value.Item2);
+                    Syscall.chown(path, owner.Value.Item1, owner.Value.Item2);
             }
         }
 
@@ -176,11 +116,11 @@ namespace CloudSync
             SetOwner(owner, path);
             if (isDirectory)
             {
-                Chmod("0750", path);
+                Chmod(750, path);
             }
             else
             {
-                Chmod("0640", path);
+                Chmod(640, path);
             }
         }
 
@@ -197,7 +137,7 @@ namespace CloudSync
                 return false;
             try
             {
-                return chown(path, owner, group) == 0;
+                return Syscall.chown(path, owner, group) == 0;
             }
             catch (Exception)
             {
