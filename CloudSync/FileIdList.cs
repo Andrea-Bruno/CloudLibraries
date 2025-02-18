@@ -80,19 +80,17 @@ namespace CloudSync
         /// </summary>
         private void Save()
         {
-            if (!Directory.Exists(Path.GetDirectoryName(FileName)))
+            var path = new DirectoryInfo(Path.GetDirectoryName(FileName));
+            if (!path.Exists)
             {
-                var newDir = Directory.CreateDirectory(Path.GetDirectoryName(FileName));
-                newDir.Attributes |= FileAttributes.Hidden;
+                path.Create();
+                path.Attributes |= FileAttributes.Hidden;
             }
-
-            using (var fileStream = new FileStream(FileName, FileMode.Create, FileAccess.Write))
-            using (var binaryWriter = new BinaryWriter(fileStream))
+            using var fileStream = new FileStream(FileName, FileMode.Create, FileAccess.Write);
+            using var binaryWriter = new BinaryWriter(fileStream);
+            foreach (var fileId in fileIdList)
             {
-                foreach (var fileId in fileIdList)
-                {
-                    binaryWriter.Write(fileId.Bytes);
-                }
+                binaryWriter.Write(fileId.Bytes);
             }
         }
 

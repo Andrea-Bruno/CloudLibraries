@@ -254,8 +254,7 @@ namespace CloudSync
         /// <param name="attempts">number of attempts</param>
         /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt (in milliseconds)</param>
         /// <returns>True for successful</returns>
-        public static bool DirectoryDelete(string directoryName, out Exception exception, int attempts = 10,
-            int pauseBetweenAttempts = 50)
+        public static bool DirectoryDelete(string directoryName, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
         {
             exception = null;
             for (int numTries = 0; numTries < attempts; numTries++)

@@ -38,7 +38,6 @@ namespace CloudSync
             }
             if (encryptionMasterKey != null)
                 ZeroKnowledgeProof = new ZeroKnowledgeProof(this, encryptionMasterKey);
-            Share = new Share(this);
             SecureStorage = secureStorage;
             RoleManager = new RoleManager(this);
             InstanceId = InstanceCounter;
@@ -65,6 +64,7 @@ namespace CloudSync
                 SetOwner(Owner, cloudRoot);
             }
 
+            Share = new Share(this);
             Send = sendCommand;
             onCommand = OnCommand;
             Spooler = new Spooler(this);
@@ -103,7 +103,7 @@ namespace CloudSync
 
         internal ZeroKnowledgeProof ZeroKnowledgeProof;
         private ulong UserId;
-        private (uint, uint)? Owner;
+        internal (uint, uint)? Owner;
         public readonly Share Share;
 
         /// <summary>

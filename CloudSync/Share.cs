@@ -100,6 +100,14 @@ namespace CloudSync
             {
                 lines.Add(fileToAdd);
             }
+
+            var appDataPath = new DirectoryInfo(AppData);
+            if (!appDataPath.Exists)
+            {
+                Util.DirectoryCreate(AppData, Context.Owner, out _);
+                appDataPath.Refresh();
+                appDataPath.Attributes |= FileAttributes.Hidden;
+            }
             File.WriteAllLines(ShareSettingFile, lines);
         }
 
