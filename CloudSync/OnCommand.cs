@@ -402,8 +402,7 @@ namespace CloudSync
         /// <param name="delimitsRange">A possible delimiter that restricts the area of files to be checked for synchronization</param>
         private void OnSendHashStructure(ulong? fromUserId, Dictionary<ulong, uint> remoteHashes, BlockRange delimitsRange)
         {
-            if (TaskOnSendHashStructure == null)
-                TaskOnSendHashStructure = Task.Run(() =>
+            TaskOnSendHashStructure ??= Task.Run(() =>
                 {
                     try
                     {
@@ -449,7 +448,6 @@ namespace CloudSync
                                 }
                             }
                         }
-                        TaskOnSendHashStructure = null;
                     }
                     catch (Exception ex)
                     {
@@ -457,6 +455,7 @@ namespace CloudSync
                         Debugger.Break(); // Error! Investigate the cause of the error!
                         Debug.WriteLine(ex);
                     }
+                    TaskOnSendHashStructure = null;
                 });
         }
 
