@@ -13,22 +13,22 @@ namespace CloudSync
     /// </summary>
     public partial class Sync : IDisposable
     {
-        private FileSystemWatcher pathWatcher;
+        private FileSystemWatcher PathWatcher;
 
         private bool WatchCloudRoot(int maxAttempts = 10)
         {
-            int attempts = 0;
+            var attempts = 0;
             while (attempts < maxAttempts)
             {
                 try
                 {
-                    if (pathWatcher != null)
+                    if (PathWatcher != null)
                     {
-                        pathWatcher.EnableRaisingEvents = true;
+                        PathWatcher.EnableRaisingEvents = true;
                         return true;
                     }
 
-                    pathWatcher = new FileSystemWatcher
+                    PathWatcher = new FileSystemWatcher
                     {
                         Path = CloudRoot,
                         NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.CreationTime,
@@ -36,30 +36,30 @@ namespace CloudSync
                         EnableRaisingEvents = true,
                         IncludeSubdirectories = true
                     };
-                    pathWatcher.Created += (s, e) =>
+                    PathWatcher.Created += (s, e) =>
                     {
                         if (!Util.CanBeSeen(e.FullPath))
                             return;
                         OnCreated(e.FullPath);
                         ClientRequestSynchronization();
                     };
-                    pathWatcher.Changed += (s, e) =>
+                    PathWatcher.Changed += (s, e) =>
                     {
                         if (!Util.CanBeSeen(e.FullPath))
                             return;
                         OnChanged(e.FullPath);
                         ClientRequestSynchronization();
                     };
-                    pathWatcher.Deleted += (s, e) =>
+                    PathWatcher.Deleted += (s, e) =>
                     {
                         if (!Util.CanBeSeen(e.FullPath, false))
                             return;
                         OnDeleted(e.FullPath);
                         ClientRequestSynchronization();
                     };
-                    pathWatcher.Renamed += (s, e) =>
+                    PathWatcher.Renamed += (s, e) =>
                     {
-                        bool sync = false;
+                        var sync = false;
                         if (Util.CanBeSeen(e.OldFullPath, false))
                         {
                             OnDeleted(e.OldFullPath);
@@ -87,8 +87,8 @@ namespace CloudSync
 
         private void StopWatchCloudRoot()
         {
-            if (pathWatcher != null)
-                pathWatcher.EnableRaisingEvents = false;
+            if (PathWatcher != null)
+                PathWatcher.EnableRaisingEvents = false;
         }
 
         private void OnDeleted(string fileName)
@@ -167,7 +167,7 @@ namespace CloudSync
             }
         }
 
-        private List<FileId> DeletedByRemoteRequest = new List<FileId>();
+        private readonly List<FileId> DeletedByRemoteRequest = new List<FileId>();
         private void AddDeletedByRemoteRequest(FileId fileId)
         {
             DeletedByRemoteRequest.Add(fileId);

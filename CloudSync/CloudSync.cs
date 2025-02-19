@@ -266,11 +266,11 @@ namespace CloudSync
                     CheckSyncStatusChanged = null;
                 }
                
-                if (pathWatcher != null)
+                if (PathWatcher != null)
                 {
-                    pathWatcher.EnableRaisingEvents = false;
-                    pathWatcher.Dispose();
-                    pathWatcher = null;
+                    PathWatcher.EnableRaisingEvents = false;
+                    PathWatcher.Dispose();
+                    PathWatcher = null;
                 }
 
                 ReceptionInProgress.Dispose();
@@ -532,11 +532,6 @@ namespace CloudSync
                 hashTable = null;
                 return false;
             }
-
-#if DEBUG && !TEST
-            var timer = new Stopwatch();
-            timer.Start();
-#endif
             try
             {
                 void StartAnalyzeDirectory(string directoryName, out HashFileTable hashDirTable)
@@ -630,21 +625,10 @@ namespace CloudSync
                 if (delimitsRange != null)
                 {
                     hashTable = GetRestrictedHashFileTable(CacheHashFileTable, out _, delimitsRange);
-
-#if DEBUG && !TEST
-                    timer.Stop();
-                    if (timer.ElapsedMilliseconds > 10000)
-                        Debugger.Break();
-#endif
                     return true;
                 }
                 OnHashFileTableChanged(CacheHashFileTable);
                 hashTable = CacheHashFileTable;
-#if DEBUG && !TEST
-                timer.Stop();
-                if (timer.ElapsedMilliseconds > 10000)
-                    Debugger.Break();
-#endif
                 return true;
             }
             catch (Exception ex)
