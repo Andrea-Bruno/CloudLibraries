@@ -29,7 +29,8 @@ namespace CloudSync
         /// <param name="doNotCreateSpecialFolders">Set to true if you want to automatically create sub-folders in the cloud area to save images, photos, documents, etc..</param>
         /// <param name="owner">If set, during synchronization operations (creating files and directories), the owner will be the one specified here</param>
         /// <param name="encryptionMasterKey">If set, zero knowledge proof is enabled, meaning files will be sent encrypted with keys derived from this, and once received, if encrypted, they will be decrypted.</param>
-        public Sync(ulong userId, SendCommandDelegate sendCommand, out SendCommandDelegate onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential clientCredential = null, bool doNotCreateSpecialFolders = false, string owner = null, byte[] encryptionMasterKey = null)
+        /// <param name="storageLimitGB">Limit cloud storage (useful for assigning storage to users with subscription plans)</param>
+        public Sync(ulong userId, SendCommandDelegate sendCommand, out SendCommandDelegate onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential clientCredential = null, bool doNotCreateSpecialFolders = false, string owner = null, byte[] encryptionMasterKey = null, int storageLimitGB = -1)
         {
             UserId = userId;
             if (owner != null)
@@ -38,6 +39,7 @@ namespace CloudSync
             }
             if (encryptionMasterKey != null)
                 ZeroKnowledgeProof = new ZeroKnowledgeProof(this, encryptionMasterKey);
+            StorageLimitGB = storageLimitGB;
             SecureStorage = secureStorage;
             RoleManager = new RoleManager(this);
             InstanceId = InstanceCounter;
@@ -105,6 +107,10 @@ namespace CloudSync
         private ulong UserId;
         internal (uint, uint)? Owner;
         public readonly Share Share;
+        /// <summary>
+        /// The amount of space reserved for file storage expressed in gigabytes
+        /// </summary>
+        public int StorageLimitGB { get; private set; }
 
         /// <summary>
         /// Approximate value of the end of synchronization (calculated in a statistical way)
@@ -534,13 +540,14 @@ namespace CloudSync
             }
             try
             {
-                void StartAnalyzeDirectory(string directoryName, out HashFileTable hashDirTable)
+                long usedSpace = 0;
+                void StartAnalyzeDirectory(string directoryName, out HashFileTable hashDirTable, ref long usedSpace)
                 {
                     hashDirTable = new HashFileTable();
-                    AnalyzeDirectory(new DirectoryInfo(directoryName), ref hashDirTable);
+                    AnalyzeDirectory(new DirectoryInfo(directoryName), ref hashDirTable, ref usedSpace);
                 }
 
-                void AnalyzeDirectory(DirectoryInfo directory, ref HashFileTable hashFileTable)
+                void AnalyzeDirectory(DirectoryInfo directory, ref HashFileTable hashFileTable, ref long usedSpace)
                 {
                     try
                     {
@@ -557,11 +564,12 @@ namespace CloudSync
                                 {
                                     if (!DirToExclude((DirectoryInfo)item))
                                     {
-                                        AnalyzeDirectory((DirectoryInfo)item, ref hashFileTable);
+                                        AnalyzeDirectory((DirectoryInfo)item, ref hashFileTable, ref usedSpace);
                                     }
                                 }
                                 else  // Id a FIle
                                 {
+                                    usedSpace += ((FileInfo)item).Length;
                                     hash = item.HashFileName(this);
                                     hashFileTable.Add(hash, item);
                                 }
@@ -627,6 +635,10 @@ namespace CloudSync
                     hashTable = GetRestrictedHashFileTable(CacheHashFileTable, out _, delimitsRange);
                     return true;
                 }
+                else
+                {
+                    UsedSpace = usedSpace;
+                }
                 OnHashFileTableChanged(CacheHashFileTable);
                 hashTable = CacheHashFileTable;
                 return true;
@@ -641,6 +653,10 @@ namespace CloudSync
             return false;
         }
 
+        /// <summary>
+        /// Cloud storage space used in bytes
+        /// </summary>
+        public long  UsedSpace {  get; private set; }
 
         private void OnHashFileTableChanged(HashFileTable newHashFileTable)
         {
@@ -683,7 +699,6 @@ namespace CloudSync
                 }
             }
         }
-
 
         /// <summary>
         /// The time taken to compute the cloud path file table hash in milliseconds

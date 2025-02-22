@@ -228,7 +228,7 @@ namespace CloudSync
                         var maxFileSize = total * data.Length;
                         // If the disk is about to be full notify the sender, and finish the operation.
                         lock (FlagsDriveOverLimit)
-                            if (!PreserveDriveSpace(CloudRoot, preserveSize: maxFileSize))
+                            if (!CheckDiskSPace(this, preserveSize: maxFileSize))
                             {
                                 if (!FlagsDriveOverLimit.Contains(fromUserId))
                                     FlagsDriveOverLimit.Add(fromUserId);
@@ -338,7 +338,7 @@ namespace CloudSync
                                     lock (FlagsDriveOverLimit)
                                         if (FlagsDriveOverLimit.Contains(fromUserId))
                                         {
-                                            if (PreserveDriveSpace(CloudRoot))
+                                            if (CheckDiskSPace(this))
                                             {
                                                 FlagsDriveOverLimit.Remove(fromUserId);
                                                 SendNotification(fromUserId, Notice.FullSpaceOff);
@@ -355,7 +355,7 @@ namespace CloudSync
                         var fullDirectoryName = FullName(values[0]);
                         infoData = fullDirectoryName;
                         lock (FlagsDriveOverLimit)
-                            if (!PreserveDriveSpace(CloudRoot))
+                            if (!CheckDiskSPace(this))
                             {
                                 if (!FlagsDriveOverLimit.Contains(fromUserId))
                                     FlagsDriveOverLimit.Add(fromUserId);

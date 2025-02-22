@@ -154,12 +154,12 @@ namespace CloudSync
         /// <param name="exception">Returns any errors encountered in performing the operation</param>
         /// <param name="attempts">number of attempts</param>
         /// <param name="pauseBetweenAttempts">Pause in the file is busy, before a new attempt</param>
-        /// <param name="chunkSize">Set a value different of 0 to check a file size if is consistent with the chunk size size</param>
+        /// <param name="chunkSize">Set a value different of 0 to check a file size if is consistent with the chunk size</param>
         /// <param name="chunkNumber">Chunk number (base 1) if chunk size is different of 0</param>
         /// <returns>True for successful</returns>
-        public static bool FileAppend(string fileName, byte[] data, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50, int chunkSize = 0, uint chunkNumber = 0)
+        public static bool FileAppend(string fileName, byte[] data, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50, int chunkSize = 0, uint chunkNumber = 0, Sync context = null)
         {
-            if (!PreserveDriveSpace(fileName))
+            if (!CheckDiskSPace(context))
             {
                 exception = DriveFullException;
                 return false;
@@ -301,12 +301,6 @@ namespace CloudSync
         /// <returns>True for successful</returns>
         public static bool DirectoryCreate(string directoryName, (uint, uint)? owner, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50)
         {
-            if (!PreserveDriveSpace(directoryName))
-            {
-                exception = DriveFullException;
-                return false;
-            }
-
             exception = null;
             for (int numTries = 0; numTries < attempts; numTries++)
             {
@@ -337,7 +331,7 @@ namespace CloudSync
         /// <returns>True for successful</returns>
         public static bool FileMove(string source, string target, bool decrypt, (uint, uint)? owner, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50, Sync context = null)
         {
-            if (!PreserveDriveSpace(target))
+            if (!CheckDiskSPace(context))
             {
                 exception = DriveFullException;
                 return false;
@@ -396,7 +390,7 @@ namespace CloudSync
         /// <returns>True for successful</returns>
         public static bool FileCopy(FileSystemInfo source, string target, out Exception exception, int attempts = 10, int pauseBetweenAttempts = 50, Sync context = null)
         {
-            if (!PreserveDriveSpace(target))
+            if (!CheckDiskSPace(context))
             {
                 exception = DriveFullException;
                 return false;

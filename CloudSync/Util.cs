@@ -957,6 +957,23 @@ end tell";
         }
 
         /// <summary>
+        /// Verify that the space occupied is sufficient and compatible with the assigned space
+        /// </summary>
+        /// <param name="cloudRoot">A path pointing to a disk location to test or a drive</param>
+        /// <param name="preserveSize">Space limit to preserve, default is one gigabyte. If the free space is less then it will return false, or generate an error if set by parameter throwError. If this value is less than MinimumPreserveDiskSize, then MinimumPreserveDiskSize will still be treated as the value.</param>
+        /// <returns>True if space is not running low</returns>
+        /// <exception cref="Exception">If set by parameter, an exception can be generated if the space is close to running out</exception>
+        internal static bool CheckDiskSPace(Sync context, long preserveSize = MinimumPreserveDiskSize)
+        {
+            if (context == null)
+                return true;
+            if (context.StorageLimitGB != -1 && (context.UsedSpace / 1000000000) > context.StorageLimitGB) // check over limit quota
+                    return false;
+            var result = PreserveDriveSpace(context.CloudRoot, false, preserveSize);
+            return result;
+        }
+
+        /// <summary>
         /// Check if the disk is close to being full and return true if it is within the limits, it can also generate an appropriate error if set by parameters.
         /// </summary>
         /// <param name="path">A path pointing to a disk location to test or a drive</param>
@@ -964,8 +981,7 @@ end tell";
         /// <param name="preserveSize">Space limit to preserve, default is one gigabyte. If the free space is less then it will return false, or generate an error if set by parameter throwError. If this value is less than MinimumPreserveDiskSize, then MinimumPreserveDiskSize will still be treated as the value.</param>
         /// <returns>True if space is not running low</returns>
         /// <exception cref="Exception">If set by parameter, an exception can be generated if the space is close to running out</exception>
-        public static bool PreserveDriveSpace(string path, bool throwError = false,
-            long preserveSize = MinimumPreserveDiskSize)
+        public static bool PreserveDriveSpace(string path, bool throwError = false, long preserveSize = MinimumPreserveDiskSize)
         {
             if (preserveSize < MinimumPreserveDiskSize)
                 preserveSize = MinimumPreserveDiskSize;
@@ -979,7 +995,7 @@ end tell";
         /// <summary>
         /// The disk should never be filled completely to avoid blocking the operating system and disk operations. This is the minimum space you want to keep on the disk.
         /// </summary>
-        private const long MinimumPreserveDiskSize = 1000000000;
+        internal const long MinimumPreserveDiskSize = 1000000000;
 
         public static Exception DriveFullException
         {

@@ -10,6 +10,7 @@ using System.Threading;
 using CloudSync;
 using EncryptedMessaging;
 using NBitcoin;
+using SecureStorage;
 using static CommunicationChannel.Channel;
 
 namespace CloudBox
@@ -45,11 +46,12 @@ namespace CloudBox
         /// <param name="licenseOEM">The OEM private key for activating licenses.</param>
         /// <param name="name">A label name to assign to this instance (this does not affect how the cloud works)</param>
         /// <param name="doNotCreateSpecialFolders">If instantiated as a server it will automatically create specific subdirectories for documents, photos, etc., unless this parameter is specified</param>
-        public CloudBox(string cloudPath = null, bool isServer = false, ulong? id = null, string licenseOEM = null, string name = null, bool doNotCreateSpecialFolders = false)
+        /// <param name="storageLimitGB">Limit cloud storage (useful for assigning storage to users with subscription plans)</param>
+        public CloudBox(string cloudPath = null, bool isServer = false, ulong? id = null, string licenseOEM = null, string name = null, bool doNotCreateSpecialFolders = false, int storageLimitGB = -1)
         {
             DoNotCreateSpecialFolders = doNotCreateSpecialFolders;
-            ;
             _Name = name;
+            _StorageLimitGB = storageLimitGB;
             //if (string.IsNullOrEmpty(routerEntryPoint))
             //{
             //    throw new Exception("Missing entryPoint");
@@ -148,8 +150,15 @@ namespace CloudBox
         /// </summary>
         public string Name
         {
-            get { return Context.SecureStorage.Values.Get("Name", null); }
-            set { Context.SecureStorage.Values.Set("Name", value); }
+            get { return Context.SecureStorage.Values.Get(nameof(Name), null); }
+            set { Context.SecureStorage.Values.Set(nameof(Name), value); }
+        }
+
+        private int _StorageLimitGB;
+        public int StorageLimitGB
+        {
+            get { return Context.SecureStorage.Values.Get(nameof(StorageLimitGB), -1); }
+            set { Context.SecureStorage.Values.Set(nameof(StorageLimitGB), value); }
         }
 
         /// <summary>
@@ -258,6 +267,10 @@ namespace CloudBox
             if (!string.IsNullOrEmpty(_Name))
             {
                 Name = _Name;
+            }
+            if (_StorageLimitGB != -1)
+            {
+                StorageLimitGB = _StorageLimitGB;
             }
 
             Context.OnContactEvent += OnContactEvent;
@@ -382,7 +395,7 @@ namespace CloudBox
         /// <param name="zeroKnowledgeEncryptionMasterKey">If set, zero knowledge proof is enabled, meaning files will be sent encrypted with keys derived from this, and once received, if encrypted, they will be decrypted.</param>
         public void StartSync(LoginCredential credential = null, byte[] zeroKnowledgeEncryptionMasterKey = null)
         {
-            Sync = new Sync(Context.My.Id, SendSyncCommand, out OnSyncCommand, Context.SecureStorage, CloudPath, credential, DoNotCreateSpecialFolders, Owner, zeroKnowledgeEncryptionMasterKey);
+            Sync = new Sync(Context.My.Id, SendSyncCommand, out OnSyncCommand, Context.SecureStorage, CloudPath, credential, DoNotCreateSpecialFolders, Owner, zeroKnowledgeEncryptionMasterKey, StorageLimitGB);
             // Sync.OnNotification += (fromUserId, notice) => OnNotificationAction?.Invoke(fromUserId, notice);
             Sync.OnNotification += (fromUserId, notice) => OnNotificationActionList
                 .Concat(new[] { OnNotificationAction }).ToList().ForEach(x => x?.Invoke(fromUserId, notice));
