@@ -154,32 +154,40 @@ namespace CloudSync
 
 
         /// <summary>
+        /// Set this function to externally hook the command to pause and resume synchronization
+        /// </summary>
+        public Func<bool> SuspendSync;
+
+        /// <summary>
         /// If you are using a virtual disk as storage and it is synchronized, this function will return false, which indicates that synchronization is suspended.
         /// </summary>
         public bool SyncIsEnabled
         {
             get
             {
+                var suspended = SuspendSync?.Invoke() == true;
+                if (suspended)
+                    return false;
                 if (IsServer)
                 {
                     Directory.Exists(CloudRoot); // Enable this code line is the server can disconnect the cloud path location
                     return true;
                 }
-                var isEnabled = !IsMountingPoint(CloudRoot);
+                var isEnabled = !IsMountingPoint(CloudRoot) && !suspended;
                 CheckSyncStatusChanged ??= new Timer((o) => { var check = SyncIsEnabled; });
                 if (_SyncIsEnabled != isEnabled)
                 {
                     _SyncIsEnabled = isEnabled;
-                        if (isEnabled)
-                        {
-                            CheckSyncStatusChanged.Change(Timeout.Infinite, Timeout.Infinite);
-                            OnEnabledSync();
-                        }
-                        else
-                        {
-                            CheckSyncStatusChanged.Change(30000, 30000); //30 sec.
-                            OnDisableSync();
-                        }
+                    if (isEnabled)
+                    {
+                        CheckSyncStatusChanged.Change(Timeout.Infinite, Timeout.Infinite);
+                        OnEnabledSync();
+                    }
+                    else
+                    {
+                        CheckSyncStatusChanged.Change(30000, 30000); //30 sec.
+                        OnDisableSync();
+                    }
                 }
                 return _SyncIsEnabled == true;
             }
@@ -588,7 +596,7 @@ namespace CloudSync
                     lock (this)
                     {
                         var watch = Stopwatch.StartNew();
-                        StartAnalyzeDirectory(CloudRoot, out var newHashFileTable);
+                        StartAnalyzeDirectory(CloudRoot, out var newHashFileTable, ref usedSpace);
                         if (!SyncIsEnabled)
                         {
                             hashTable = null;
