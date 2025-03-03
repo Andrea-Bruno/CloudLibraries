@@ -62,11 +62,11 @@ namespace CloudSync
         /// <returns></returns>
         public static string CloudRelativeUnixFullName(this FileSystemInfo fileSystemInfo, Sync context)
         {
-            var name = fileSystemInfo.FullName.Substring(context.CloudRoot.Length);
+            var name = fileSystemInfo.FullName[context.CloudRoot.Length..];
             name = name.Replace('\\', '/');
             if (name.Length != 0 && name[0] == '/')
                 name = name.Substring(1);
-            return context.ZeroKnowledgeProof == null ? name : context.ZeroKnowledgeProof.EncryptFullFileName(name);
+            return context.ZeroKnowledgeProof == null || fileSystemInfo.Name.EndsWith(ZeroKnowledgeProof.EncryptFileNameEndChar) ? name : context.ZeroKnowledgeProof.EncryptFullFileName(name);
         }
 
         public static uint UnixLastWriteTimestamp(this FileSystemInfo fileSystemInfo)
@@ -84,7 +84,6 @@ namespace CloudSync
             return context.ZeroKnowledgeProof == null ? fileSystemInfo.Name : context.ZeroKnowledgeProof.EncryptFileName(fileSystemInfo.Name);
         }
 
-
         /// <summary>
         /// the first 32 bits from the right are the Unicode timestamp, the rest the hash on the full file name
         /// </summary>
@@ -93,7 +92,8 @@ namespace CloudSync
         public static ulong HashFileName(this FileSystemInfo fileSystemInfo, Sync context)
         {
             var relativeName = CloudRelativeUnixFullName(fileSystemInfo, context);
-            return HashFileName(relativeName, fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory));
+            return HashFileName(relativeName, fileSystemInfo is DirectoryInfo);
+            // return HashFileName(relativeName, fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory));
         }
 
         public static void Decrypt(this FileInfo encryptedFile, string outputFile, Sync context)

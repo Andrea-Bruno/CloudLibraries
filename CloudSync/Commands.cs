@@ -160,7 +160,7 @@ namespace CloudSync
 #endif
             if (Spooler.RemoteDriveOverLimit)
                 return; // The remote disk is full, do not send any more data
-            if (fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory))
+            if (fileSystemInfo is DirectoryInfo)
             {
                 CreateDirectory(toUserId, fileSystemInfo);
             }

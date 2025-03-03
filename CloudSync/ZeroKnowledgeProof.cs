@@ -1,10 +1,8 @@
 ﻿using Blake2Fast;
-using NBitcoin;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 
 namespace CloudSync
@@ -35,12 +33,13 @@ namespace CloudSync
         /// </summary>
         internal byte[] FilenameObfuscationKey;
 
-        internal byte[] DerivedEncryptionKey(FileInfo file)
+        internal byte[] DerivedEncryptionKey(FileInfo file, uint unixLastWriteTimestamp = default)
         {
+            unixLastWriteTimestamp = unixLastWriteTimestamp != default ? unixLastWriteTimestamp : file.UnixLastWriteTimestamp();
             var relativeName = file.CloudRelativeUnixFullName(Context);
             var bytes = relativeName.GetBytes();
             var len = BitConverter.GetBytes((ulong)bytes.Length);
-            var date = file.UnixLastWriteTimestamp().GetBytes();
+            var date = unixLastWriteTimestamp.GetBytes();
             var concat = new byte[len.Length + bytes.Length + date.Length + EncryptionMasterKey.Length];
             var offset = 0;
             Buffer.BlockCopy(bytes, 0, concat, offset, bytes.Length);
@@ -60,7 +59,7 @@ namespace CloudSync
         /// <param name="inputFile">The input file to process.</param>
         /// <param name="outputFile">The output file to store the result.</param>
         /// <param name="key">The encryption/decryption key.</param>
-        public static void EncryptFile(FileInfo inputFile, string outputFile, byte[] key)
+        private static void EncryptFile(FileInfo inputFile, string outputFile, byte[] key)
         {
             // Validate parameters
             if (inputFile == null)
@@ -78,42 +77,38 @@ namespace CloudSync
 
             // Buffers for input and output data
             byte[] inputBuffer = new byte[blockSize];
-            byte[] outputBuffer = new byte[blockSize];
 
             // Initialize the seal and current key using Blake2b
             byte[] sealt = Blake2b.ComputeHash(key);
             byte[] currentKey = Blake2b.ComputeHash(sealt);
 
-            using (FileStream inputStream = inputFile.OpenRead())
-            using (FileStream outputStream = File.Create(outputFile))
+            using FileStream inputStream = inputFile.OpenRead();
+            using FileStream outputStream = File.Create(outputFile);
+            int cycleCounter = 0;
+            int bytesRead;
+            while ((bytesRead = inputStream.Read(inputBuffer, 0, blockSize)) > 0)
             {
-                int cycleCounter = 0;
-                int bytesRead;
-                while ((bytesRead = inputStream.Read(inputBuffer, 0, blockSize)) > 0)
+                // Convert the input buffer and current key to ulong for XOR operation
+                ulong inputBlock = BitConverter.ToUInt64(inputBuffer, 0);
+                ulong keyBlock = BitConverter.ToUInt64(currentKey, cycleCounter * blockSize);
+
+                // Perform XOR on 8-byte blocks
+                ulong outputBlock = inputBlock ^ keyBlock;
+
+                // Convert the result back to bytes
+                byte[] outputBytes = BitConverter.GetBytes(outputBlock);
+
+                // Write the processed data to the output file
+                outputStream.Write(outputBytes, 0, bytesRead);
+
+                // Update the cycle counter
+                cycleCounter++;
+
+                // Recompute the hash every 8 cycles
+                if (cycleCounter >= cyclesPerHash)
                 {
-                    // Convert the input buffer and current key to ulong for XOR operation
-                    ulong inputBlock = BitConverter.ToUInt64(inputBuffer, 0);
-                    ulong keyBlock = BitConverter.ToUInt64(currentKey, cycleCounter * blockSize);
-
-                    // Perform XOR on 8-byte blocks
-                    ulong outputBlock = inputBlock ^ keyBlock;
-
-                    // Convert the result back to bytes
-                    byte[] outputBytes = BitConverter.GetBytes(outputBlock);
-                    Array.Copy(outputBytes, outputBuffer, bytesRead);
-
-                    // Write the processed data to the output file
-                    outputStream.Write(outputBuffer, 0, bytesRead);
-
-                    // Update the cycle counter
-                    cycleCounter++;
-
-                    // Recompute the hash every 8 cycles
-                    if (cycleCounter >= cyclesPerHash)
-                    {
-                        currentKey = Blake2b.ComputeHash(sealt, currentKey);
-                        cycleCounter = 0;
-                    }
+                    currentKey = Blake2b.ComputeHash(sealt, currentKey);
+                    cycleCounter = 0;
                 }
             }
         }
@@ -125,7 +120,7 @@ namespace CloudSync
         /// <param name="inputFile">The encrypted file to decrypt.</param>
         /// <param name="outputFile">The output file to store the decrypted file.</param>
         /// <param name="key">The encryption/decryption key.</param>
-        public static void DecryptFile(FileInfo inputFile, string outputFile, byte[] key) => EncryptFile(inputFile, outputFile, key);
+        private static void DecryptFile(FileInfo inputFile, string outputFile, byte[] key) => EncryptFile(inputFile, outputFile, key);
 
         /// <summary>
         /// Encrypts or decrypts a file using a key derived from recursive hashing and XOR.
@@ -141,10 +136,7 @@ namespace CloudSync
         /// </summary>
         /// <param name="inputFile">The encrypted file to decrypt.</param>
         /// <param name="outputFile">The output file to store the decrypted file.</param>
-        public void DecryptFile(FileInfo inputFile, string outputFile) => EncryptFile(inputFile, outputFile, DerivedEncryptionKey(inputFile));
-
-        private const int IvSize = 16; // AES block size (128 bits)
-        private const CipherMode EncryptionMode = CipherMode.CFB;
+        public void DecryptFile(FileInfo inputFile, string outputFile) => DecryptFile(inputFile, outputFile, DerivedEncryptionKey(new FileInfo(outputFile), inputFile.UnixLastWriteTimestamp()));
 
         public string EncryptFullFileName(string fullFileName) => EncryptFullFileName(fullFileName, FilenameObfuscationKey);
 
@@ -193,13 +185,8 @@ namespace CloudSync
                 return fileName;
             bool hasLeadingDot = fileName.StartsWith('.');
             string namePart = hasLeadingDot ? fileName[1..] : fileName;
-
-            byte[] nameBytes = Encoding.UTF8.GetBytes(namePart);
-            byte[] iv = GenerateSecureIV();
-            byte[] encryptedBytes = PerformEncryption(nameBytes, key, iv);
-
-            string encoded = Base64UrlEncode(iv.Concat(encryptedBytes).ToArray());
-            return FormatEncryptedFilename(encoded, hasLeadingDot) + EncryptFileNameEndChar;
+            var encryptName = PerformEncrtptText(namePart, key);
+            return hasLeadingDot ? "." : "" + encryptName + EncryptFileNameEndChar;
         }
 
         public string DecryptFileName(string fullFileName) => DecryptFileName(fullFileName, FilenameObfuscationKey);
@@ -221,97 +208,63 @@ namespace CloudSync
                 return encryptedFileName;
             bool hasLeadingDot = encryptedFileName.StartsWith('.');
             string encodedPart = hasLeadingDot ? encryptedFileName[1..] : encryptedFileName;
-
-            byte[] combined = Base64UrlDecode(encodedPart);
-            ValidateCombinedData(combined);
-
-            byte[] iv = combined.Take(IvSize).ToArray();
-            byte[] ciphertext = combined.Skip(IvSize).ToArray();
-
-            byte[] decryptedBytes = PerformDecryption(ciphertext, key, iv);
-            return FormatDecryptedFilename(decryptedBytes, hasLeadingDot);
+            var namePart = PerformDecryptText(encodedPart, key);
+            return hasLeadingDot ? "." : "" + namePart;
         }
 
-        public const char EncryptFileNameEndChar = '!';
+        public const char EncryptFileNameEndChar = '⁇';
 
-        private static byte[] GenerateSecureIV()
+        private const string Set256Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿĀāĂăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĦħĨĩĪīĬĭĮįİıĲĳĴĵĶķĹĺĻļĽľŁłŃńŅņŇňŌōŎŏŐőŒœŔŕŖŗŘřŚśŜŝŞşŠšŢţŤťŦŧŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽžǍǎǏǐǑǒǓǔǕǖǗ";
+
+        private static string PerformEncrtptText(string text, byte[] key)
         {
-            using var rng = RandomNumberGenerator.Create();
-            byte[] iv = new byte[IvSize];
-            rng.GetBytes(iv);
-            return iv;
-        }
-
-        private static byte[] PerformEncryption(byte[] data, byte[] key, byte[] iv)
-        {
-            using var aes = Aes.Create();
-            aes.Key = key;
-            aes.IV = iv;
-            aes.Mode = EncryptionMode;
-            aes.Padding = PaddingMode.None;
-
-            using var encryptor = aes.CreateEncryptor();
-            return encryptor.TransformFinalBlock(data, 0, data.Length);
-        }
-
-        private static byte[] PerformDecryption(byte[] ciphertext, byte[] key, byte[] iv)
-        {
-            using var aes = Aes.Create();
-            aes.Key = key;
-            aes.IV = iv;
-            aes.Mode = EncryptionMode;
-            aes.Padding = PaddingMode.None;
-
-            using var decryptor = aes.CreateDecryptor();
-            return decryptor.TransformFinalBlock(ciphertext, 0, ciphertext.Length);
-        }
-
-        private static string FormatEncryptedFilename(string encoded, bool hasLeadingDot)
-        {
-            // Ensure valid filename by removing any potential trailing spaces
-            string trimmed = encoded.TrimEnd(' ');
-            return hasLeadingDot
-                ? $".{trimmed}"
-                : trimmed;
-        }
-
-        private static string FormatDecryptedFilename(byte[] decryptedBytes, bool hasLeadingDot)
-        {
-            string namePart = Encoding.UTF8.GetString(decryptedBytes);
-            return hasLeadingDot
-                ? $".{namePart}"
-                : namePart;
-        }
-
-        private static void ValidateCombinedData(byte[] combined)
-        {
-            if (combined.Length < IvSize)
+            var bytes = Encoding.UTF8.GetBytes(text);
+            var masterKey = key.Concat(new byte[] { (byte)bytes.Length });
+            var masc = new byte[0];
+            do
             {
-                throw new ArgumentException("Invalid encrypted data format");
-            }
-        }
-
-        private static string Base64UrlEncode(byte[] input)
-        {
-            return Convert.ToBase64String(input)
-                .Replace('+', '-')
-                .Replace('/', '_')
-                .TrimEnd('=');
-        }
-
-        private static byte[] Base64UrlDecode(string input)
-        {
-            string incoming = input
-                .Replace('-', '+')
-                .Replace('_', '/');
-
-            switch (input.Length % 4)
+                masterKey = Blake2b.ComputeHash(masterKey);
+                masc = masc.Concat(masterKey);
+            } while (masc.Length < bytes.Length);
+            var result = new StringBuilder(bytes.Length);
+            for (int i = 0; i < bytes.Length; i++)
             {
-                case 2: incoming += "=="; break;
-                case 3: incoming += "="; break;
+                byte b = bytes[i];
+                result.Append(Set256Chars[b ^ masc[i]]);
             }
-
-            return Convert.FromBase64String(incoming);
+            return result.ToString();
+        }
+        private static Dictionary<char, byte> DecryptHelper = null;
+        private static string PerformDecryptText(string text, byte[] key)
+        {
+            lock (Set256Chars)
+            {
+                if (DecryptHelper == null)
+                {
+                    var helper = new Dictionary<char, byte>();
+                    var len = Set256Chars.ToCharArray().Length;
+                    for (int i = 0; i < len; i++)
+                    {
+                        helper.Add(Set256Chars[i], (byte)i);
+                    }
+                    DecryptHelper = helper;
+                }
+            }
+            var bytes = new byte[text.Length];
+            var masterKey = key.Concat(new byte[] { (byte)bytes.Length });
+            var masc = new byte[0];
+            do
+            {
+                masterKey = Blake2b.ComputeHash(masterKey);
+                masc = masc.Concat(masterKey);
+            } while (masc.Length < bytes.Length);
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                var b = DecryptHelper[text[i]];
+                var m = masc[i];
+                bytes[i] = (byte)(b ^ m);
+            }
+            return Encoding.UTF8.GetString(bytes);
         }
     }
 }

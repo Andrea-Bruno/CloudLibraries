@@ -71,9 +71,8 @@ namespace CloudBox
         /// <returns>Returns true if the command has been forwarded, false if the connection between client and server has not been established.</returns>
         public bool SendCommand(Contact contact, Command command, byte[][] data)
         {
-            if (Context == null)
+            if (Context?.IsConnected != true)
             {
-                Debugger.Break();
                 return false;
             }
             if (contact == null)

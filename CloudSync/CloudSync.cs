@@ -8,7 +8,6 @@ using static CloudSync.Util;
 using HashFileTable = System.Collections.Generic.Dictionary<ulong, System.IO.FileSystemInfo>;
 using System.Linq;
 using System.Collections.Generic;
-using NBitcoin;
 
 namespace CloudSync
 {
@@ -438,7 +437,7 @@ namespace CloudSync
 
         public static readonly ushort AppId = BitConverter.ToUInt16(Encoding.ASCII.GetBytes("sync"), 0);
 
-        public delegate void SendCommandDelegate(ulong? contactId, ushort command, params byte[][] values);
+        public delegate bool SendCommandDelegate(ulong? contactId, ushort command, params byte[][] values);
 
         public DateTime LastCommandSent { get; private set; }
 

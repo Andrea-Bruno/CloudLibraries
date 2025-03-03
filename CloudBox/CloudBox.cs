@@ -816,19 +816,19 @@ namespace CloudBox
 
         private static readonly ushort CloudAppId = BitConverter.ToUInt16(Encoding.ASCII.GetBytes("cloud"), 0);
 
-        private void SendSyncCommand(ulong? toContactId, ushort command, byte[][] values)
+        private bool SendSyncCommand(ulong? toContactId, ushort command, byte[][] values)
         {
-#if DEBUG
-            if (Context == null)
-                Debugger.Break();
-#endif
+            if (Context?.IsConnected != true)
+                return false;
             var sendToContact = ServerCloud;
             if (sendToContact == null && toContactId != null)
                 CloudSyncUsers.TryGetValue((ulong)toContactId, out sendToContact);
             if (sendToContact != null && Sync != null)
             {
                 Context?.Messaging.SendCommandToSubApplication(sendToContact, Sync.AppId, command, true, true, values);
+                return true;
             }
+            return false;
         }
 
         /// <summary>

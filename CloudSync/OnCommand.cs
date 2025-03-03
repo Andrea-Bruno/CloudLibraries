@@ -1,4 +1,4 @@
-﻿using NBitcoin;
+﻿using Mono.Unix;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -16,13 +16,13 @@ namespace CloudSync
         private int OnCommandRunning;
         public bool CommandIsRunning => OnCommandRunning > 0;
 
-        internal void OnCommand(ulong? fromUserId, ushort command, params byte[][] values)
+        internal bool OnCommand(ulong? fromUserId, ushort command, params byte[][] values)
         {
+            lastFromUserId = fromUserId;
+            if (!Enum.IsDefined(typeof(Commands), command))
+                return false; // Commend not supported from this version
             Task.Run(() =>
             {
-                lastFromUserId = fromUserId;
-                if (!Enum.IsDefined(typeof(Commands), command))
-                    return; // Commend not supported from this version
                 OnCommandRunning++;
                 try
                 {
@@ -37,6 +37,7 @@ namespace CloudSync
                 }
                 OnCommandRunning--;
             });
+            return true;
         }
 
         ulong? lastFromUserId;
@@ -132,7 +133,7 @@ namespace CloudSync
                     }
                     if (!SyncIsEnabled)
                     {
-                        infoData = "Operation rejected. The cloud path is not mounted";
+                        infoData = "Operation rejected. Sync is suspended!";
                         return;
                     }
                     if (command == Commands.SendHashStructure)
@@ -254,7 +255,7 @@ namespace CloudSync
                                 var expectedCrc = BitConverter.ToUInt64(values[7], 0);
                                 if (expectedCrc == CRC.GetCRC(fromUserId, hashFileName, part) && new FileInfo(tmpFile).Length.Equals(length)) // Use the length to check if the file was received correctly
                                 {
-                                    var target = FullName(values[6], out bool isEncrypted);
+                                    var target = FullName(values[6], out bool isEncrypted, out string nameFile);
                                     var fileInfo = new FileInfo(target);
                                     if (hashFileName != HashFileName(values[6].ToText(), false))
                                     {
@@ -295,6 +296,11 @@ namespace CloudSync
                                         if (exception1 != null)
                                             RaiseOnFileError(exception1, targetDirectory.FullName);
                                     }
+                                    var infoTmpFile = new FileInfo(tmpFile)
+                                    {
+                                        LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp) // Need for correct decryption
+                                    };
+                                    infoTmpFile.Refresh();
                                     FileMove(tmpFile, target, isEncrypted, Owner, out Exception exception2, context: this);
                                     if (exception2 != null)
                                         RaiseOnFileError(exception2, target);
@@ -352,7 +358,7 @@ namespace CloudSync
                     else if (command == Commands.CreateDirectory)
                     {
                         // If the disk is about to be full notify the sender, and finish the operation.
-                        var fullDirectoryName = FullName(values[0]);
+                        var fullDirectoryName = FullName(values[0], out _, out string nameFile);
                         infoData = fullDirectoryName;
                         lock (FlagsDriveOverLimit)
                             if (!CheckDiskSPace(this))
@@ -462,19 +468,19 @@ namespace CloudSync
         public uint TotalFilesReceived;
         public uint TotalBytesReceived;
         public readonly ProgressFileTransfer ReceptionInProgress;
-        private string FullName(byte[] unixRelativeName, out bool isEncrypted)
+        private string FullName(byte[] unixRelativeName, out bool isEncrypted, out string virtualName)
         {
-            var fileName = unixRelativeName.ToText();
+            virtualName = unixRelativeName.ToText();
             if (ZeroKnowledgeProof != null)
             {
-                isEncrypted = fileName.EndsWith(ZeroKnowledgeProof.EncryptFileNameEndChar);
-                fileName = ZeroKnowledgeProof.DecryptFullFileName(fileName);
+                isEncrypted = virtualName.EndsWith(ZeroKnowledgeProof.EncryptFileNameEndChar);
+                virtualName = ZeroKnowledgeProof.DecryptFullFileName(virtualName);
             }
             else
                 isEncrypted = false;
-            return Path.Combine(CloudRoot, fileName.Replace('/', Path.DirectorySeparatorChar));
+            return Path.Combine(CloudRoot, virtualName.Replace('/', Path.DirectorySeparatorChar));
         }
-        private string FullName(byte[] unixRelativeName) => FullName(unixRelativeName, out _);
+        private string FullName(byte[] unixRelativeName) => FullName(unixRelativeName, out _, out _);
 
     }
 }

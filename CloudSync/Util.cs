@@ -6,11 +6,11 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
-using Mono.Unix.Native;
 using HashFileTable = System.Collections.Generic.Dictionary<ulong, System.IO.FileSystemInfo>;
 
 namespace CloudSync
@@ -383,8 +383,29 @@ namespace CloudSync
         {
             var bytes = relativeName.GetBytes();
             var startValue = isDirectory ? 5120927932783021125ul : 2993167789729610286ul;
-            return ULongHash(startValue, bytes);
+            var hash = ULongHash(startValue, bytes);
+            if (Debugger.IsAttached)
+            {
+                try
+                {
+                    lock (Sha256)
+                    {
+                        var fileName = "HashFileName.log";
+                        if (!FlasLog)
+                        {
+                            FlasLog = true;
+                            File.Delete(fileName);
+                        }
+                        using StreamWriter sw = new StreamWriter(fileName, true);
+                        sw.WriteLine(hash + ", " + relativeName + ", dir=" + isDirectory);
+                        sw.Flush();
+                    }
+                }
+                catch (Exception) { }
+            }
+            return hash;
         }
+        private static bool FlasLog;
 
         internal static readonly SHA256 Sha256 = SHA256.Create();
 
@@ -800,8 +821,7 @@ end tell";
             var elementInBlockReverse = delimitsRange == null ? null : new List<KeyValuePair<ulong, HashFileTable>>();
             var hashList = new List<byte[]>();
 
-            void hashBlock(IEnumerable<KeyValuePair<ulong, FileSystemInfo>> hashTable, ref List<byte[]> result,
-                ref List<KeyValuePair<ulong, HashFileTable>> outElementInBlock)
+            static void hashBlock(IEnumerable<KeyValuePair<ulong, FileSystemInfo>> hashTable, ref List<byte[]> result, ref List<KeyValuePair<ulong, HashFileTable>> outElementInBlock)
             {
                 var toAdd = outElementInBlock == null ? null : new HashFileTable();
                 ulong hash1 = 0;
@@ -827,7 +847,6 @@ end tell";
                             toAdd = new HashFileTable();
                         }
                     }
-
                     n++;
                 }
             }
@@ -968,7 +987,7 @@ end tell";
             if (context == null)
                 return true;
             if (context.StorageLimitGB != -1 && (context.UsedSpace / 1000000000) > context.StorageLimitGB) // check over limit quota
-                    return false;
+                return false;
             var result = PreserveDriveSpace(context.CloudRoot, false, preserveSize);
             return result;
         }
@@ -1077,7 +1096,7 @@ end tell";
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 var dir = new DirectoryInfo(path);
-                dir.Attributes |= (FileAttributes.Hidden | FileAttributes.ReadOnly | FileAttributes.System);
+                dir.Attributes |= (FileAttributes.ReadOnly | FileAttributes.System);
             }
             else
             {
@@ -1095,7 +1114,11 @@ end tell";
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 var dir = new DirectoryInfo(path);
-                return dir.Attributes.HasFlag(FileAttributes.ReadOnly) && dir.Attributes.HasFlag(FileAttributes.System);
+                string linkTarget = null;
+                PropertyInfo linkTargetProperty = typeof(DirectoryInfo).GetProperty("LinkTarget");
+                if (linkTargetProperty != null)
+                    linkTarget = linkTargetProperty.GetValue(dir) as string;
+                return dir.Attributes.HasFlag(FileAttributes.ReadOnly) && dir.Attributes.HasFlag(FileAttributes.System) && linkTarget == null;
             }
             else
             {

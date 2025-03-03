@@ -52,10 +52,13 @@ namespace CloudSync
         public string[] GetGroups()
         {
             var result = new List<string>();
-            foreach (var item in Directory.GetFiles(AppData, "*.share", SearchOption.TopDirectoryOnly))
+            if (Directory.Exists(AppData))
             {
-                result.Add(Path.GetFileNameWithoutExtension(item));
-            };
+                foreach (var item in Directory.GetFiles(AppData, "*.share", SearchOption.TopDirectoryOnly))
+                {
+                    result.Add(Path.GetFileNameWithoutExtension(item));
+                };
+            }
             if (result.Count == 0)
                 result.Add("generic");
             return result.ToArray();
