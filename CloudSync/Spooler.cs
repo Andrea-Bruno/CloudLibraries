@@ -192,7 +192,7 @@ namespace CloudSync
                         FilePendingTree[hash]++;
                     }
                     SetFilePendingStatus(fileSystemInfo, pendingStatus);
-                    var parent = ((DirectoryInfo)fileSystemInfo).Parent;
+                    var parent = new DirectoryInfo(fileSystemInfo.FullName).Parent;
                     if (Path.GetFullPath(parent.FullName) != Path.GetFullPath(Context.CloudRoot))
                         SetRecursiveFilePendingStatus(parent, pendingStatus);
                 }

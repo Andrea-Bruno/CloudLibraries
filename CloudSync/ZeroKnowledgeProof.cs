@@ -128,7 +128,10 @@ namespace CloudSync
         /// </summary>
         /// <param name="inputFile">The input file to process.</param>
         /// <param name="outputFile">The output file to store the result.</param>
-        public void EncryptFile(FileInfo inputFile, string outputFile) => EncryptFile(inputFile, outputFile, DerivedEncryptionKey(inputFile));
+        public void EncryptFile(FileInfo inputFile, string outputFile)
+        {
+            EncryptFile(inputFile, outputFile, DerivedEncryptionKey(inputFile));
+        }
 
         /// <summary>
         /// Decrypts a file using a key derived from recursive hashing and XOR.
@@ -136,7 +139,11 @@ namespace CloudSync
         /// </summary>
         /// <param name="inputFile">The encrypted file to decrypt.</param>
         /// <param name="outputFile">The output file to store the decrypted file.</param>
-        public void DecryptFile(FileInfo inputFile, string outputFile) => DecryptFile(inputFile, outputFile, DerivedEncryptionKey(new FileInfo(outputFile), inputFile.UnixLastWriteTimestamp()));
+        public void DecryptFile(FileInfo inputFile, string outputFile)
+        {
+            DecryptFile(inputFile, outputFile, DerivedEncryptionKey(new FileInfo(outputFile), inputFile.UnixLastWriteTimestamp()));
+        }
+
 
         public string EncryptFullFileName(string fullFileName) => EncryptFullFileName(fullFileName, FilenameObfuscationKey);
 

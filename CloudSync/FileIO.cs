@@ -1,4 +1,3 @@
-using Mono.Unix.Native;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -18,23 +17,34 @@ namespace CloudSync
         /// <returns>True if the operation was successful, otherwise false</returns>
         public static bool Chmod(int permissionsMode, string filePath)
         {
-            uint uintMode = PermissionsBase10ToUnixOctal(permissionsMode);
-            // Check if the operating system is Unix-like
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
                 return false; // OS not supported
-            var permission = (FilePermissions)uintMode;
-            // Change the file permissions
-            int result = Syscall.chmod(filePath, permission);
-            return result == 0;
+            }
+            try
+            {
+                var uintMode = PermissionsBase10ToUnixOctal(permissionsMode);
+                File.SetUnixFileMode(filePath, (UnixFileMode)uintMode);
+            }
+            catch (Exception e)
+            {
+                return false;
+            }
+            return true;
         }
 
-        private static int GetOctalFilePermissions(string filePath)
+        /// <summary>
+        /// Reads the permissions of a file or directory on Unix-like systems.
+        /// </summary>
+        /// <param name="filePath">Full path of the file or directory.</param>
+        /// <returns>An octal value representing the permissions.</returns>
+        public static uint GetFilePermissionsOctal(string filePath)
         {
-            if (Syscall.stat(filePath, out Stat statBuf) != 0)
-                return -1; // Error while reading file information
-            // Convert permissions to a human-readable string
-            var mode = statBuf.st_mode;
-            return (int)mode;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return 0;
+            var fileMode = File.GetUnixFileMode(filePath);
+            var octal = (uint)fileMode;
+            return octal;
         }
 
         /// <summary>
@@ -63,15 +73,13 @@ namespace CloudSync
             out IntPtr error
         );
 
-        const FilePermissions S_IXUSR = (FilePermissions)0x40; // User execute permission
-
         private static void SetExecutable(string filePath)
         {
-            if (Syscall.chmod(filePath, S_IXUSR) != 0)
-            {
-                int errno = Marshal.GetLastWin32Error();
-                Debugger.Break(); // error
-            }
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return ;
+            UnixFileMode currentMode = File.GetUnixFileMode(filePath);
+            UnixFileMode newMode = currentMode | UnixFileMode.UserExecute;
+            File.SetUnixFileMode(filePath, newMode);
         }
 
         private static void AllowLaunching(string filePath)
@@ -107,9 +115,12 @@ namespace CloudSync
             if (owner != null)
             {
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                    Syscall.chown(path, owner.Value.Item1, owner.Value.Item2);
+                    chown(path, owner.Value.Item1, owner.Value.Item2);
             }
         }
+
+        [DllImport("libc", SetLastError = true)]
+        private static extern int chown(string path, uint owner, uint group);
 
         static private void SetDefaultPermission(bool isDirectory, string path, (uint, uint)? owner)
         {
@@ -137,14 +148,13 @@ namespace CloudSync
                 return false;
             try
             {
-                return Syscall.chown(path, owner, group) == 0;
+                return chown(path, owner, group) == 0;
             }
             catch (Exception)
             {
                 return false;
             }
         }
-
 
         /// <summary>
         /// Write binary data in append to a file, retrying if the file is busy with other processes.

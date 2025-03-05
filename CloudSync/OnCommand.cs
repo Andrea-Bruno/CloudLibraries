@@ -1,5 +1,4 @@
-﻿using Mono.Unix;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -162,10 +161,10 @@ namespace CloudSync
                     }
                     else if (command == Commands.SendHashBlocks)
                     {
-                        var remoteHash = values[0];
-                        if (GetHasBlock(out var localHash))
+                        var hashBlocksRemote = values[0];
+                        if (GetHasBlock(out var hashBlocksLocal))
                         {
-                            if (remoteHash.SequenceEqual(localHash))
+                            if (hashBlocksRemote.SequenceEqual(hashBlocksLocal))
                             {
                                 RaiseOnStatusChangesEvent(SyncStatus.Monitoring);
                                 SendNotification(fromUserId, Notice.Synchronized);
@@ -173,7 +172,7 @@ namespace CloudSync
                             else
                             {
                                 RaiseOnStatusChangesEvent(SyncStatus.Pending);
-                                var range = HashBlocksToBlockRange(remoteHash, localHash);
+                                var range = HashBlocksToBlockRange(hashBlocksRemote, hashBlocksLocal);
                                 if (IsServer)
                                     SendHashStructure(fromUserId, range);
                                 else
@@ -190,8 +189,8 @@ namespace CloudSync
                             if (localHash != remoteHash)
                             {
                                 RaiseOnStatusChangesEvent(SyncStatus.Pending);
-                                SendHashBlocks(fromUserId);
-                                //SendHashStructure(fromUserId);
+                                //SendHashBlocks(fromUserId);
+                                SendHashStructure(fromUserId);
                             }
                             else
                             {

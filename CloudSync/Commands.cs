@@ -99,7 +99,7 @@ namespace CloudSync
                 if (delimitsRange == null)
                     SendCommand(toUserId, Commands.SendHashStructure, null, new[] { structure });
                 else
-                    SendCommand(toUserId, Commands.SendHashStructure, null, new[] { structure, delimitsRange.BetweenHasBlockBynary, delimitsRange.BetweenHasBlockIndexBinary, delimitsRange.BetweenReverseHasBlockBinary, delimitsRange.BetweenReverseHasBlockIndexBinary });
+                    SendCommand(toUserId, Commands.SendHashStructure, null, new[] { structure, delimitsRange.BetweenHashBlockBinary, delimitsRange.BetweenHashBlockIndexBinary, delimitsRange.BetweenReverseHashBlockBinary, delimitsRange.BetweenReverseHashBlockIndexBinary });
             }
         }
 
@@ -108,7 +108,7 @@ namespace CloudSync
             if (delimitsRange == null)
                 SendCommand(toUserId, Commands.RequestHashStructure, null);
             else
-                SendCommand(toUserId, Commands.RequestHashStructure, null, new[] { delimitsRange.BetweenHasBlockBynary, delimitsRange.BetweenHasBlockIndexBinary, delimitsRange.BetweenReverseHasBlockBinary, delimitsRange.BetweenReverseHasBlockIndexBinary });
+                SendCommand(toUserId, Commands.RequestHashStructure, null, new[] { delimitsRange.BetweenHashBlockBinary, delimitsRange.BetweenHashBlockIndexBinary, delimitsRange.BetweenReverseHashBlockBinary, delimitsRange.BetweenReverseHashBlockIndexBinary });
         }
 
         private void SendHashBlocks(ulong? toUserId)

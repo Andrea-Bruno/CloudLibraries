@@ -651,7 +651,7 @@ end tell";
                     return $"/home/{desktopUser}/Desktop";
                 }
             }
-            return null; // os not supported
+            return null; // OS not supported
         }
 
         /// <summary>
@@ -743,59 +743,48 @@ end tell";
 
         public class BlockRange
         {
-            public BlockRange(ulong? betweenHasBlock, int betweenHasBlockIndex, ulong? betweenReverseHasBlock,
-                int betweenReverseHasBlockIndex)
+            public BlockRange(ulong? betweenHashBlock, int betweenHashBlockIndex, ulong? betweenReverseHashBlock, int betweenReverseHashBlockIndex)
             {
-                BetweenHasBlock = betweenHasBlock;
-                BetweenHasBlockIndex = betweenHasBlockIndex;
-                BetweenReverseHasBlock = betweenReverseHasBlock;
-                BetweenReverseHasBlockIndex = betweenReverseHasBlockIndex;
+                BetweenHashBlock = betweenHashBlock;
+                BetweenHasBlockIndex = betweenHashBlockIndex;
+                BetweenReverseHashBlock = betweenReverseHashBlock;
+                BetweenReverseHashBlockIndex = betweenReverseHashBlockIndex;
 #if (DEBUG)
-                if (BetweenHasBlock == null && BetweenHasBlockIndex != -1)
+                if (BetweenHashBlock == null && BetweenHasBlockIndex != -1)
                     System.Diagnostics.Debugger.Break(); // wrong !
-                if (BetweenReverseHasBlock == null && BetweenReverseHasBlockIndex != -1)
+                if (BetweenReverseHashBlock == null && BetweenReverseHashBlockIndex != -1)
                     System.Diagnostics.Debugger.Break(); // wrong !
 #endif
             }
 
-            public BlockRange(byte[] betweenHasBlockBinary, byte[] betweenHasBlockIndex,
-                byte[] betweenReverseHasBlockBinary, byte[] betweenReverseHasBlockPIndex)
+            public BlockRange(byte[] betweenHasBlockBinary, byte[] betweenHasBlockIndex, byte[] betweenReverseHasBlockBinary, byte[] betweenReverseHasBlockPIndex)
             {
-                BetweenHasBlock = betweenHasBlockBinary.Length == 8
-                    ? BitConverter.ToUInt64(betweenHasBlockBinary, 0)
-                    : (ulong?)null;
+                BetweenHashBlock = betweenHasBlockBinary.Length == 8 ? BitConverter.ToUInt64(betweenHasBlockBinary, 0) : (ulong?)null;
                 BetweenHasBlockIndex = BitConverter.ToInt32(betweenHasBlockIndex, 0);
-                BetweenReverseHasBlock = betweenReverseHasBlockBinary.Length == 8
-                    ? BitConverter.ToUInt64(betweenReverseHasBlockBinary, 0)
-                    : (ulong?)null;
-                BetweenReverseHasBlockIndex = BitConverter.ToInt32(betweenReverseHasBlockPIndex, 0);
+                BetweenReverseHashBlock = betweenReverseHasBlockBinary.Length == 8 ? BitConverter.ToUInt64(betweenReverseHasBlockBinary, 0) : (ulong?)null;
+                BetweenReverseHashBlockIndex = BitConverter.ToInt32(betweenReverseHasBlockPIndex, 0);
 #if (DEBUG)
-                if (BetweenHasBlock == null && BetweenHasBlockIndex != -1)
+                if (BetweenHashBlock == null && BetweenHasBlockIndex != -1)
                     System.Diagnostics.Debugger.Break(); // wrong !
-                if (BetweenReverseHasBlock == null && BetweenReverseHasBlockIndex != -1)
+                if (BetweenReverseHashBlock == null && BetweenReverseHashBlockIndex != -1)
                     System.Diagnostics.Debugger.Break(); // wrong !
 #endif
             }
 
-            public readonly ulong? BetweenHasBlock;
-
-            public byte[] BetweenHasBlockBynary => BetweenHasBlock == null
-                ? new byte[] { }
-                : BitConverter.GetBytes((ulong)BetweenHasBlock);
+            public readonly ulong? BetweenHashBlock;
+            public byte[] BetweenHashBlockBinary => BetweenHashBlock == null ? new byte[] { } : BitConverter.GetBytes((ulong)BetweenHashBlock);
 
             public readonly int BetweenHasBlockIndex;
-            public byte[] BetweenHasBlockIndexBinary => BitConverter.GetBytes(BetweenHasBlockIndex);
-            public readonly ulong? BetweenReverseHasBlock;
+            public byte[] BetweenHashBlockIndexBinary => BitConverter.GetBytes(BetweenHasBlockIndex);
 
-            public byte[] BetweenReverseHasBlockBinary => BetweenReverseHasBlock == null
-                ? new byte[] { }
-                : BitConverter.GetBytes((ulong)BetweenReverseHasBlock);
+            public readonly ulong? BetweenReverseHashBlock;
+            public byte[] BetweenReverseHashBlockBinary => BetweenReverseHashBlock == null ? new byte[] { } : BitConverter.GetBytes((ulong)BetweenReverseHashBlock);
 
-            public readonly int BetweenReverseHasBlockIndex;
-            public byte[] BetweenReverseHasBlockIndexBinary => BitConverter.GetBytes(BetweenReverseHasBlockIndex);
+            public readonly int BetweenReverseHashBlockIndex;
+            public byte[] BetweenReverseHashBlockIndexBinary => BitConverter.GetBytes(BetweenReverseHashBlockIndex);
 
-            public bool TakeAll => BetweenHasBlock == null;
-            public bool ReverseTakeAll => BetweenReverseHasBlock == null;
+            public bool TakeAll => BetweenHashBlock == null;
+            public bool ReverseTakeAll => BetweenReverseHashBlock == null;
         }
 
         private const int BlockFileSize = 256; // Each hash represents a block of 256 files
@@ -813,8 +802,7 @@ end tell";
         /// <param name="returnHashBlocks">Return hash block if delimitsRange is null</param>
         /// <param name="delimitsRange">An object that indicates the portion of the FileTable hash to take</param>
         /// <returns></returns>
-        public static HashFileTable GetRestrictedHashFileTable(HashFileTable hashFileTable, out byte[] returnHashBlocks,
-            BlockRange delimitsRange = null)
+        public static HashFileTable GetRestrictedHashFileTable(HashFileTable hashFileTable, out byte[] returnHashBlocks, BlockRange delimitsRange = null)
         {
             var returnValue = delimitsRange == null ? null : new HashFileTable();
             var elementInBlock = delimitsRange == null ? null : new List<KeyValuePair<ulong, HashFileTable>>();
@@ -842,8 +830,7 @@ end tell";
                         hash2 = 0;
                         if (outElementInBlock != null)
                         {
-                            outElementInBlock.Add(
-                                new KeyValuePair<ulong, HashFileTable>(BitConverter.ToUInt64(hash, 0), toAdd));
+                            outElementInBlock.Add(new KeyValuePair<ulong, HashFileTable>(BitConverter.ToUInt64(hash, 0), toAdd));
                             toAdd = new HashFileTable();
                         }
                     }
@@ -868,29 +855,22 @@ end tell";
             else
             {
                 returnHashBlocks = null;
-                if (!PerformRange(false, ref elementInBlock, ref returnValue, delimitsRange.TakeAll,
-                        delimitsRange.BetweenHasBlock, delimitsRange.BetweenHasBlockIndex))
-                    return
-                        null; // There is no block in the requested position, the operation must be canceled because there is something wrong
+                if (!PerformRange(false, ref elementInBlock, ref returnValue, delimitsRange.TakeAll, delimitsRange.BetweenHashBlock, delimitsRange.BetweenHasBlockIndex))
+                    return null; // There is no block in the requested position, the operation must be canceled because there is something wrong
 
-                if (!PerformRange(true, ref elementInBlock, ref returnValue, delimitsRange.ReverseTakeAll,
-                        delimitsRange.BetweenReverseHasBlock, delimitsRange.BetweenReverseHasBlockIndex))
-                    return
-                        null; // There is no block in the requested position, the operation must be canceled because there is something wrong
+                if (!PerformRange(true, ref elementInBlockReverse, ref returnValue, delimitsRange.ReverseTakeAll, delimitsRange.BetweenReverseHashBlock, delimitsRange.BetweenReverseHashBlockIndex))
+                    return null; // There is no block in the requested position, the operation must be canceled because there is something wrong
             }
 
             return returnValue;
         }
 
-        private static bool PerformRange(bool reverseStep, ref List<KeyValuePair<ulong, HashFileTable>> elementInBlock,
-            ref HashFileTable returnValue, bool takeAll, ulong? betweenHasBlock, int betweenHasBlockIndex)
+        private static bool PerformRange(bool reverseStep, ref List<KeyValuePair<ulong, HashFileTable>> elementInBlock, ref HashFileTable returnValue, bool takeAll, ulong? betweenHasBlock, int betweenHasBlockIndex)
         {
             var startIndex = takeAll ? 0 : betweenHasBlockIndex;
-            if (betweenHasBlockIndex != -1 && (elementInBlock.Count <= betweenHasBlockIndex ||
-                                               elementInBlock[betweenHasBlockIndex].Key != betweenHasBlock))
+            if (betweenHasBlockIndex != -1 && (elementInBlock.Count <= betweenHasBlockIndex || elementInBlock[betweenHasBlockIndex].Key != betweenHasBlock))
             {
-                return
-                    false; // There is no block in the requested position, the operation must be canceled because there is something wrong
+                return false; // There is no block in the requested position, the operation must be canceled because there is something wrong
             }
 
             if (!reverseStep)
@@ -919,7 +899,6 @@ end tell";
                     }
                 }
             }
-
             return true;
         }
 
@@ -935,8 +914,7 @@ end tell";
             return new BlockRange(lastHashStraight, indexStraight, lastHashReverse, indexReverse);
         }
 
-        private static void HashBlockComparer(byte[] hashBlocksRemote, byte[] hashBlocksLocal, out ulong? lastHashMatch,
-            out int index)
+        private static void HashBlockComparer(byte[] hashBlocksRemote, byte[] hashBlocksLocal, out ulong? lastHashMatch, out int index)
         {
             lastHashMatch = null;
             index = -1;
@@ -1122,7 +1100,7 @@ end tell";
             }
             else
             {
-                var permission = GetOctalFilePermissions(path);
+                var permission = GetFilePermissionsOctal(path);
                 var EXECUTE_OWNER = 64; // 0100 in octal
                 // Check if the execute permission for the owner is enabled
                 bool isExecuteOwnerEnabled = (permission & EXECUTE_OWNER) != 0;
