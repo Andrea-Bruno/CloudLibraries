@@ -33,22 +33,22 @@ namespace CloudSync
 
             var ip = A(bytes);
             // IP for special use: https://en.wikipedia.org/wiki/Reserved_IP_addresses             
-            if (Ir(ip, new byte[] { 0, 0, 0, 0 }, new byte[] { 0, 255, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 10, 0, 0, 0 }, new byte[] { 10, 255, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 100, 64, 0, 0 }, new byte[] { 100, 127, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 127, 0, 0, 0 }, new byte[] { 127, 255, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 169, 254, 0, 0 }, new byte[] { 169, 254, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 172, 16, 0, 0 }, new byte[] { 172, 31, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 192, 0, 0, 0 }, new byte[] { 192, 0, 0, 255 })) return true;
-            if (Ir(ip, new byte[] { 192, 0, 2, 0 }, new byte[] { 192, 0, 2, 255 })) return true;
-            if (Ir(ip, new byte[] { 192, 88, 99, 0 }, new byte[] { 192, 88, 99, 255 })) return true;
-            if (Ir(ip, new byte[] { 192, 168, 0, 0 }, new byte[] { 192, 168, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 198, 18, 0, 0 }, new byte[] { 198, 19, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 198, 51, 100, 0 }, new byte[] { 198, 51, 100, 255 })) return true;
-            if (Ir(ip, new byte[] { 203, 0, 113, 0 }, new byte[] { 203, 0, 113, 255 })) return true;
-            if (Ir(ip, new byte[] { 224, 0, 0, 0 }, new byte[] { 239, 255, 255, 255 })) return true;
-            if (Ir(ip, new byte[] { 233, 252, 0, 0 }, new byte[] { 233, 252, 0, 255 })) return true;
-            if (Ir(ip, new byte[] { 240, 0, 0, 0 }, new byte[] { 255, 255, 255, 254 })) return true;
+            if (Ir(ip, [0, 0, 0, 0], [0, 255, 255, 255])) return true;
+            if (Ir(ip, [10, 0, 0, 0], [10, 255, 255, 255])) return true;
+            if (Ir(ip, [100, 64, 0, 0], [100, 127, 255, 255])) return true;
+            if (Ir(ip, [127, 0, 0, 0], [127, 255, 255, 255])) return true;
+            if (Ir(ip, [169, 254, 0, 0], [169, 254, 255, 255])) return true;
+            if (Ir(ip, [172, 16, 0, 0], [172, 31, 255, 255])) return true;
+            if (Ir(ip, [192, 0, 0, 0], [192, 0, 0, 255])) return true;
+            if (Ir(ip, [192, 0, 2, 0], [192, 0, 2, 255])) return true;
+            if (Ir(ip, [192, 88, 99, 0], [192, 88, 99, 255])) return true;
+            if (Ir(ip, [192, 168, 0, 0], [192, 168, 255, 255])) return true;
+            if (Ir(ip, [198, 18, 0, 0], [198, 19, 255, 255])) return true;
+            if (Ir(ip, [198, 51, 100, 0], [198, 51, 100, 255])) return true;
+            if (Ir(ip, [203, 0, 113, 0], [203, 0, 113, 255])) return true;
+            if (Ir(ip, [224, 0, 0, 0], [239, 255, 255, 255])) return true;
+            if (Ir(ip, [233, 252, 0, 0], [233, 252, 0, 255])) return true;
+            if (Ir(ip, [240, 0, 0, 0], [255, 255, 255, 254])) return true;
             return false;
         }
 

@@ -167,7 +167,7 @@ namespace CloudSync
             }
         }
 
-        private readonly List<FileId> DeletedByRemoteRequest = new List<FileId>();
+        private readonly List<FileId> DeletedByRemoteRequest = [];
         private void AddDeletedByRemoteRequest(FileId fileId)
         {
             DeletedByRemoteRequest.Add(fileId);

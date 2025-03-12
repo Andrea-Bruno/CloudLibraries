@@ -465,7 +465,7 @@ namespace CloudSync
                 {
                     foreach (var item in hashFileTable)
                     {
-                        var priority = item.Value is FileInfo fileInfo && Util.SpecialDirectories.Contains(fileInfo.DirectoryName);
+                        var priority = item.Value is FileInfo fileInfo && SpecialDirectories.Contains(fileInfo.DirectoryName);
                         if ((phase == 0 && priority) || (phase == 1 && !priority))
                         {
                             Buffer.BlockCopy(BitConverter.GetBytes(item.Key), 0, array, offset, 8);
@@ -550,7 +550,7 @@ namespace CloudSync
                 long usedSpace = 0;
                 void StartAnalyzeDirectory(string directoryName, out HashFileTable hashDirTable, ref long usedSpace)
                 {
-                    hashDirTable = new HashFileTable();
+                    hashDirTable = [];
                     AnalyzeDirectory(new DirectoryInfo(directoryName), ref hashDirTable, ref usedSpace);
                 }
 
@@ -712,7 +712,7 @@ namespace CloudSync
         /// </summary>
         public int CalculationTimeHashFileTableMS { get; internal set; }
 
-        private static readonly string[] ExcludeDir = { "bin", "obj", ".vs", "packages", "apppackages" };
+        private static readonly string[] ExcludeDir = ["bin", "obj", ".vs", "packages", "apppackages"];
 
         private static bool DirToExclude(DirectoryInfo directory)
         {

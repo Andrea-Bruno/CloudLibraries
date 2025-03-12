@@ -396,7 +396,7 @@ namespace CloudSync
         /// <summary>
         /// Flags that indicates that the disk over limit has been notified to the remote device
         /// </summary>
-        public List<ulong?> FlagsDriveOverLimit = new List<ulong?>();
+        public List<ulong?> FlagsDriveOverLimit = [];
         private Task TaskOnSendHashStructure;
         /// <summary>
         /// Add the operations to be performed for file synchronization to the spooler.

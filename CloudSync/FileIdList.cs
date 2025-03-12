@@ -23,7 +23,7 @@ namespace CloudSync
     internal class FileIdList
     {
         // Static dictionary to store all instances of FileIdList
-        private static readonly Dictionary<string, FileIdList> instances = new Dictionary<string, FileIdList>();
+        private static readonly Dictionary<string, FileIdList> instances = [];
 
         /// <summary>
         /// Action to be called on successful load with parameters scope, userId, and newFileIdList.
@@ -56,7 +56,7 @@ namespace CloudSync
         private string FileName => Path.Combine(Context.CloudRoot, CloudCache, GetKey(UserID, Scope));
         private Sync Context;
         private ulong UserID;
-        private List<FileId> fileIdList = new List<FileId>();
+        private List<FileId> fileIdList = [];
         private Timer saveTimer;
 
         /// <summary>
@@ -115,7 +115,7 @@ namespace CloudSync
             {
                 if (instances.TryGetValue(fileName, out var existingInstance))
                 {
-                    previousFileIdList = new List<FileId>(existingInstance.fileIdList);
+                    previousFileIdList = [.. existingInstance.fileIdList];
                 }
             }
 

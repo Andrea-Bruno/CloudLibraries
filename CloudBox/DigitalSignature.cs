@@ -49,7 +49,7 @@ namespace CloudBox
             BlockchainHashBlock = (string)hashBlock;
             var blockchainHashBlock = BlockchainHashBlock.HexToBytes();
             ScopeOfSignature = scopeOfSignature;
-            var signBase = new byte[] { Version }.Concat(publicKey.ToBytes()).Concat(hash).Concat(blockchainHashBlock).Concat(new byte[] { (byte)ScopeOfSignature }).ToArray();
+            var signBase = new byte[] { Version }.Concat(publicKey.ToBytes()).Concat(hash).Concat(blockchainHashBlock).Concat([(byte)ScopeOfSignature]).ToArray();
             var hashBase = new uint256(Hash256(signBase));
             var signature = key.Sign(hashBase);
             Signature = signature.ToDER().ToHex();
@@ -128,7 +128,7 @@ namespace CloudBox
             var hash = file != null ? Hash256(file) : HashFile(fullFileName);
             if (Hash != hash.ToHex())
                 return false;
-            var signBase = new byte[] { Version }.Concat(PublicKey.HexToBytes()).Concat(hash).Concat(BlockchainHashBlock.HexToBytes()).Concat(new byte[] { (byte)ScopeOfSignature }).ToArray();
+            var signBase = new byte[] { Version }.Concat(PublicKey.HexToBytes()).Concat(hash).Concat(BlockchainHashBlock.HexToBytes()).Concat([(byte)ScopeOfSignature]).ToArray();
             var hashBase = new uint256(Hash256(signBase));
             var publicKey = new PubKey(PublicKey.HexToBytes());
             return publicKey.Verify(hashBase, Signature.HexToBytes());
@@ -153,7 +153,7 @@ namespace CloudBox
             return "." + UserId() + ".sign";
         }
 
-        private static readonly Dictionary<string, Tuple<DateTime, string>> JsonCache = new Dictionary<string, Tuple<DateTime, string>>();
+        private static readonly Dictionary<string, Tuple<DateTime, string>> JsonCache = [];
 
         private Dictionary<string, object> Json(string url)
         {

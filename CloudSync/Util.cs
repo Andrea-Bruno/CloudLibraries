@@ -327,8 +327,8 @@ namespace CloudSync
             return false;
         }
 
-        private static readonly List<string> ExcludeName = new List<string> { "desktop.ini", "tmp", "temp", "cache", "bin", "obj" };
-        private static readonly List<string> ExcludeExtension = new List<string> { ".desktop", ".tmp", ".cache" };
+        private static readonly List<string> ExcludeName = ["desktop.ini", "tmp", "temp", "cache", "bin", "obj"];
+        private static readonly List<string> ExcludeExtension = [".desktop", ".tmp", ".cache"];
 
         /// <summary>
         /// Return true if it is a hidden file or not subject to synchronization between cloud client and server
@@ -354,7 +354,7 @@ namespace CloudSync
         /// <returns>A Boolean value indicating whether the file is subject to synchronization or not</returns>
         public static bool CanBeSeen(string fullNameFile, bool checkAttribute = true) => CanBeSeen(new FileInfo(fullNameFile), checkAttribute);
 
-        internal static readonly string[] SpecialDirectories = { FileIdList.CloudCache };
+        internal static readonly string[] SpecialDirectories = [FileIdList.CloudCache];
 
         /// <summary>
         /// Convert a date to Unix timestamp format
@@ -671,10 +671,10 @@ end tell";
             process.Start();
             string output = process.StandardOutput.ReadToEnd();
             process.WaitForExit();
-            string[] lines = output.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+            string[] lines = output.Split([Environment.NewLine], StringSplitOptions.RemoveEmptyEntries);
             foreach (var line in lines)
             {
-                string[] parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                string[] parts = line.Split([' '], StringSplitOptions.RemoveEmptyEntries);
                 if (parts[1].StartsWith(desktop))
                 {
                     return parts[0];
@@ -751,9 +751,9 @@ end tell";
                 BetweenReverseHashBlockIndex = betweenReverseHashBlockIndex;
 #if (DEBUG)
                 if (BetweenHashBlock == null && BetweenHasBlockIndex != -1)
-                    System.Diagnostics.Debugger.Break(); // wrong !
+                    Debugger.Break(); // wrong !
                 if (BetweenReverseHashBlock == null && BetweenReverseHashBlockIndex != -1)
-                    System.Diagnostics.Debugger.Break(); // wrong !
+                    Debugger.Break(); // wrong !
 #endif
             }
 
@@ -765,20 +765,20 @@ end tell";
                 BetweenReverseHashBlockIndex = BitConverter.ToInt32(betweenReverseHasBlockPIndex, 0);
 #if (DEBUG)
                 if (BetweenHashBlock == null && BetweenHasBlockIndex != -1)
-                    System.Diagnostics.Debugger.Break(); // wrong !
+                    Debugger.Break(); // wrong !
                 if (BetweenReverseHashBlock == null && BetweenReverseHashBlockIndex != -1)
-                    System.Diagnostics.Debugger.Break(); // wrong !
+                    Debugger.Break(); // wrong !
 #endif
             }
 
             public readonly ulong? BetweenHashBlock;
-            public byte[] BetweenHashBlockBinary => BetweenHashBlock == null ? new byte[] { } : BitConverter.GetBytes((ulong)BetweenHashBlock);
+            public byte[] BetweenHashBlockBinary => BetweenHashBlock == null ? [] : BitConverter.GetBytes((ulong)BetweenHashBlock);
 
             public readonly int BetweenHasBlockIndex;
             public byte[] BetweenHashBlockIndexBinary => BitConverter.GetBytes(BetweenHasBlockIndex);
 
             public readonly ulong? BetweenReverseHashBlock;
-            public byte[] BetweenReverseHashBlockBinary => BetweenReverseHashBlock == null ? new byte[] { } : BitConverter.GetBytes((ulong)BetweenReverseHashBlock);
+            public byte[] BetweenReverseHashBlockBinary => BetweenReverseHashBlock == null ? [] : BitConverter.GetBytes((ulong)BetweenReverseHashBlock);
 
             public readonly int BetweenReverseHashBlockIndex;
             public byte[] BetweenReverseHashBlockIndexBinary => BitConverter.GetBytes(BetweenReverseHashBlockIndex);
@@ -831,7 +831,7 @@ end tell";
                         if (outElementInBlock != null)
                         {
                             outElementInBlock.Add(new KeyValuePair<ulong, HashFileTable>(BitConverter.ToUInt64(hash, 0), toAdd));
-                            toAdd = new HashFileTable();
+                            toAdd = [];
                         }
                     }
                     n++;

@@ -149,11 +149,11 @@ namespace CloudSync
         /// <returns>If the pin is valid and not expired it returns true</returns>
         internal List<string> GetPins(string sharingGroup)
         {
-            return new List<string>
-            {
+            return
+            [
                 GetPin(sharingGroup),
                 GetPin(sharingGroup, DateTime.UtcNow.AddDays(-7))
-            };
+            ];
         }
 
         /// <summary>

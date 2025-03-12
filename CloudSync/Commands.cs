@@ -63,7 +63,7 @@ namespace CloudSync
 
         private void SendNotification(ulong? toUserId, Notice notice)
         {
-            SendCommand(toUserId, Commands.Notification, notice.ToString(), new[] { new[] { (byte)notice } });
+            SendCommand(toUserId, Commands.Notification, notice.ToString(), [new[] { (byte)notice }]);
         }
 
         /// <summary>
@@ -76,8 +76,8 @@ namespace CloudSync
         private void RequestOfAuthentication(ulong? toUserId, LoginCredential credential, string host, string userAgent = null)
         {
             Credential = credential;
-            var hostArray = host == null ? new byte[] { } : Encoding.ASCII.GetBytes(host);
-            var userAgentArray = userAgent == null ? new byte[] { } : Encoding.ASCII.GetBytes(userAgent);
+            var hostArray = host == null ? [] : Encoding.ASCII.GetBytes(host);
+            var userAgentArray = userAgent == null ? [] : Encoding.ASCII.GetBytes(userAgent);
             SendCommand(toUserId, Commands.RequestOfAuthentication, host, hostArray, userAgentArray);
         }
         private LoginCredential Credential;
@@ -89,7 +89,7 @@ namespace CloudSync
         /// <param name="randomDataForAuthentication"></param>
         private void Authentication(ulong? toUserId, byte[] randomDataForAuthentication)
         {
-            SendCommand(toUserId, Commands.Authentication, null, new[] { randomDataForAuthentication });
+            SendCommand(toUserId, Commands.Authentication, null, [randomDataForAuthentication]);
         }
 
         private void SendHashStructure(ulong? toUserId, BlockRange delimitsRange = null)
@@ -97,9 +97,9 @@ namespace CloudSync
             if (GetLocalHashStructure(out var structure, delimitsRange))
             {
                 if (delimitsRange == null)
-                    SendCommand(toUserId, Commands.SendHashStructure, null, new[] { structure });
+                    SendCommand(toUserId, Commands.SendHashStructure, null, [structure]);
                 else
-                    SendCommand(toUserId, Commands.SendHashStructure, null, new[] { structure, delimitsRange.BetweenHashBlockBinary, delimitsRange.BetweenHashBlockIndexBinary, delimitsRange.BetweenReverseHashBlockBinary, delimitsRange.BetweenReverseHashBlockIndexBinary });
+                    SendCommand(toUserId, Commands.SendHashStructure, null, [structure, delimitsRange.BetweenHashBlockBinary, delimitsRange.BetweenHashBlockIndexBinary, delimitsRange.BetweenReverseHashBlockBinary, delimitsRange.BetweenReverseHashBlockIndexBinary]);
             }
         }
 
@@ -108,14 +108,14 @@ namespace CloudSync
             if (delimitsRange == null)
                 SendCommand(toUserId, Commands.RequestHashStructure, null);
             else
-                SendCommand(toUserId, Commands.RequestHashStructure, null, new[] { delimitsRange.BetweenHashBlockBinary, delimitsRange.BetweenHashBlockIndexBinary, delimitsRange.BetweenReverseHashBlockBinary, delimitsRange.BetweenReverseHashBlockIndexBinary });
+                SendCommand(toUserId, Commands.RequestHashStructure, null, [delimitsRange.BetweenHashBlockBinary, delimitsRange.BetweenHashBlockIndexBinary, delimitsRange.BetweenReverseHashBlockBinary, delimitsRange.BetweenReverseHashBlockIndexBinary]);
         }
 
         private void SendHashBlocks(ulong? toUserId)
         {
             if (GetHasBlock(out var hashBlock))
             {
-                SendCommand(toUserId, Commands.SendHashBlocks, null, new[] { hashBlock });
+                SendCommand(toUserId, Commands.SendHashBlocks, null, [hashBlock]);
             }
         }
 
@@ -123,7 +123,7 @@ namespace CloudSync
         {
             if (GetHasRoot(out var hashRoot, true))
             {
-                SendCommand(toUserId, Commands.SendHashRoot, null, new[] { hashRoot });
+                SendCommand(toUserId, Commands.SendHashRoot, null, [hashRoot]);
             }
         }
 
@@ -138,7 +138,7 @@ namespace CloudSync
                 ReceptionInProgress.Completed(hash, (ulong)toUserId);
             else
                 ReceptionInProgress.SetTimeout(hash);
-            SendCommand(toUserId, Commands.RequestChunkFile, "#" + chunkPart + " " + hash, new[] { hash.GetBytes(), chunkPart.GetBytes() });
+            SendCommand(toUserId, Commands.RequestChunkFile, "#" + chunkPart + " " + hash, [hash.GetBytes(), chunkPart.GetBytes()]);
         }
 
         private void ReportReceiptFileCompleted(ulong? toUserId, ulong hash, uint totalParts)
@@ -225,24 +225,24 @@ namespace CloudSync
         private void DeleteFile(ulong? toUserId, ulong hash, FileSystemInfo fileSystemInfo)
         {
             var timestamp = fileSystemInfo.UnixLastWriteTimestamp();
-            SendCommand(toUserId, Commands.DeleteFile, fileSystemInfo.FullName, new[] { hash.GetBytes(), timestamp.GetBytes() });
+            SendCommand(toUserId, Commands.DeleteFile, fileSystemInfo.FullName, [hash.GetBytes(), timestamp.GetBytes()]);
         }
 
         private void DeleteFile(ulong? toUserId, ulong hash, uint unixTimestamp, string infoData)
         {
-            SendCommand(toUserId, Commands.DeleteFile, infoData, new[] { hash.GetBytes(), unixTimestamp.GetBytes() });
+            SendCommand(toUserId, Commands.DeleteFile, infoData, [hash.GetBytes(), unixTimestamp.GetBytes()]);
         }
 
         private void CreateDirectory(ulong? toUserId, FileSystemInfo fileSystemInfo)
         {
             if (Spooler.RemoteDriveOverLimit)
                 return; // The remote disk is full, do not send any more data
-            SendCommand(toUserId, Commands.CreateDirectory, fileSystemInfo.FullName, new[] { fileSystemInfo.CloudRelativeUnixFullName(this).GetBytes() });
+            SendCommand(toUserId, Commands.CreateDirectory, fileSystemInfo.FullName, [fileSystemInfo.CloudRelativeUnixFullName(this).GetBytes()]);
         }
 
         private void DeleteDirectory(ulong? toUserId, FileSystemInfo fileSystemInfo)
         {
-            SendCommand(toUserId, Commands.DeleteDirectory, fileSystemInfo.FullName, new[] { fileSystemInfo.CloudRelativeUnixFullName(this).GetBytes() });
+            SendCommand(toUserId, Commands.DeleteDirectory, fileSystemInfo.FullName, [fileSystemInfo.CloudRelativeUnixFullName(this).GetBytes()]);
         }
 
         /// <summary>
@@ -252,7 +252,7 @@ namespace CloudSync
         /// <param name="status">Busy otherwise Ready to request to proceed with the synchronization</param>
         internal void StatusNotification(ulong? toUserId, Status status)
         {
-            SendCommand(toUserId, Commands.StatusNotification, status.ToString(), new[] { (byte)status });
+            SendCommand(toUserId, Commands.StatusNotification, status.ToString(), [(byte)status]);
         }
 
         /// <summary>

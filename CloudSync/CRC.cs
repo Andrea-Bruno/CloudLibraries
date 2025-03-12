@@ -154,7 +154,7 @@ namespace CloudSync
             return toChunkPart == 0 || parts == toChunkPart;
         }
 
-        private static Dictionary<ulong, Dictionary<ulong, PartialCRC>> _CollectionOfTmpCRCs = new Dictionary<ulong, Dictionary<ulong, PartialCRC>>();
+        private static Dictionary<ulong, Dictionary<ulong, PartialCRC>> _CollectionOfTmpCRCs = [];
 
         private static Dictionary<ulong, PartialCRC> TmpCRCs(ulong? userID)
         {
@@ -164,7 +164,7 @@ namespace CloudSync
                 {
                     return value;
                 }
-                value = new Dictionary<ulong, PartialCRC>();
+                value = [];
                 _CollectionOfTmpCRCs.Add(userID == null ? 0 : (ulong)userID, value);
                 return value;
             }
@@ -173,7 +173,7 @@ namespace CloudSync
         class PartialCRC
         {
             public uint LastPart;
-            public ulong TempCRC = CRC.StartCRC;
+            public ulong TempCRC = StartCRC;
         }
 
     }

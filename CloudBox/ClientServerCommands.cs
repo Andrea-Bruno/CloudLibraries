@@ -100,9 +100,9 @@ namespace CloudBox
                 return false;
             }
             if (data == null)
-                data = new byte[0][];
+                data = [];
             // Encryption is disabled because the data that must be encrypted by the client when it sends it is not saved in the clear, so it is not necessary to add additional encryption
-            Context?.Messaging.SendMessage(MessageType.SubApplicationCommandWithParameters, Functions.JoinData(false, data).Combine(BitConverter.GetBytes(AppId), BitConverter.GetBytes((ushort)command)), null, null, null, new ulong[] { ToIdUser }, true, false);
+            Context?.Messaging.SendMessage(MessageType.SubApplicationCommandWithParameters, Functions.JoinData(false, data).Combine(BitConverter.GetBytes(AppId), BitConverter.GetBytes((ushort)command)), null, null, null, [ToIdUser], true, false);
             return true;
         }
     }

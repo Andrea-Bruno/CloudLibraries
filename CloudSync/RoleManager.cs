@@ -15,8 +15,8 @@ namespace CloudSync
 
         private readonly Sync Context;
 
-        public readonly Dictionary<ulong, Client> Clients = new Dictionary<ulong, Client>();
-        public readonly Dictionary<ulong, Client> TmpClients = new Dictionary<ulong, Client>();
+        public readonly Dictionary<ulong, Client> Clients = [];
+        public readonly Dictionary<ulong, Client> TmpClients = [];
         public List<Client> ClientsConnected()
         {
             var clients = new List<Client>();
@@ -181,7 +181,7 @@ namespace CloudSync
 
         internal static uint CryptographicProofOfPinKnowledge(byte[] randomBitesForAuthenticationProof, string pin)
         {
-            byte[] pinBytes = int.TryParse(pin, out int pinInt) ? BitConverter.GetBytes(pinInt) : (new byte[0]);
+            byte[] pinBytes = int.TryParse(pin, out int pinInt) ? BitConverter.GetBytes(pinInt) : ([]);
             var baseHash = new byte[randomBitesForAuthenticationProof.Length + pinBytes.Length];
             randomBitesForAuthenticationProof.CopyTo(baseHash, 0);
             pinBytes.CopyTo(baseHash, randomBitesForAuthenticationProof.Length);

@@ -15,7 +15,7 @@ namespace CloudSync
             Context = context;
         }
         private readonly Sync Context;
-        private readonly Dictionary<ulong, DateTime> TimeoutChunkFileToTransfer = new Dictionary<ulong, DateTime>();
+        private readonly Dictionary<ulong, DateTime> TimeoutChunkFileToTransfer = [];
         /// <summary>
         /// Property indicating the number of file transfers currently in progress
         /// </summary>
@@ -79,7 +79,7 @@ namespace CloudSync
                 Timers.Add(timer);
             }
         }
-        private readonly List<Timer> Timers = new List<Timer>();
+        private readonly List<Timer> Timers = [];
 
         /// <summary>
         /// Returns a descriptive information that specifies how long it is to timeout for operations in progress

@@ -150,7 +150,7 @@ namespace CloudSync
         public static string EncryptFullFileName(string fullFileName, byte[] key)
         {
             var result = new List<string>();
-            var parts = fullFileName.Split(new char[] { '/', '\\' });
+            var parts = fullFileName.Split(['/', '\\']);
             var clearFolder = false;
             foreach (var part in parts)
             {
@@ -166,7 +166,7 @@ namespace CloudSync
         public static string DecryptFullFileName(string fullFileName, byte[] key)
         {
             var result = new List<string>();
-            var parts = fullFileName.Split(new char[] { '/', '\\' });
+            var parts = fullFileName.Split(['/', '\\']);
             var clearFolder = false;
             foreach (var part in parts)
             {
@@ -226,7 +226,7 @@ namespace CloudSync
         private static string PerformEncrtptText(string text, byte[] key)
         {
             var bytes = Encoding.UTF8.GetBytes(text);
-            var masterKey = key.Concat(new byte[] { (byte)bytes.Length });
+            var masterKey = key.Concat([(byte)bytes.Length]);
             var masc = new byte[0];
             do
             {
@@ -258,7 +258,7 @@ namespace CloudSync
                 }
             }
             var bytes = new byte[text.Length];
-            var masterKey = key.Concat(new byte[] { (byte)bytes.Length });
+            var masterKey = key.Concat([(byte)bytes.Length]);
             var masc = new byte[0];
             do
             {

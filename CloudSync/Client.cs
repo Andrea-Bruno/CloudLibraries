@@ -237,13 +237,15 @@ namespace CloudSync
         /// <summary>
         /// Log of accesses made by this client
         /// </summary>
-        public LogAccess[] Accesses = { };
+        public LogAccess[] Accesses = [];
 
         public void AddNewAccess(string host, string userAgent = null)
         {
             var log = new LogAccess { DateTime = DateTime.UtcNow, Host = host, UserAgent = userAgent };
-            var list = new List<LogAccess>(Accesses);
-            list.Add(log);
+            var list = new List<LogAccess>(Accesses)
+            {
+                log
+            };
             Accesses = list.ToArray();
             if (Accesses.Length > 1)
                 Save();

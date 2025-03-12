@@ -72,7 +72,7 @@ namespace CloudSync
             }
         }
 
-        private readonly Dictionary<ulong, Operation> ToDoOperations = new Dictionary<ulong, Operation>();
+        private readonly Dictionary<ulong, Operation> ToDoOperations = [];
         public int PendingOperations => ToDoOperations.Count;
 
         public enum OperationType
@@ -241,7 +241,7 @@ namespace CloudSync
             catch (Exception) { }
         }
 
-        private Dictionary<ulong, int> FilePendingTree = new Dictionary<ulong, int>();
+        private Dictionary<ulong, int> FilePendingTree = [];
 
 
         private void RemoveOperation(ulong hashFile)
