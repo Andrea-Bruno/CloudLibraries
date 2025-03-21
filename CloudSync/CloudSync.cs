@@ -73,7 +73,10 @@ namespace CloudSync
             SendingInProgress = new ProgressFileTransfer(this);
             if (SyncIsEnabled)
             {
-                Task.Run(() => HashFileTable(out _)); // set cache initial state to check if file is deleted
+                if (Debugger.IsAttached)
+                    HashFileTable(out _);
+                else
+                    Task.Run(() => HashFileTable(out _)); // set cache initial state to check if file is deleted
             }
             if (IsServer)
             {
@@ -278,7 +281,7 @@ namespace CloudSync
                     CheckSyncStatusChanged.Dispose();
                     CheckSyncStatusChanged = null;
                 }
-               
+
                 if (PathWatcher != null)
                 {
                     PathWatcher.EnableRaisingEvents = false;
@@ -663,7 +666,7 @@ namespace CloudSync
         /// <summary>
         /// Cloud storage space used in bytes
         /// </summary>
-        public long  UsedSpace {  get; private set; }
+        public long UsedSpace { get; private set; }
 
         private void OnHashFileTableChanged(HashFileTable newHashFileTable)
         {

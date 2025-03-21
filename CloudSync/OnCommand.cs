@@ -1,4 +1,5 @@
-﻿using System;
+﻿using NBitcoin;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -20,13 +21,23 @@ namespace CloudSync
             lastFromUserId = fromUserId;
             if (!Enum.IsDefined(typeof(Commands), command))
                 return false; // Commend not supported from this version
+            void execute()
+            {
+                OnCommand(fromUserId, (Commands)command, out string infoData, values);
+                RaiseOnCommandEvent(fromUserId, (Commands)command, infoData);
+            }
+            if (Debugger.IsAttached)
+            {
+                OnCommandRunning++;
+                execute();
+                OnCommandRunning--;
+            }
             Task.Run(() =>
             {
                 OnCommandRunning++;
                 try
                 {
-                    OnCommand(fromUserId, (Commands)command, out string infoData, values);
-                    RaiseOnCommandEvent(fromUserId, (Commands)command, infoData);
+                    execute();
                 }
                 catch (Exception ex)
                 {
@@ -407,61 +418,68 @@ namespace CloudSync
         /// <param name="delimitsRange">A possible delimiter that restricts the area of files to be checked for synchronization</param>
         private void OnSendHashStructure(ulong? fromUserId, Dictionary<ulong, uint> remoteHashes, BlockRange delimitsRange)
         {
-            TaskOnSendHashStructure ??= Task.Run(() =>
+            void execute()
+            {
+                Spooler.Clear();
+                if (HashFileTable(out var localHashes, delimitsRange: delimitsRange))
                 {
-                    try
+                    if (localHashes != null)
                     {
-                        Spooler.Clear();
-                        if (HashFileTable(out var localHashes, delimitsRange: delimitsRange))
+                        //Update file
+                        foreach (var hash in remoteHashes.Keys)
                         {
-                            if (localHashes != null)
+                            if (localHashes.TryGetValue(hash, out var dateTime))
                             {
-                                //Update file
-                                foreach (var hash in remoteHashes.Keys)
+                                var remoteDate = remoteHashes[hash];
+                                var localDate = dateTime.UnixLastWriteTimestamp();
+                                if (remoteDate > localDate)
                                 {
-                                    if (localHashes.TryGetValue(hash, out var dateTime))
-                                    {
-                                        var remoteDate = remoteHashes[hash];
-                                        var localDate = dateTime.UnixLastWriteTimestamp();
-                                        if (remoteDate > localDate)
-                                        {
-                                            Spooler.AddOperation(Spooler.OperationType.Request, fromUserId, hash);
-                                        }
-                                        else if (remoteDate < localDate)
-                                        {
-                                            Spooler.AddOperation(Spooler.OperationType.Send, fromUserId, hash);
-                                        }
-                                    }
+                                    Spooler.AddOperation(Spooler.OperationType.Request, fromUserId, hash);
                                 }
-                                // Send missing files to the remote (or delete local if is removed)
-                                foreach (var hash in localHashes.Keys)
+                                else if (remoteDate < localDate)
                                 {
-                                    if (!remoteHashes.ContainsKey(hash))
-                                    {
-                                        Spooler.AddOperation(Spooler.OperationType.Send, fromUserId, hash);
-                                    }
-                                }
-
-                                // Request missing files locally
-                                foreach (var hash in remoteHashes.Keys)
-                                {
-                                    var wasDeleted = Existed(hash);
-                                    if (!localHashes.ContainsKey(hash) && !wasDeleted)
-                                    {
-                                        Spooler.AddOperation(Spooler.OperationType.Request, fromUserId, hash);
-                                    }
+                                    Spooler.AddOperation(Spooler.OperationType.Send, fromUserId, hash);
                                 }
                             }
                         }
+                        // Send missing files to the remote (or delete local if is removed)
+                        foreach (var hash in localHashes.Keys)
+                        {
+                            if (!remoteHashes.ContainsKey(hash))
+                            {
+                                Spooler.AddOperation(Spooler.OperationType.Send, fromUserId, hash);
+                            }
+                        }
+
+                        // Request missing files locally
+                        foreach (var hash in remoteHashes.Keys)
+                        {
+                            var wasDeleted = Existed(hash);
+                            if (!localHashes.ContainsKey(hash) && !wasDeleted)
+                            {
+                                Spooler.AddOperation(Spooler.OperationType.Request, fromUserId, hash);
+                            }
+                        }
                     }
-                    catch (Exception ex)
+                }
+            }
+            if (Debugger.IsAttached)
+                execute();
+            else
+                TaskOnSendHashStructure ??= Task.Run(() =>
                     {
-                        RecordError(ex);
-                        Debugger.Break(); // Error! Investigate the cause of the error!
-                        Debug.WriteLine(ex);
-                    }
-                    TaskOnSendHashStructure = null;
-                });
+                        try
+                        {
+                            execute();
+                        }
+                        catch (Exception ex)
+                        {
+                            RecordError(ex);
+                            Debugger.Break(); // Error! Investigate the cause of the error!
+                            Debug.WriteLine(ex);
+                        }
+                        TaskOnSendHashStructure = null;
+                    });
         }
 
         public uint TotalFilesReceived;

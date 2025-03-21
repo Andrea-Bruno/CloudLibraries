@@ -267,21 +267,28 @@ namespace CloudSync
             if (!Disposed)
             {
                 LastCommandSent = DateTime.UtcNow;
-                Task.Run(() =>
+                void execute()
                 {
-                    try
+                    Debug.WriteLine("OUT " + command);
+                    RaiseOnCommandEvent(contactId, command, infoData, true);
+                    Send.Invoke(contactId, (ushort)command, values);
+                }
+                if (Debugger.IsAttached)
+                    execute();
+                else
+                    Task.Run(() =>
                     {
-                        Debug.WriteLine("OUT " + command);
-                        RaiseOnCommandEvent(contactId, command, infoData, true);
-                        Send.Invoke(contactId, (ushort)command, values);
-                    }
-                    catch (Exception ex)
-                    {
-                        RecordError(ex);
-                        Debugger.Break(); // Error! Investigate the cause of the error!
-                        Debug.WriteLine(ex);
-                    }
-                });
+                        try
+                        {
+                            execute();
+                        }
+                        catch (Exception ex)
+                        {
+                            RecordError(ex);
+                            Debugger.Break(); // Error! Investigate the cause of the error!
+                            Debug.WriteLine(ex);
+                        }
+                    });
             }
         }
 
