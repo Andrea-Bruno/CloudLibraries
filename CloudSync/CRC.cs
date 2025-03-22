@@ -25,42 +25,35 @@ namespace CloudSync
         {
             isRestored = false;
             PartialCRC partialCRC;
-            if (part == 1 && tmpFile != null && tryRestore)
+            var oldDownload = tryRestore && part == 1 ? new FileInfo(tmpFile) : null;
+            if (oldDownload?.Exists == true)
             {
-                var oldDownload = new FileInfo(tmpFile);
-                if (oldDownload.Exists)
+                if ((oldDownload.Length % data.LongLength) == 0)
                 {
-                    if ((oldDownload.Length % data.LongLength) == 0)
+                    var restoreParts = (uint)(oldDownload.Length / data.LongLength);
+                    if (TmpCRCs(userID).TryGetValue(hashFileName, out partialCRC))
                     {
-                        var restoreParts = (uint)(oldDownload.Length / data.LongLength);
-                        if (TmpCRCs(userID).TryGetValue(hashFileName, out partialCRC))
+                        if (restoreParts == partialCRC.LastPart)
                         {
-                            if (restoreParts == partialCRC.LastPart)
-                            {
-                                part = restoreParts;
-                                isRestored = true;
-                                return true;
-                            }
-                        }
-                        if (File.Exists(tmpFile) && ComputingCRC(tmpFile, out ulong CRC, 0, data.Length, firstChunkData))
-                        {
-                            TmpCRCs(userID)[hashFileName] = new PartialCRC()
-                            {
-                                LastPart = restoreParts,
-                                TempCRC = CRC,
-                            };
                             part = restoreParts;
                             isRestored = true;
                             return true;
                         }
                     }
+                    if (File.Exists(tmpFile) && ComputingCRC(tmpFile, out ulong CRC, 0, data.Length, firstChunkData))
+                    {
+                        TmpCRCs(userID)[hashFileName] = new PartialCRC()
+                        {
+                            LastPart = restoreParts,
+                            TempCRC = CRC,
+                        };
+                        part = restoreParts;
+                        isRestored = true;
+                        return true;
+                    }
                 }
-                if (oldDownload.Exists)
-                {
-                    oldDownload.Delete();
-                }
+                oldDownload.Delete();
             }
-
             if (part == 1)
             {
                 partialCRC = new PartialCRC();

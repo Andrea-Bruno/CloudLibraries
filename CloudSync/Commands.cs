@@ -63,7 +63,7 @@ namespace CloudSync
 
         private void SendNotification(ulong? toUserId, Notice notice)
         {
-            SendCommand(toUserId, Commands.Notification, notice.ToString(), [new[] { (byte)notice }]);
+            SendCommand(toUserId, Commands.Notification, notice.ToString(), [[(byte)notice]]);
         }
 
         /// <summary>

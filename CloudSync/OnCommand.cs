@@ -32,21 +32,22 @@ namespace CloudSync
                 execute();
                 OnCommandRunning--;
             }
-            Task.Run(() =>
-            {
-                OnCommandRunning++;
-                try
+            else
+                Task.Run(() =>
                 {
-                    execute();
-                }
-                catch (Exception ex)
-                {
-                    RecordError(ex);
-                    Debugger.Break(); // Error! Investigate the cause of the error!
-                    Debug.WriteLine(ex);
-                }
-                OnCommandRunning--;
-            });
+                    OnCommandRunning++;
+                    try
+                    {
+                        execute();
+                    }
+                    catch (Exception ex)
+                    {
+                        RecordError(ex);
+                        Debugger.Break(); // Error! Investigate the cause of the error!
+                        Debug.WriteLine(ex);
+                    }
+                    OnCommandRunning--;
+                });
             return true;
         }
 
@@ -306,10 +307,13 @@ namespace CloudSync
                                         if (exception1 != null)
                                             RaiseOnFileError(exception1, targetDirectory.FullName);
                                     }
-                                    var infoTmpFile = new FileInfo(tmpFile)
+                                    var infoTmpFile = new FileInfo(tmpFile);
+                                    if (!infoTmpFile.Exists)
                                     {
-                                        LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp) // Need for correct decryption
-                                    };
+                                        Debugger.Break(); // investigate !!
+                                        return;
+                                    }
+                                    infoTmpFile.LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp); // Need for correct decryption
                                     infoTmpFile.Refresh();
                                     FileMove(tmpFile, target, isEncrypted, Owner, out Exception exception2, context: this);
                                     if (exception2 != null)

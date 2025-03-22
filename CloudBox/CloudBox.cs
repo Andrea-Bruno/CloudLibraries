@@ -397,19 +397,16 @@ namespace CloudBox
         {
             Sync = new Sync(Context.My.Id, SendSyncCommand, out OnSyncCommand, Context.SecureStorage, CloudPath, credential, DoNotCreateSpecialFolders, Owner, zeroKnowledgeEncryptionMasterKey, StorageLimitGB);
             // Sync.OnNotification += (fromUserId, notice) => OnNotificationAction?.Invoke(fromUserId, notice);
-            Sync.OnNotification += (fromUserId, notice) => OnNotificationActionList
-                .Concat(new[] { OnNotificationAction }).ToList().ForEach(x => x?.Invoke(fromUserId, notice));
+            Sync.OnNotification += (fromUserId, notice) => OnNotificationActionList.Concat([OnNotificationAction]).ToList().ForEach(x => x?.Invoke(fromUserId, notice));
             Sync.OnLocalSyncStatusChanges += (syncStatus, pendingFiles) =>
             {
                 SyncStatus = syncStatus;
                 PendingFiles = pendingFiles;
                 // OnLocalSyncStatusChangesAction?.Invoke(syncStatus, pendingFiles);
-                OnLocalSyncStatusChangesActionList.Concat(new[] { OnLocalSyncStatusChangesAction }).ToList()
-                    .ForEach(x => x?.Invoke(syncStatus, pendingFiles));
+                OnLocalSyncStatusChangesActionList.Concat([OnLocalSyncStatusChangesAction]).ToList().ForEach(x => x?.Invoke(syncStatus, pendingFiles));
             };
             Sync.OnFileTransfer += fileTransfer => TransferredFiles.UpdateList(fileTransfer);
-            Sync.OnCommandEvent += (userId, command, infoData, isOutput) =>
-                OnCommands.AddOnCommand(userId, command, infoData, isOutput);
+            Sync.OnCommandEvent += (userId, command, infoData, isOutput) => OnCommands.AddOnCommand(userId, command, infoData, isOutput);
             Sync.OnFileError += (error, fileName) => AddFileError(error.Message, fileName);
             Sync.OnAntivirus += (message, fileName) => AddAntivirusWarning(message, fileName);
             OnSyncStart?.Set();
@@ -823,7 +820,7 @@ namespace CloudBox
             var sendToContact = ServerCloud;
             if (sendToContact == null && toContactId != null)
                 CloudSyncUsers.TryGetValue((ulong)toContactId, out sendToContact);
-            if (sendToContact != null && Sync != null)
+            if (sendToContact != null)
             {
                 Context?.Messaging.SendCommandToSubApplication(sendToContact, Sync.AppId, command, true, true, values);
                 return true;

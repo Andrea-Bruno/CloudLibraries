@@ -31,6 +31,7 @@ namespace CloudSync
         /// <param name="storageLimitGB">Limit cloud storage (useful for assigning storage to users with subscription plans)</param>
         public Sync(ulong userId, SendCommandDelegate sendCommand, out SendCommandDelegate onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential clientCredential = null, bool doNotCreateSpecialFolders = false, string owner = null, byte[] encryptionMasterKey = null, int storageLimitGB = -1)
         {
+            onCommand = OnCommand;
             UserId = userId;
             if (owner != null)
             {
@@ -67,10 +68,11 @@ namespace CloudSync
 
             Share = new Share(this);
             Send = sendCommand;
-            onCommand = OnCommand;
             Spooler = new Spooler(this);
             ReceptionInProgress = new ProgressFileTransfer(this);
             SendingInProgress = new ProgressFileTransfer(this);
+            
+            
             if (SyncIsEnabled)
             {
                 if (Debugger.IsAttached)
@@ -100,8 +102,7 @@ namespace CloudSync
                 if (isLogged)
                     InitializeClientSynchronization(); // It's already logged in, so start syncing immediately
                 else
-                    RequestOfAuthentication(null, clientCredential, PublicIpAddressInfo(),
-                        Environment.MachineName); // Start the login process
+                    RequestOfAuthentication(null, clientCredential, PublicIpAddressInfo(), Environment.MachineName); // Start the login process
             }
         }
 
