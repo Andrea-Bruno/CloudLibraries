@@ -182,11 +182,9 @@ namespace CloudBox
         /// <returns>Hash 256</returns>
         public static byte[] Hash256(byte[] data)
         {
-            using (SHA256 sha256Hash = SHA256.Create())
-            {
-                // ComputeHash - returns byte array  
-                return sha256Hash.ComputeHash(data);
-            }
+            using SHA256 sha256Hash = SHA256.Create();
+            // ComputeHash - returns byte array  
+            return sha256Hash.ComputeHash(data);
         }
 
         /// <summary>

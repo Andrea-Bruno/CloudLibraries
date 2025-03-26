@@ -23,6 +23,9 @@ namespace CloudSync
             Authentication,
             SendHashStructure,
             RequestHashStructure,
+            /// <summary>
+            /// Obsolete command
+            /// </summary>
             SendHashBlocks,
             SendHashRoot,
             RequestChunkFile,
@@ -92,27 +95,22 @@ namespace CloudSync
             SendCommand(toUserId, Commands.Authentication, null, [randomDataForAuthentication]);
         }
 
-        private void SendHashStructure(ulong? toUserId, BlockRange delimitsRange = null)
+        private void SendHashStructure(ulong? toUserId)
         {
-            if (GetLocalHashStructure(out var structure, delimitsRange))
+            if (GetLocalHashStructure(out var structure))
             {
-                if (delimitsRange == null)
-                    SendCommand(toUserId, Commands.SendHashStructure, null, [structure]);
-                else
-                    SendCommand(toUserId, Commands.SendHashStructure, null, [structure, delimitsRange.BetweenHashBlockBinary, delimitsRange.BetweenHashBlockIndexBinary, delimitsRange.BetweenReverseHashBlockBinary, delimitsRange.BetweenReverseHashBlockIndexBinary]);
+                SendCommand(toUserId, Commands.SendHashStructure, null, [structure]);
             }
         }
 
-        private void RequestHashStructure(ulong? toUserId, BlockRange delimitsRange = null)
+        private void RequestHashStructure(ulong? toUserId)
         {
-            if (delimitsRange == null)
-                SendCommand(toUserId, Commands.RequestHashStructure, null);
-            else
-                SendCommand(toUserId, Commands.RequestHashStructure, null, [delimitsRange.BetweenHashBlockBinary, delimitsRange.BetweenHashBlockIndexBinary, delimitsRange.BetweenReverseHashBlockBinary, delimitsRange.BetweenReverseHashBlockIndexBinary]);
+            SendCommand(toUserId, Commands.RequestHashStructure, null);
         }
 
         private void SendHashBlocks(ulong? toUserId)
         {
+            Debugger.Break(); //obsolete
             if (GetHasBlock(out var hashBlock))
             {
                 SendCommand(toUserId, Commands.SendHashBlocks, null, [hashBlock]);
@@ -121,7 +119,13 @@ namespace CloudSync
 
         public void SendHashRoot(ulong? toUserId = null)
         {
-            if (GetHasRoot(out var hashRoot, true))
+            // In case of pending operations, this operation is postponed by a timer
+            //if (Spooler.IsPending)
+            //{
+            //    ClientRequestSynchronization();
+            //    return; 
+            //}
+            if (GetHasRoot(out var hashRoot))
             {
                 SendCommand(toUserId, Commands.SendHashRoot, null, [hashRoot]);
             }
@@ -153,7 +157,10 @@ namespace CloudSync
         private void SendChunkFile(ulong? toUserId, FileSystemInfo fileSystemInfo, uint chunkPart)
         {
             if (!fileSystemInfo.Exists)
+            {   
+                Debugger.Break();
                 return;
+            }
 #if RELEASE
             try
             {
@@ -267,30 +274,22 @@ namespace CloudSync
             if (!Disposed)
             {
                 LastCommandSent = DateTime.UtcNow;
-                void execute()
+                Task.Run(() =>
                 {
-                    Debug.WriteLine("OUT " + command);
-                    RaiseOnCommandEvent(contactId, command, infoData, true);
-                    Send.Invoke(contactId, (ushort)command, values);
-                }
-                if (Debugger.IsAttached)
-                    execute();
-                else
-                    Task.Run(() =>
+                    try
                     {
-                        try
-                        {
-                            execute();
-                        }
-                        catch (Exception ex)
-                        {
-                            RecordError(ex);
-                            Debugger.Break(); // Error! Investigate the cause of the error!
-                            Debug.WriteLine(ex);
-                        }
-                    });
+                        Debug.WriteLine("OUT " + command);
+                        RaiseOnCommandEvent(contactId, command, infoData, true);
+                        Send.Invoke(contactId, (ushort)command, values);
+                    }
+                    catch (Exception ex)
+                    {
+                        RecordError(ex);
+                        Debugger.Break(); // Error! Investigate the cause of the error!
+                        Debug.WriteLine(ex);
+                    }
+                });
             }
         }
-
     }
 }

@@ -116,7 +116,7 @@ namespace CloudSync
             // Prevention of brute force attacks (The first 3 attempts at a distance of 5 seconds then wait 10 minutes)
             Attempts++;
             var secFromLastAttempt = (DateTime.UtcNow - LastAttempt).TotalSeconds;
-            if (secFromLastAttempt < (Attempts <= 3 ? 5 : 600)) 
+            if (secFromLastAttempt < (Attempts <= 3 ? 5 : 600))
                 return false;
             LastAttempt = DateTime.UtcNow;
 

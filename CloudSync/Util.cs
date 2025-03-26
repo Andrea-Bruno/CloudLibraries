@@ -11,7 +11,6 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
-using HashFileTable = System.Collections.Generic.Dictionary<ulong, System.IO.FileSystemInfo>;
 
 namespace CloudSync
 {
@@ -478,14 +477,12 @@ namespace CloudSync
                 {
                     using (var fs = File.OpenRead(fullFileName))
                     {
-                        using (var reader = new BinaryReader(fs))
-                        {
-                            fs.Position = (chunkPart - 1) * chunkSize;
-                            var toTake = reader.BaseStream.Length - reader.BaseStream.Position;
-                            if (toTake > chunkSize)
-                                toTake = chunkSize;
-                            chunk = reader.ReadBytes((int)toTake);
-                        }
+                        using var reader = new BinaryReader(fs);
+                        fs.Position = (chunkPart - 1) * chunkSize;
+                        var toTake = reader.BaseStream.Length - reader.BaseStream.Position;
+                        if (toTake > chunkSize)
+                            toTake = chunkSize;
+                        chunk = reader.ReadBytes((int)toTake);
                     }
 
                     return chunk;
@@ -706,14 +703,12 @@ end tell";
             var fileName = new FileInfo(sourceFile).Name;
             if (Environment.OSVersion.Platform == PlatformID.Win32NT)
             {
-                using (var writer = new StreamWriter(targetDir + "\\" + fileName + ".url"))
-                {
-                    writer.WriteLine("[InternetShortcut]");
-                    writer.WriteLine("URL=file:///" + sourceFile);
-                    writer.WriteLine("IconIndex=0");
-                    var icon = icoFullName.Replace('\\', '/');
-                    writer.WriteLine("IconFile=" + icon);
-                }
+                using var writer = new StreamWriter(targetDir + "\\" + fileName + ".url");
+                writer.WriteLine("[InternetShortcut]");
+                writer.WriteLine("URL=file:///" + sourceFile);
+                writer.WriteLine("IconIndex=0");
+                var icon = icoFullName.Replace('\\', '/');
+                writer.WriteLine("IconFile=" + icon);
             }
             else if (Environment.OSVersion.Platform == PlatformID.Unix)
             {
@@ -741,225 +736,228 @@ end tell";
             }
         }
 
-        public class BlockRange
-        {
-            public BlockRange(ulong? betweenHashBlock, int betweenHashBlockIndex, ulong? betweenReverseHashBlock, int betweenReverseHashBlockIndex)
-            {
-                BetweenHashBlock = betweenHashBlock;
-                BetweenHasBlockIndex = betweenHashBlockIndex;
-                BetweenReverseHashBlock = betweenReverseHashBlock;
-                BetweenReverseHashBlockIndex = betweenReverseHashBlockIndex;
-#if (DEBUG)
-                if (BetweenHashBlock == null && BetweenHasBlockIndex != -1)
-                    Debugger.Break(); // wrong !
-                if (BetweenReverseHashBlock == null && BetweenReverseHashBlockIndex != -1)
-                    Debugger.Break(); // wrong !
-#endif
-            }
+        //        public class BlockRange
+        //        {
+        //            public BlockRange(ulong? betweenHashBlock, int betweenHashBlockIndex, ulong? betweenReverseHashBlock, int betweenReverseHashBlockIndex)
+        //            {
+        //                BetweenHashBlock = betweenHashBlock;
+        //                BetweenHasBlockIndex = betweenHashBlockIndex;
+        //                BetweenReverseHashBlock = betweenReverseHashBlock;
+        //                BetweenReverseHashBlockIndex = betweenReverseHashBlockIndex;
+        //#if (DEBUG)
+        //                if (BetweenHashBlock == null && BetweenHasBlockIndex != -1)
+        //                    Debugger.Break(); // wrong !
+        //                if (BetweenReverseHashBlock == null && BetweenReverseHashBlockIndex != -1)
+        //                    Debugger.Break(); // wrong !
+        //#endif
+        //            }
 
-            public BlockRange(byte[] betweenHasBlockBinary, byte[] betweenHasBlockIndex, byte[] betweenReverseHasBlockBinary, byte[] betweenReverseHasBlockPIndex)
-            {
-                BetweenHashBlock = betweenHasBlockBinary.Length == 8 ? BitConverter.ToUInt64(betweenHasBlockBinary, 0) : (ulong?)null;
-                BetweenHasBlockIndex = BitConverter.ToInt32(betweenHasBlockIndex, 0);
-                BetweenReverseHashBlock = betweenReverseHasBlockBinary.Length == 8 ? BitConverter.ToUInt64(betweenReverseHasBlockBinary, 0) : (ulong?)null;
-                BetweenReverseHashBlockIndex = BitConverter.ToInt32(betweenReverseHasBlockPIndex, 0);
-#if (DEBUG)
-                if (BetweenHashBlock == null && BetweenHasBlockIndex != -1)
-                    Debugger.Break(); // wrong !
-                if (BetweenReverseHashBlock == null && BetweenReverseHashBlockIndex != -1)
-                    Debugger.Break(); // wrong !
-#endif
-            }
+        //            public BlockRange(byte[] betweenHasBlockBinary, byte[] betweenHasBlockIndex, byte[] betweenReverseHasBlockBinary, byte[] betweenReverseHasBlockPIndex)
+        //            {
+        //                BetweenHashBlock = betweenHasBlockBinary.Length == 8 ? BitConverter.ToUInt64(betweenHasBlockBinary, 0) : (ulong?)null;
+        //                BetweenHasBlockIndex = BitConverter.ToInt32(betweenHasBlockIndex, 0);
+        //                BetweenReverseHashBlock = betweenReverseHasBlockBinary.Length == 8 ? BitConverter.ToUInt64(betweenReverseHasBlockBinary, 0) : (ulong?)null;
+        //                BetweenReverseHashBlockIndex = BitConverter.ToInt32(betweenReverseHasBlockPIndex, 0);
+        //#if (DEBUG)
+        //                if (BetweenHashBlock == null && BetweenHasBlockIndex != -1)
+        //                    Debugger.Break(); // wrong !
+        //                if (BetweenReverseHashBlock == null && BetweenReverseHashBlockIndex != -1)
+        //                    Debugger.Break(); // wrong !
+        //#endif
+        //            }
 
-            public readonly ulong? BetweenHashBlock;
-            public byte[] BetweenHashBlockBinary => BetweenHashBlock == null ? [] : BitConverter.GetBytes((ulong)BetweenHashBlock);
+        //            public readonly ulong? BetweenHashBlock;
+        //            public byte[] BetweenHashBlockBinary => BetweenHashBlock == null ? [] : BitConverter.GetBytes((ulong)BetweenHashBlock);
 
-            public readonly int BetweenHasBlockIndex;
-            public byte[] BetweenHashBlockIndexBinary => BitConverter.GetBytes(BetweenHasBlockIndex);
+        //            public readonly int BetweenHasBlockIndex;
+        //            public byte[] BetweenHashBlockIndexBinary => BitConverter.GetBytes(BetweenHasBlockIndex);
 
-            public readonly ulong? BetweenReverseHashBlock;
-            public byte[] BetweenReverseHashBlockBinary => BetweenReverseHashBlock == null ? [] : BitConverter.GetBytes((ulong)BetweenReverseHashBlock);
+        //            public readonly ulong? BetweenReverseHashBlock;
+        //            public byte[] BetweenReverseHashBlockBinary => BetweenReverseHashBlock == null ? [] : BitConverter.GetBytes((ulong)BetweenReverseHashBlock);
 
-            public readonly int BetweenReverseHashBlockIndex;
-            public byte[] BetweenReverseHashBlockIndexBinary => BitConverter.GetBytes(BetweenReverseHashBlockIndex);
+        //            public readonly int BetweenReverseHashBlockIndex;
+        //            public byte[] BetweenReverseHashBlockIndexBinary => BitConverter.GetBytes(BetweenReverseHashBlockIndex);
 
-            public bool TakeAll => BetweenHashBlock == null;
-            public bool ReverseTakeAll => BetweenReverseHashBlock == null;
-        }
+        //            public bool TakeAll => BetweenHashBlock == null;
+        //            public bool ReverseTakeAll => BetweenReverseHashBlock == null;
+        //        }
 
-        private const int BlockFileSize = 256; // Each hash represents a block of 256 files
+        //        private const int BlockFileSize = 256; // Each hash represents a block of 256 files
 
+        [Obsolete("Remove all reference and all function that use this")]
         public static byte[] HashFileTableToHashBlock(HashFileTable hashFileTable)
         {
-            GetRestrictedHashFileTable(hashFileTable, out var hashBlocks);
-            return hashBlocks;
+            Debugger.Break(); // obsolete
+            return null;
+            //GetRestrictedHashFileTable(hashFileTable, out var hashBlocks);
+            //return hashBlocks;
         }
 
         /// <summary>
-        /// If delimitsRange != Null, returns HashFileTable of range, otherwise returns HashBlocks (out byte[] returnHashBlocks)
+        /// If delimitsRange != Null, returns HashFileTable of range, otherwise returns HashBlocks(out byte[] returnHashBlocks)
         /// </summary>
-        /// <param name="hashFileTable">The whole hash table without delimits</param>
-        /// <param name="returnHashBlocks">Return hash block if delimitsRange is null</param>
-        /// <param name="delimitsRange">An object that indicates the portion of the FileTable hash to take</param>
+        /// <param name = "hashFileTable" > The whole hash table without delimits</param>
+        /// <param name = "returnHashBlocks" > Return hash block if delimitsRange is null</param>
+        /// <param name = "delimitsRange" > An object that indicates the portion of the FileTable hash to take</param>
         /// <returns></returns>
-        public static HashFileTable GetRestrictedHashFileTable(HashFileTable hashFileTable, out byte[] returnHashBlocks, BlockRange delimitsRange = null)
-        {
-            var returnValue = delimitsRange == null ? null : new HashFileTable();
-            var elementInBlock = delimitsRange == null ? null : new List<KeyValuePair<ulong, HashFileTable>>();
-            var elementInBlockReverse = delimitsRange == null ? null : new List<KeyValuePair<ulong, HashFileTable>>();
-            var hashList = new List<byte[]>();
+        //public static HashFileTable GetRestrictedHashFileTable(HashFileTable hashFileTable, out byte[] returnHashBlocks, BlockRange delimitsRange = null)
+        //{
+        //    var returnValue = delimitsRange == null ? null : new HashFileTable();
+        //    var elementInBlock = delimitsRange == null ? null : new List<KeyValuePair<ulong, HashFileTable>>();
+        //    var elementInBlockReverse = delimitsRange == null ? null : new List<KeyValuePair<ulong, HashFileTable>>();
+        //    var hashList = new List<byte[]>();
 
-            static void hashBlock(IEnumerable<KeyValuePair<ulong, FileSystemInfo>> hashTable, ref List<byte[]> result, ref List<KeyValuePair<ulong, HashFileTable>> outElementInBlock)
-            {
-                var toAdd = outElementInBlock == null ? null : new HashFileTable();
-                ulong hash1 = 0;
-                ulong hash2 = 0;
-                var n = 1;
-                var total = hashTable.Count();
-                foreach (var item in hashTable)
-                {
-                    toAdd?.Add(item.Key, item.Value);
-                    hash1 ^= item.Key;
-                    hash2 ^= item.Value.UnixLastWriteTimestamp();
-                    if (1 % BlockFileSize == 0 || n == total)
-                    {
-                        var hash = (hash1 ^ hash2).GetBytes();
-                        //var hash = hash1.GetBytes().Concat(hash2.GetBytes());
-                        result.Add(hash);
-                        hash1 = 0;
-                        hash2 = 0;
-                        if (outElementInBlock != null)
-                        {
-                            outElementInBlock.Add(new KeyValuePair<ulong, HashFileTable>(BitConverter.ToUInt64(hash, 0), toAdd));
-                            toAdd = [];
-                        }
-                    }
-                    n++;
-                }
-            }
+        //    static void hashBlock(IEnumerable<KeyValuePair<ulong, FileSystemInfo>> hashTable, ref List<byte[]> result, ref List<KeyValuePair<ulong, HashFileTable>> outElementInBlock)
+        //    {
+        //        var toAdd = outElementInBlock == null ? null : new HashFileTable();
+        //        ulong hash1 = 0;
+        //        ulong hash2 = 0;
+        //        var n = 1;
+        //        var total = hashTable.Count();
+        //        foreach (var item in hashTable)
+        //        {
+        //            toAdd?.Add(item.Key, item.Value);
+        //            hash1 ^= item.Key;
+        //            hash2 ^= item.Value.UnixLastWriteTimestamp();
+        //            if (1 % BlockFileSize == 0 || n == total)
+        //            {
+        //                var hash = (hash1 ^ hash2).GetBytes();
+        //                var hash = hash1.GetBytes().Concat(hash2.GetBytes());
+        //                result.Add(hash);
+        //                hash1 = 0;
+        //                hash2 = 0;
+        //                if (outElementInBlock != null)
+        //                {
+        //                    outElementInBlock.Add(new KeyValuePair<ulong, HashFileTable>(BitConverter.ToUInt64(hash, 0), toAdd));
+        //                    toAdd = [];
+        //                }
+        //            }
+        //            n++;
+        //        }
+        //    }
 
-            hashBlock(hashFileTable, ref hashList, ref elementInBlock);
-            hashBlock(hashFileTable.Reverse(), ref hashList, ref elementInBlockReverse);
+        //    hashBlock(hashFileTable, ref hashList, ref elementInBlock);
+        //    hashBlock(hashFileTable.Reverse(), ref hashList, ref elementInBlockReverse);
 
-            if (returnValue == null)
-            {
-                returnHashBlocks = new byte[hashList.Count * 8];
-                //Array.Resize(ref returnHashBlocks, hashList.Count * 8);
-                for (var i = 0; i < hashList.Count; i++)
-                {
-                    var item = hashList[i];
-                    var p = i * 8;
-                    item.CopyTo(returnHashBlocks, p);
-                }
-            }
-            else
-            {
-                returnHashBlocks = null;
-                if (!PerformRange(false, ref elementInBlock, ref returnValue, delimitsRange.TakeAll, delimitsRange.BetweenHashBlock, delimitsRange.BetweenHasBlockIndex))
-                    return null; // There is no block in the requested position, the operation must be canceled because there is something wrong
+            //    if (returnValue == null)
+            //    {
+            //        returnHashBlocks = new byte[hashList.Count * 8];
+            //        //Array.Resize(ref returnHashBlocks, hashList.Count * 8);
+            //        for (var i = 0; i < hashList.Count; i++)
+            //        {
+            //            var item = hashList[i];
+            //            var p = i * 8;
+            //            item.CopyTo(returnHashBlocks, p);
+            //        }
+            //    }
+            //    else
+            //    {
+            //        returnHashBlocks = null;
+            //        if (!PerformRange(false, ref elementInBlock, ref returnValue, delimitsRange.TakeAll, delimitsRange.BetweenHashBlock, delimitsRange.BetweenHasBlockIndex))
+            //            return null; // There is no block in the requested position, the operation must be canceled because there is something wrong
 
-                if (!PerformRange(true, ref elementInBlockReverse, ref returnValue, delimitsRange.ReverseTakeAll, delimitsRange.BetweenReverseHashBlock, delimitsRange.BetweenReverseHashBlockIndex))
-                    return null; // There is no block in the requested position, the operation must be canceled because there is something wrong
-            }
+            //        if (!PerformRange(true, ref elementInBlockReverse, ref returnValue, delimitsRange.ReverseTakeAll, delimitsRange.BetweenReverseHashBlock, delimitsRange.BetweenReverseHashBlockIndex))
+            //            return null; // There is no block in the requested position, the operation must be canceled because there is something wrong
+            //    }
 
-            return returnValue;
-        }
+            //    return returnValue;
+            //}
 
-        private static bool PerformRange(bool reverseStep, ref List<KeyValuePair<ulong, HashFileTable>> elementInBlock, ref HashFileTable returnValue, bool takeAll, ulong? betweenHasBlock, int betweenHasBlockIndex)
-        {
-            var startIndex = takeAll ? 0 : betweenHasBlockIndex;
-            if (betweenHasBlockIndex != -1 && (elementInBlock.Count <= betweenHasBlockIndex || elementInBlock[betweenHasBlockIndex].Key != betweenHasBlock))
-            {
-                return false; // There is no block in the requested position, the operation must be canceled because there is something wrong
-            }
+            //private static bool PerformRange(bool reverseStep, ref List<KeyValuePair<ulong, HashFileTable>> elementInBlock, ref HashFileTable returnValue, bool takeAll, ulong? betweenHasBlock, int betweenHasBlockIndex)
+            //{
+            //    var startIndex = takeAll ? 0 : betweenHasBlockIndex;
+            //    if (betweenHasBlockIndex != -1 && (elementInBlock.Count <= betweenHasBlockIndex || elementInBlock[betweenHasBlockIndex].Key != betweenHasBlock))
+            //    {
+            //        return false; // There is no block in the requested position, the operation must be canceled because there is something wrong
+            //    }
 
-            if (!reverseStep)
-            {
-                for (var i = startIndex; i < elementInBlock.Count; i++)
-                {
-                    var block = elementInBlock[i].Value;
-                    foreach (var item in block)
-                    {
-                        returnValue[item.Key] = item.Value;
-                    }
-                }
-            }
-            else
-            {
-                if (!takeAll)
-                {
-                    for (var i = 0; i <= betweenHasBlockIndex; i++)
-                    {
-                        var block = elementInBlock[i].Value;
-                        foreach (var item in block)
-                        {
-                            if (returnValue.ContainsKey(item.Key))
-                                returnValue.Remove(item.Key);
-                        }
-                    }
-                }
-            }
-            return true;
-        }
+            //    if (!reverseStep)
+            //    {
+            //        for (var i = startIndex; i < elementInBlock.Count; i++)
+            //        {
+            //            var block = elementInBlock[i].Value;
+            //            foreach (var item in block)
+            //            {
+            //                returnValue[item.Key] = item.Value;
+            //            }
+            //        }
+            //    }
+            //    else
+            //    {
+            //        if (!takeAll)
+            //        {
+            //            for (var i = 0; i <= betweenHasBlockIndex; i++)
+            //            {
+            //                var block = elementInBlock[i].Value;
+            //                foreach (var item in block)
+            //                {
+            //                    if (returnValue.ContainsKey(item.Key))
+            //                        returnValue.Remove(item.Key);
+            //                }
+            //            }
+            //        }
+            //    }
+            //    return true;
+            //}
 
-        public static BlockRange HashBlocksToBlockRange(byte[] hashBlocksRemote, byte[] hashBlocksLocal)
-        {
-            var straightRemote = hashBlocksRemote.Take(hashBlocksRemote.Length / 2).ToArray();
-            var straightLocal = hashBlocksLocal.Take(hashBlocksLocal.Length / 2).ToArray();
-            HashBlockComparer(straightRemote, straightLocal, out var lastHashStraight, out var indexStraight);
+            //public static BlockRange HashBlocksToBlockRange(byte[] hashBlocksRemote, byte[] hashBlocksLocal)
+            //{
+            //    var straightRemote = hashBlocksRemote.Take(hashBlocksRemote.Length / 2).ToArray();
+            //    var straightLocal = hashBlocksLocal.Take(hashBlocksLocal.Length / 2).ToArray();
+            //    HashBlockComparer(straightRemote, straightLocal, out var lastHashStraight, out var indexStraight);
 
-            var reverseRemote = hashBlocksRemote.Skip(hashBlocksRemote.Length / 2).ToArray();
-            var reverseLocal = hashBlocksLocal.Skip(hashBlocksLocal.Length / 2).ToArray();
-            HashBlockComparer(reverseRemote, reverseLocal, out var lastHashReverse, out var indexReverse);
-            return new BlockRange(lastHashStraight, indexStraight, lastHashReverse, indexReverse);
-        }
+            //    var reverseRemote = hashBlocksRemote.Skip(hashBlocksRemote.Length / 2).ToArray();
+            //    var reverseLocal = hashBlocksLocal.Skip(hashBlocksLocal.Length / 2).ToArray();
+            //    HashBlockComparer(reverseRemote, reverseLocal, out var lastHashReverse, out var indexReverse);
+            //    return new BlockRange(lastHashStraight, indexStraight, lastHashReverse, indexReverse);
+            //}
 
-        private static void HashBlockComparer(byte[] hashBlocksRemote, byte[] hashBlocksLocal, out ulong? lastHashMatch, out int index)
-        {
-            lastHashMatch = null;
-            index = -1;
-            var p = 0;
-            ulong h1, h2;
-            while (p < hashBlocksRemote.Length && p < hashBlocksLocal.Length)
-            {
-                try
-                {
-                    h1 = BitConverter.ToUInt64(hashBlocksRemote, p);
-                }
-                catch (Exception ex)
-                {
-                    throw new Exception("Wrong hashBlocksRemote: Length=" + hashBlocksRemote.Length + " p=" + p, ex);
-                }
+            //private static void HashBlockComparer(byte[] hashBlocksRemote, byte[] hashBlocksLocal, out ulong? lastHashMatch, out int index)
+            //{
+            //    lastHashMatch = null;
+            //    index = -1;
+            //    var p = 0;
+            //    ulong h1, h2;
+            //    while (p < hashBlocksRemote.Length && p < hashBlocksLocal.Length)
+            //    {
+            //        try
+            //        {
+            //            h1 = BitConverter.ToUInt64(hashBlocksRemote, p);
+            //        }
+            //        catch (Exception ex)
+            //        {
+            //            throw new Exception("Wrong hashBlocksRemote: Length=" + hashBlocksRemote.Length + " p=" + p, ex);
+            //        }
 
-                try
-                {
-                    h2 = BitConverter.ToUInt64(hashBlocksLocal, p);
-                }
-                catch (Exception ex)
-                {
-                    throw new Exception("Wrong hashBlocksLocal: Length=" + hashBlocksLocal.Length + " p=" + p, ex);
-                }
+            //        try
+            //        {
+            //            h2 = BitConverter.ToUInt64(hashBlocksLocal, p);
+            //        }
+            //        catch (Exception ex)
+            //        {
+            //            throw new Exception("Wrong hashBlocksLocal: Length=" + hashBlocksLocal.Length + " p=" + p, ex);
+            //        }
 
-                if (h1 == h2)
-                {
-                    lastHashMatch = h1;
-                    p += 8;
-                    index++;
-                }
-                else
-                {
-                    break;
-                }
-            }
-        }
+            //        if (h1 == h2)
+            //        {
+            //            lastHashMatch = h1;
+            //            p += 8;
+            //            index++;
+            //        }
+            //        else
+            //        {
+            //            break;
+            //        }
+            //    }
+            //}
 
-        /// <summary>
-        /// Verify that the space occupied is sufficient and compatible with the assigned space
-        /// </summary>
-        /// <param name="cloudRoot">A path pointing to a disk location to test or a drive</param>
-        /// <param name="preserveSize">Space limit to preserve, default is one gigabyte. If the free space is less then it will return false, or generate an error if set by parameter throwError. If this value is less than MinimumPreserveDiskSize, then MinimumPreserveDiskSize will still be treated as the value.</param>
-        /// <returns>True if space is not running low</returns>
-        /// <exception cref="Exception">If set by parameter, an exception can be generated if the space is close to running out</exception>
+            /// <summary>
+            /// Verify that the space occupied is sufficient and compatible with the assigned space
+            /// </summary>
+            /// <param name="cloudRoot">A path pointing to a disk location to test or a drive</param>
+            /// <param name="preserveSize">Space limit to preserve, default is one gigabyte. If the free space is less then it will return false, or generate an error if set by parameter throwError. If this value is less than MinimumPreserveDiskSize, then MinimumPreserveDiskSize will still be treated as the value.</param>
+            /// <returns>True if space is not running low</returns>
+            /// <exception cref="Exception">If set by parameter, an exception can be generated if the space is close to running out</exception>
         internal static bool CheckDiskSPace(Sync context, long preserveSize = MinimumPreserveDiskSize)
         {
             if (context == null)
@@ -1007,7 +1005,11 @@ end tell";
         /// <param name="e">Unhandled exception event args</param>
         public static void UnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
-            if (!Debugger.IsAttached)
+            if (Debugger.IsAttached)
+            {
+                Debugger.Break();
+            }
+            else
             {
                 if (e.ExceptionObject is Exception exception)
                 {

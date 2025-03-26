@@ -133,13 +133,11 @@ namespace CloudSync
                 date = DateTime.UtcNow;
             var days = ((DateTime)date).Ticks / (24L * 60L * 60L * 10000000L); // Math.floor() rounds a number downwards to the nearest whole integer, which in this case is the value representing the day
             var week = days / 7;
-            using (HashAlgorithm algorithm = SHA256.Create())
-            {
-                var random = algorithm.ComputeHash(guid.ToByteArray().Concat(BitConverter.GetBytes(week)));
-                var val = BitConverter.ToUInt64(random, 0);
-                var numBase = "000000000" + val;
-                return numBase.Substring(numBase.Length - 9);
-            }
+            using HashAlgorithm algorithm = SHA256.Create();
+            var random = algorithm.ComputeHash(guid.ToByteArray().Concat(BitConverter.GetBytes(week)));
+            var val = BitConverter.ToUInt64(random, 0);
+            var numBase = "000000000" + val;
+            return numBase.Substring(numBase.Length - 9);
         }
 
         /// <summary>

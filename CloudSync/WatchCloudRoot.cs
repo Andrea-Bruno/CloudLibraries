@@ -93,27 +93,26 @@ namespace CloudSync
 
         private void OnDeleted(string fileName)
         {
-            if (CacheHashFileTable != null)
+            if (GetHashFileTable(out var hashFileTable))
             {
-                foreach (var item in CacheHashFileTable)
+                var fileSystemInfo = hashFileTable.GetByFileName(fileName, out ulong hash);
+                if (fileSystemInfo != null)
                 {
-                    if (item.Value.FullName == fileName)
+                    if (!DeletedHashTable.Contains(hash))
+                        DeletedHashTable.Add(hash);
+                    if (!fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory))
                     {
-                        if (!item.Value.Attributes.HasFlag(FileAttributes.Directory))
+                        if (DeletedByRemoteRequest.Contains(FileId.GetFileId(hash, fileSystemInfo.UnixLastWriteTimestamp())))
                         {
-                            var hash = item.Key;
-                            if (DeletedByRemoteRequest.Contains(FileId.GetFileId(hash, item.Value.UnixLastWriteTimestamp())))
-                            {
-                                // File deleted by remote request
-                            }
-                            else
-                            {
-                                // File deleted locally 
-                                FileIdList.AddItem(this, UserId, ScopeType.Deleted, FileId.GetFileId(hash, item.Value.UnixLastWriteTimestamp()));
-                            }
+                            // File deleted by remote request
                         }
-                        return;
+                        else
+                        {
+                            // File deleted locally 
+                            FileIdList.AddItem(this, UserId, ScopeType.Deleted, FileId.GetFileId(hash, fileSystemInfo.UnixLastWriteTimestamp()));
+                        }
                     }
+                    hashFileTable.Remove(hash);
                 }
             }
         }
@@ -146,6 +145,14 @@ namespace CloudSync
                         FileIdList.Load(this, fileName);
                     }
                 }
+            }
+            if (GetHashFileTable(out var hashFileTable))
+            {
+                var fileInfo = hashFileTable.GetByFileName(fileName, out ulong hash);
+                if (fileInfo != null)
+                    hashFileTable.Remove(hash);
+                fileInfo = Directory.Exists(fileName) ? new DirectoryInfo(fileName) : new FileInfo(fileName);
+                hashFileTable.Add(fileInfo);
             }
         }
 

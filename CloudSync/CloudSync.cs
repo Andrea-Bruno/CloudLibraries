@@ -5,9 +5,9 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Threading;
 using static CloudSync.Util;
-using HashFileTable = System.Collections.Generic.Dictionary<ulong, System.IO.FileSystemInfo>;
 using System.Linq;
 using System.Collections.Generic;
+using System.Xml.Serialization;
 
 namespace CloudSync
 {
@@ -29,6 +29,7 @@ namespace CloudSync
         /// <param name="owner">If set, during synchronization operations (creating files and directories), the owner will be the one specified here</param>
         /// <param name="encryptionMasterKey">If set, zero knowledge proof is enabled, meaning files will be sent encrypted with keys derived from this, and once received, if encrypted, they will be decrypted.</param>
         /// <param name="storageLimitGB">Limit cloud storage (useful for assigning storage to users with subscription plans)</param>
+        [DebuggerHidden]
         public Sync(ulong userId, SendCommandDelegate sendCommand, out SendCommandDelegate onCommand, SecureStorage.Storage secureStorage, string cloudRoot, LoginCredential clientCredential = null, bool doNotCreateSpecialFolders = false, string owner = null, byte[] encryptionMasterKey = null, int storageLimitGB = -1)
         {
             onCommand = OnCommand;
@@ -71,16 +72,25 @@ namespace CloudSync
             Spooler = new Spooler(this);
             ReceptionInProgress = new ProgressFileTransfer(this);
             SendingInProgress = new ProgressFileTransfer(this);
-            
-            
-            if (SyncIsEnabled)
+
+            if (IsClient)
             {
-                if (Debugger.IsAttached)
-                    HashFileTable(out _);
-                else
-                    Task.Run(() => HashFileTable(out _)); // set cache initial state to check if file is deleted
+                OnNotify(null, Notice.Authentication);
+                if (!isLogged)
+                    RequestOfAuthentication(null, clientCredential, PublicIpAddressInfo(), Environment.MachineName); // Start the login process
+
+                // initialize SyncIsEnabled status
+                Task.Run(delegate { _ = SyncIsEnabled; });
+
+                //if (SyncIsEnabled)
+                //{
+                //    //if (Debugger.IsAttached)
+                //    //    GetHashFileTable(out _);
+                //    //else
+                //    Task.Run(() => GetHashFileTable(out _)); // set cache initial state to check if file is deleted
+                //}
             }
-            if (IsServer)
+            else
             {
                 var pin = GetPin(secureStorage);
                 if (pin == null)
@@ -96,18 +106,10 @@ namespace CloudSync
                     SetPin(secureStorage, null, pin);
                 }
             }
-            else
-            {
-                OnNotify(null, Notice.Authentication);
-                if (isLogged)
-                    InitializeClientSynchronization(); // It's already logged in, so start syncing immediately
-                else
-                    RequestOfAuthentication(null, clientCredential, PublicIpAddressInfo(), Environment.MachineName); // Start the login process
-            }
         }
 
         internal ZeroKnowledgeProof ZeroKnowledgeProof;
-        private ulong UserId;
+        internal ulong UserId;
         internal (uint, uint)? Owner;
         public readonly Share Share;
         /// <summary>
@@ -173,8 +175,8 @@ namespace CloudSync
                     return false;
                 if (IsServer)
                 {
-                    Directory.Exists(CloudRoot); // Enable this code line is the server can disconnect the cloud path location
-                    return true;
+                    return Directory.Exists(CloudRoot); // Enable this code line if the server can disconnect the cloud path location
+                    //return true;
                 }
                 var isEnabled = !IsMountingPoint(CloudRoot) && !suspended;
                 CheckSyncStatusChanged ??= new Timer((o) => { var check = SyncIsEnabled; });
@@ -204,7 +206,7 @@ namespace CloudSync
         ///// Block or enable synchronization. Possible use:
         ///// Function that the host app must call if the disk at the root of the cloud is mounted or unmounted.
         ///// If you plan not to use a virtual disk for cloud space then this function should not be called.
-        ///// If you use a virtual disk as a path to the cloud, this feature will suspend synchronization when the disk is unsmounted.
+        ///// If you use a virtual disk as a path to the cloud, this feature will suspend synchronization when the disk is unmounted.
         ///// </summary>
         //public void SetSyncState(bool isMounted) => SyncIsEnabled = isMounted;
 
@@ -241,6 +243,7 @@ namespace CloudSync
             {
                 if (WaitForDirectory(CloudRoot))
                 {
+                    GetHashFileTable(out _, true);
                     if (WatchCloudRoot())
                     {
                         Spooler?.ExecuteNext();
@@ -346,7 +349,7 @@ namespace CloudSync
 
         private bool FirstSyncFlag;
 
-        private bool SyncIsInPending => RemoteStatus != Notice.Synchronized || ConcurrentOperations() != 0 || LocalSyncStatus != SyncStatus.Monitoring || Spooler.InPending != 0;
+        private bool SyncIsInPending => RemoteStatus != Notice.Synchronized || ConcurrentOperations() != 0 || LocalSyncStatus != SyncStatus.Monitoring || Spooler.IsPending;
 
         /// <summary>
         /// Timer that starts the synchronization procedure when something in the cloud path has changed. The timer delays the synchronization of a few seconds because multiple changes may be in progress on the files and it is convenient to wait for the end of the operations.
@@ -381,7 +384,7 @@ namespace CloudSync
                 {
                     if (IsServer)
                     {
-                        if (GetHasRoot(out var hashRoot, true))
+                        if (GetHasRoot(out var hashRoot))
                         {
                             RoleManager.ClientsConnected().ForEach(client => SendHashRoot(hashRoot, client.Id));
                         }
@@ -390,8 +393,10 @@ namespace CloudSync
                     {
                         if (IsLogged)
                         {
-                            Spooler.Clear();
-                            SendHashRoot();
+                            if (Spooler.IsPending)
+                                Spooler.ExecuteNext();
+                            else
+                                SendHashRoot();
                         }
                     }
                 }
@@ -417,7 +422,6 @@ namespace CloudSync
         public int PendingOperations => Spooler.PendingOperations;
         public readonly int InstanceId;
         private static int InstanceCounter;
-
         public bool IsServer
         {
             get { return !IsClient; }
@@ -448,19 +452,19 @@ namespace CloudSync
 
         private readonly SendCommandDelegate Send;
 
-        private bool GetLocalHashStructure(out byte[] localHashStructure, BlockRange delimitsRange)
+        private bool GetLocalHashStructure(out byte[] localHashStructure)
         {
-            if (HashFileTable(out var hashFileTable))
+            if (GetHashFileTable(out var hashFileTable))
             {
-                if (delimitsRange != null)
-                {
-                    hashFileTable = GetRestrictedHashFileTable(hashFileTable, out _, delimitsRange); // Returns null if the delimiterRange is invalid. In this case, all operations must be interrupted!
-                    if (hashFileTable == null)
-                    {
-                        localHashStructure = null;
-                        return false;
-                    }
-                }
+                //if (delimitsRange != null)
+                //{
+                //    hashFileTable = GetRestrictedHashFileTable(hashFileTable, out _, delimitsRange); // Returns null if the delimiterRange is invalid. In this case, all operations must be interrupted!
+                //    if (hashFileTable == null)
+                //    {
+                //        localHashStructure = null;
+                //        return false;
+                //    }
+                //}
 
                 var array = new byte[hashFileTable.Count * 12];
                 var offset = 0;
@@ -487,11 +491,11 @@ namespace CloudSync
             return false;
         }
 
-        private bool GetHasRoot(out byte[] hashRoot, bool noCache = false)
+        private bool GetHasRoot(out byte[] hashRoot)
         {
             ulong hash1 = 0;
             ulong hash2 = 0;
-            if (HashFileTable(out var hashFileTable, noCache))
+            if (GetHashFileTable(out var hashFileTable))
             {
                 foreach (var item in hashFileTable)
                 {
@@ -507,9 +511,9 @@ namespace CloudSync
             return false;
         }
 
-        private bool GetHasBlock(out byte[] hashBlock, bool noCache = false)
+        private bool GetHasBlock(out byte[] hashBlock)
         {
-            if (HashFileTable(out var hashFileTable, noCache))
+            if (GetHashFileTable(out var hashFileTable))
             {
                 hashBlock = HashFileTableToHashBlock(hashFileTable);
                 return true;
@@ -521,27 +525,24 @@ namespace CloudSync
 
         private bool Existed(ulong hashFile)
         {
-            return OldHashFileTable != null && OldHashFileTable.ContainsKey(hashFile);
+            return DeletedHashTable.Contains(hashFile);
         }
+        private List<ulong> DeletedHashTable = [];
 
-        public void ResetCacheHashFileTable() => CacheHashFileTable = null;
-        private HashFileTable OldHashFileTable;
-        private HashFileTable CacheHashFileTable;
-        private DateTime CacheHashFileTableExpire;
+        public void ResetCacheHashFileTable() => _CacheHashFileTable = null;
 
         /// <summary>
-        /// timeout for the cache of HashFileTable, after the timeout the table will be regenerated
+        /// Don't use directly: Get it with GetHashFileTable(out value)
         /// </summary>
-        private int HashFileTableExpireCache => 10000 + CalculationTimeHashFileTableMS;
+        private HashFileTable _CacheHashFileTable;
+
 
         /// <summary>
         /// Get a hash table of contents (files and directories), useful to quickly identify what has changed. The table can be delimited within a certain range.
         /// </summary>
         /// <param name="hashTable">Returns the hash file table</param>
-        /// <param name="noCache">If true then the cached table will not be returned (the table will be computed again)</param>
-        /// <param name="delimitsRange">A delimiter that shrinks the table within a certain radius (for the partial table when changes have been detected in only part of the cloud)</param>
         /// <returns>True if the operation completed successfully, or false if there was a critical error</returns>
-        public bool HashFileTable(out HashFileTable hashTable, bool noCache = false, BlockRange delimitsRange = null)
+        public bool GetHashFileTable(out HashFileTable hashTable, bool refresh = false)
         {
             if (!Directory.Exists(CloudRoot))
             {
@@ -549,24 +550,31 @@ namespace CloudSync
                 hashTable = null;
                 return false;
             }
+            if (Disposed)
+            {
+                hashTable = null;
+                return false;
+            }
+            if (!refresh && !SyncIsEnabled)
+            {
+                hashTable = null;
+                return false;
+            }
+
             try
             {
                 long usedSpace = 0;
-                void StartAnalyzeDirectory(string directoryName, out HashFileTable hashDirTable, ref long usedSpace)
-                {
-                    hashDirTable = [];
-                    AnalyzeDirectory(new DirectoryInfo(directoryName), ref hashDirTable, ref usedSpace);
-                }
 
                 void AnalyzeDirectory(DirectoryInfo directory, ref HashFileTable hashFileTable, ref long usedSpace)
                 {
                     try
                     {
                         var items = directory.GetFileSystemInfos();
-                        var hash = directory.HashFileName(this);
-                        hashFileTable.Add(hash, directory);
+                        hashFileTable.Add(directory);
                         foreach (var item in items)
                         {
+                            if (Disposed)
+                                return;
                             if (CanBeSeen(item))
                             {
                                 if (!SyncIsInPending)
@@ -581,8 +589,7 @@ namespace CloudSync
                                 else  // Id a FIle
                                 {
                                     usedSpace += ((FileInfo)item).Length;
-                                    hash = item.HashFileName(this);
-                                    hashFileTable.Add(hash, item);
+                                    hashFileTable.Add(item);
                                 }
                             }
                         }
@@ -594,22 +601,20 @@ namespace CloudSync
                     }
                 }
 
-                if (CacheHashFileTable == null || noCache || DateTime.UtcNow > CacheHashFileTableExpire)
+                lock (this)
                 {
-                    lock (this)
+                    if (_CacheHashFileTable == null || refresh)
                     {
                         var watch = Stopwatch.StartNew();
-                        StartAnalyzeDirectory(CloudRoot, out var newHashFileTable, ref usedSpace);
-                        if (!SyncIsEnabled)
-                        {
-                            hashTable = null;
-                            return false;
-                        }
 
-                        if (CacheHashFileTable != null)
+                        var newHashFileTable = new HashFileTable(this);
+                        AnalyzeDirectory(new DirectoryInfo(CloudRoot), ref newHashFileTable, ref usedSpace);
+                        UsedSpace = usedSpace;
+
+                        if (_CacheHashFileTable != null)
                         {
                             // check if any files have been deleted
-                            foreach (var item in CacheHashFileTable)
+                            foreach (var item in _CacheHashFileTable)
                             {
                                 if (!newHashFileTable.ContainsKey(item.Key))
                                 {
@@ -633,25 +638,16 @@ namespace CloudSync
                             }
                         }
 
-                        OldHashFileTable = CacheHashFileTable ?? newHashFileTable;
-                        CacheHashFileTable = newHashFileTable;
-                        CacheHashFileTableExpire = DateTime.UtcNow.AddMilliseconds(HashFileTableExpireCache);
+                        //                        OldHashFileTable = CacheHashFileTable ?? newHashFileTable;
+                        _CacheHashFileTable = newHashFileTable;
+                        OnHashFileTableChanged(_CacheHashFileTable);
                         watch.Stop();
                         CalculationTimeHashFileTableMS = (int)(watch.ElapsedMilliseconds);
                     }
                 }
-
-                if (delimitsRange != null)
-                {
-                    hashTable = GetRestrictedHashFileTable(CacheHashFileTable, out _, delimitsRange);
-                    return true;
-                }
-                else
-                {
-                    UsedSpace = usedSpace;
-                }
-                OnHashFileTableChanged(CacheHashFileTable);
-                hashTable = CacheHashFileTable;
+                hashTable = _CacheHashFileTable;
+                if (IsClient && IsLogged)
+                    InitializeClientSynchronization(); // It's already logged in, so start syncing immediately
                 return true;
             }
             catch (Exception ex)
@@ -686,24 +682,26 @@ namespace CloudSync
             }
         }
 
-
         internal void OnUpdateFileIdList(ScopeType scope, ulong user, List<FileId> fileIdList)
         {
             if (scope == ScopeType.Deleted)
             {
-                foreach (var item in fileIdList.ToArray())
+                if (GetHashFileTable(out var hashFileTable))
                 {
-                    if (CacheHashFileTable.TryGetValue(item.HashFile, out var fileSystemInfo))
+                    foreach (var item in fileIdList.ToArray())
                     {
-                        if (fileSystemInfo.UnixLastWriteTimestamp() == item.UnixLastWriteTimestamp)
+                        if (hashFileTable.TryGetValue(item.HashFile, out var fileSystemInfo))
                         {
-                            if (fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory))
+                            if (fileSystemInfo.UnixLastWriteTimestamp() == item.UnixLastWriteTimestamp)
                             {
-                                DirectoryDelete(fileSystemInfo.FullName, out _);
-                            }
-                            else
-                            {
-                                FileDelete(fileSystemInfo.FullName, out _);
+                                if (fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory))
+                                {
+                                    DirectoryDelete(fileSystemInfo.FullName, out _);
+                                }
+                                else
+                                {
+                                    FileDelete(fileSystemInfo.FullName, out _);
+                                }
                             }
                         }
                     }

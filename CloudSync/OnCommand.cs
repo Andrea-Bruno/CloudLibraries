@@ -1,5 +1,4 @@
-﻿using NBitcoin;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -21,33 +20,20 @@ namespace CloudSync
             lastFromUserId = fromUserId;
             if (!Enum.IsDefined(typeof(Commands), command))
                 return false; // Commend not supported from this version
-            void execute()
+            OnCommandRunning++;
+            try
             {
-                OnCommand(fromUserId, (Commands)command, out string infoData, values);
-                RaiseOnCommandEvent(fromUserId, (Commands)command, infoData);
+                OnCommand(fromUserId, (Commands)command, values);
             }
-            if (Debugger.IsAttached)
+            catch (Exception ex)
             {
-                OnCommandRunning++;
-                execute();
+                RecordError(ex);
+                Debugger.Break(); // Error! Investigate the cause of the error!
+                Debug.WriteLine(ex);
                 OnCommandRunning--;
+                return false;
             }
-            else
-                Task.Run(() =>
-                {
-                    OnCommandRunning++;
-                    try
-                    {
-                        execute();
-                    }
-                    catch (Exception ex)
-                    {
-                        RecordError(ex);
-                        Debugger.Break(); // Error! Investigate the cause of the error!
-                        Debug.WriteLine(ex);
-                    }
-                    OnCommandRunning--;
-                });
+            OnCommandRunning--;
             return true;
         }
 
@@ -60,9 +46,14 @@ namespace CloudSync
 #endif
 
         public DateTime LastCommandReceived { get; private set; }
-        private void OnCommand(ulong? fromUserId, Commands command, out string infoData, params byte[][] values)
+        private void OnCommand(ulong? fromUserId, Commands command, params byte[][] values)
         {
-            infoData = null;
+            bool onCommandEventFlag = false;
+            void onCommandEvent(string litheralInfo)
+            {
+                onCommandEventFlag = true;
+                RaiseOnCommandEvent(fromUserId, command, litheralInfo);
+            }
             LastCommandReceived = DateTime.UtcNow;
             Debug.WriteLine("IN " + command);
             if (command == Commands.RequestOfAuthentication)
@@ -118,7 +109,7 @@ namespace CloudSync
                     if (command == Commands.Notification)
                     {
                         var notice = (Notice)values[0][0];
-                        infoData = notice.ToString();
+                        onCommandEvent(notice.ToString());
                         if (!IsServer)
                         {
                             if (notice == Notice.LoginSuccessful)
@@ -144,7 +135,7 @@ namespace CloudSync
                     }
                     if (!SyncIsEnabled)
                     {
-                        infoData = "Operation rejected. Sync is suspended!";
+                        onCommandEvent("Operation rejected. Sync is suspended!");
                         return;
                     }
                     if (command == Commands.SendHashStructure)
@@ -163,16 +154,17 @@ namespace CloudSync
                             if (!FileIdList.ContainsItem(ScopeType.Deleted, FileId.GetFileId(hash, timestamp), out _))
                                 remoteHashes.Add(hash, timestamp);
                         }
-                        var delimitsRange = values.Length == 1 ? null : new BlockRange(values[1], values[2], values[3], values[4]);
-                        OnSendHashStructure(fromUserId, remoteHashes, delimitsRange);
+                        //var delimitsRange = values.Length == 1 ? null : new BlockRange(values[1], values[2], values[3], values[4]);
+                        OnSendHashStructure(fromUserId, remoteHashes);
                     }
                     else if (command == Commands.RequestHashStructure)
                     {
-                        var delimitsRange = values.Length == 0 ? null : new BlockRange(values[0], values[1], values[2], values[3]);
-                        SendHashStructure(fromUserId, delimitsRange);
+                        //var delimitsRange = values.Length == 0 ? null : new BlockRange(values[0], values[1], values[2], values[3]);
+                        SendHashStructure(fromUserId);
                     }
                     else if (command == Commands.SendHashBlocks)
                     {
+                        Debugger.Break(); // obsolete
                         var hashBlocksRemote = values[0];
                         if (GetHasBlock(out var hashBlocksLocal))
                         {
@@ -184,11 +176,11 @@ namespace CloudSync
                             else
                             {
                                 RaiseOnStatusChangesEvent(SyncStatus.Pending);
-                                var range = HashBlocksToBlockRange(hashBlocksRemote, hashBlocksLocal);
+                                //var range = HashBlocksToBlockRange(hashBlocksRemote, hashBlocksLocal);
                                 if (IsServer)
-                                    SendHashStructure(fromUserId, range);
+                                    SendHashStructure(fromUserId);
                                 else
-                                    RequestHashStructure(fromUserId, range);
+                                    RequestHashStructure(fromUserId);
                             }
                         }
                     }
@@ -213,11 +205,11 @@ namespace CloudSync
                     }
                     else if (command == Commands.RequestChunkFile)
                     {
-                        if (HashFileTable(out var hashDirTable))
+                        if (GetHashFileTable(out var hashDirTable))
                         {
                             var hash = BitConverter.ToUInt64(values[0], 0);
                             var chunkPart = BitConverter.ToUInt32(values[1], 0);
-                            infoData = "#" + chunkPart + " " + hash;
+                            var infoData = "#" + chunkPart + " " + hash;
                             if (hashDirTable.TryGetValue(hash, out var fileSystemInfo))
                             {
                                 SendChunkFile(fromUserId, fileSystemInfo, chunkPart);
@@ -226,6 +218,7 @@ namespace CloudSync
                             {
                                 infoData += " not found";
                             }
+                            onCommandEvent(infoData);
                         }
                     }
                     else if (command == Commands.SendChunkFile)
@@ -235,7 +228,7 @@ namespace CloudSync
                         var total = BitConverter.ToUInt32(values[2], 0);
                         var data = values[3];
                         var tmpFile = GetTmpFile(this, fromUserId, hashFileName);
-                        infoData = "#" + part + "/" + total + " " + hashFileName;
+                        onCommandEvent("#" + part + "/" + total + " " + hashFileName);
                         Debug.WriteLine("IN #" + part + "/" + total);
                         var maxFileSize = total * data.Length;
                         // If the disk is about to be full notify the sender, and finish the operation.
@@ -318,8 +311,18 @@ namespace CloudSync
                                     FileMove(tmpFile, target, isEncrypted, Owner, out Exception exception2, context: this);
                                     if (exception2 != null)
                                         RaiseOnFileError(exception2, target);
-                                    fileInfo.LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp);
-                                    RaiseOnFileTransfer(false, hashFileName, part, total, target, (int)length);
+                                    else
+                                    {
+                                        fileInfo.LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp);
+                                        RaiseOnFileTransfer(false, hashFileName, part, total, target, (int)length);
+                                        if (GetHashFileTable(out var hashFileTable))
+                                        {
+                                            var holdFile = hashFileTable.GetByFileName(fileInfo.FullName, out var key);
+                                            if (holdFile != null)
+                                                hashFileTable.Remove(key);
+                                            hashFileTable.Add(fileInfo);
+                                        }
+                                    }
                                 }
                                 else
                                 {
@@ -342,9 +345,9 @@ namespace CloudSync
                     else if (command == Commands.DeleteFile)
                     {
                         var hash = values[0].ToUint64();
-                        infoData = hash.ToString();
+                        onCommandEvent(hash.ToString());
                         var timestamp = values[1].ToUint32();
-                        if (HashFileTable(out var hashDirTable))
+                        if (GetHashFileTable(out var hashDirTable))
                         {
                             if (hashDirTable.TryGetValue(hash, out var fileInfo))
                             {
@@ -354,7 +357,8 @@ namespace CloudSync
                                     FileDelete(fileInfo.FullName, out Exception exception);
                                     if (exception != null)
                                         RaiseOnFileError(exception, fileInfo.FullName);
-                                    hashDirTable.Remove(hash);
+                                    else
+                                        hashDirTable.Remove(hash);
                                     lock (FlagsDriveOverLimit)
                                         if (FlagsDriveOverLimit.Contains(fromUserId))
                                         {
@@ -373,7 +377,7 @@ namespace CloudSync
                     {
                         // If the disk is about to be full notify the sender, and finish the operation.
                         var fullDirectoryName = FullName(values[0], out _, out string nameFile);
-                        infoData = fullDirectoryName;
+                        onCommandEvent(fullDirectoryName);
                         lock (FlagsDriveOverLimit)
                             if (!CheckDiskSPace(this))
                             {
@@ -385,6 +389,14 @@ namespace CloudSync
                         DirectoryCreate(fullDirectoryName, Owner, out Exception exception);
                         if (exception != null)
                             RaiseOnFileError(exception, fullDirectoryName);
+                        else
+                        {
+                            if (GetHashFileTable(out var hashFileTable))
+                            {
+                                var directoryInfo = new DirectoryInfo(fullDirectoryName);
+                                hashFileTable.Add(directoryInfo);
+                            }
+                        }
                         var hash = HashFileName(values[0].ToText(), true);
                         ReceptionInProgress.Completed(hash);
                         StatusNotification(fromUserId, Status.Ready);
@@ -392,7 +404,7 @@ namespace CloudSync
                     else if (command == Commands.DeleteDirectory)
                     {
                         var fullDirectoryName = FullName(values[0]);
-                        infoData = fullDirectoryName;
+                        onCommandEvent(fullDirectoryName);
                         DirectoryDelete(fullDirectoryName, out Exception exception);
                         if (exception != null)
                             RaiseOnFileError(exception, fullDirectoryName);
@@ -400,32 +412,43 @@ namespace CloudSync
                     else if (command == Commands.StatusNotification)
                     {
                         var status = (Status)values[0][0];
-                        infoData = status.ToString();
+                        onCommandEvent(status.ToString());
                         if (status == Status.Busy)
                             return;
                     }
-                    Spooler.ExecuteNext(fromUserId);
+                    Spooler.ExecuteNext();
                 }
             }
+            if (!onCommandEventFlag)
+                onCommandEvent(null);
         }
         /// <summary>
         /// Flags that indicates that the disk over limit has been notified to the remote device
         /// </summary>
         public List<ulong?> FlagsDriveOverLimit = [];
-        private Task TaskOnSendHashStructure;
+
+        //private Task TaskOnSendHashStructure;
+
         /// <summary>
         /// Add the operations to be performed for file synchronization to the spooler.
         /// This task with many files may take a long time, so it runs in background!
         /// </summary>
         /// <param name="fromUserId">User who sent the data required for synchronization</param>
         /// <param name="remoteHashes">The structure of the remote files used to calculate the synchronization</param>
-        /// <param name="delimitsRange">A possible delimiter that restricts the area of files to be checked for synchronization</param>
-        private void OnSendHashStructure(ulong? fromUserId, Dictionary<ulong, uint> remoteHashes, BlockRange delimitsRange)
+        private void OnSendHashStructure(ulong? fromUserId, Dictionary<ulong, uint> remoteHashes)
         {
-            void execute()
+            if (Spooler.IsPending)
             {
-                Spooler.Clear();
-                if (HashFileTable(out var localHashes, delimitsRange: delimitsRange))
+                Spooler.ExecuteNext();
+                return;
+            }
+            Spooler.Clear();
+
+            try
+            {
+                //void execute()
+                //{
+                if (GetHashFileTable(out var localHashes))
                 {
                     if (localHashes != null)
                     {
@@ -466,24 +489,35 @@ namespace CloudSync
                         }
                     }
                 }
+                //}
             }
-            if (Debugger.IsAttached)
-                execute();
-            else
-                TaskOnSendHashStructure ??= Task.Run(() =>
-                    {
-                        try
-                        {
-                            execute();
-                        }
-                        catch (Exception ex)
-                        {
-                            RecordError(ex);
-                            Debugger.Break(); // Error! Investigate the cause of the error!
-                            Debug.WriteLine(ex);
-                        }
-                        TaskOnSendHashStructure = null;
-                    });
+            catch (Exception ex)
+            {
+
+                RecordError(ex);
+                Debugger.Break(); // Error! Investigate the cause of the error!
+                Debug.WriteLine(ex);
+
+            }
+
+
+            ////if (Debugger.IsAttached)
+            ////    execute();
+            ////else
+            //    TaskOnSendHashStructure ??= Task.Run(() =>
+            //        {
+            //            try
+            //            {
+            //                execute();
+            //            }
+            //            catch (Exception ex)
+            //            {
+            //                RecordError(ex);
+            //                Debugger.Break(); // Error! Investigate the cause of the error!
+            //                Debug.WriteLine(ex);
+            //            }
+            //            TaskOnSendHashStructure = null;
+            //        });
         }
 
         public uint TotalFilesReceived;

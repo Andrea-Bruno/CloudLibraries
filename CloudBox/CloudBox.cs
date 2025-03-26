@@ -449,7 +449,7 @@ namespace CloudBox
         }
 
         /// <summary>
-        /// Log of Antivirus warning occurred
+        /// Log of antivirus warning occurred
         /// It could be that the antivirus is blocking file operations, or some application is keeping the files open.
         /// </summary>
         public readonly List<FileError> AntivirusWarnings = [];
@@ -519,13 +519,16 @@ namespace CloudBox
         private void OnCommunicationError(ErrorType errorId, string description)
         {
             OnCommunicationErrorEvent?.Invoke(errorId, description);
-            CommunicationErrorLog.Insert(0, new Tuple<ErrorType, string>(errorId, description));
-            if (CommunicationErrorLog.Count > 10)
-                CommunicationErrorLog.RemoveAt(CommunicationErrorLog.Count - 1);
+            lock (CommunicationErrorLog)
+            {
+                CommunicationErrorLog.Insert(0, new Tuple<ErrorType, string>(errorId, description));
+                if (CommunicationErrorLog.Count > 10)
+                    CommunicationErrorLog.RemoveAt(CommunicationErrorLog.Count - 1);
+            }
         }
 
         /// <summary>
-        /// Indicates the current status of the connection to the router. If false then the router is not connected, check the internet network, the connection of the cables to the network, etc..
+        /// Indicates the current status of the connection to the router. If false then the router is not connected, check the Internet network, the connection of the cables to the network, etc..
         /// </summary>
         public bool IsConnected => Context != null && Context.IsConnected;
 
@@ -847,8 +850,7 @@ namespace CloudBox
         /// <param name="message">The data package received</param>
         private void OnContactEvent(Message message)
         {
-            if (message.Type == MessageFormat.MessageType.SubApplicationCommandWithParameters ||
-                message.Type == MessageFormat.MessageType.SubApplicationCommandWithData)
+            if (message.Type == MessageFormat.MessageType.SubApplicationCommandWithParameters || message.Type == MessageFormat.MessageType.SubApplicationCommandWithData)
             {
                 ushort appId = default;
                 ushort command = default;

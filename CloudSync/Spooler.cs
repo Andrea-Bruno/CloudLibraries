@@ -74,7 +74,7 @@ namespace CloudSync
 
         private readonly Dictionary<ulong, Operation> ToDoOperations = [];
         public int PendingOperations => ToDoOperations.Count;
-
+        public bool IsPending => PendingOperations > 0;
         public enum OperationType
         {
             Send,
@@ -86,7 +86,6 @@ namespace CloudSync
             public ulong? UserId;
             public ulong HashFile;
         }
-        public int InPending => ToDoOperations.Count;
 
         /// <summary>
         /// It checks if there are any pending operations for a particular user, and if not, informs the client that there are no pending operations to be performed
@@ -108,7 +107,7 @@ namespace CloudSync
         }
         public static int MaxConcurrentOperations = 3;
 
-        public void ExecuteNext(ulong? userId = null)
+        public void ExecuteNext()
         {
             lock (ToDoOperations)
             {
@@ -122,7 +121,7 @@ namespace CloudSync
                         RemoveOperation(toDo.HashFile);
                         if (toDo.Type == OperationType.Send)
                         {
-                            if (Context.HashFileTable(out var localHashes))
+                            if (Context.GetHashFileTable(out var localHashes))
                             {
                                 if (localHashes.TryGetValue(toDo.HashFile, out var fileSystemInfo))
                                 {
@@ -168,7 +167,7 @@ namespace CloudSync
         /// <param name="pendingStatus">True to set the state that indicates the file is waiting to sync with the cloud</param>
         private void SetRecursiveFilePendingStatus(ulong hashFile, bool pendingStatus)
         {
-            if (Context.HashFileTable(out var localHashes))
+            if (Context.GetHashFileTable(out var localHashes))
                 if (localHashes.TryGetValue(hashFile, out var fileSystemInfo))
                     SetRecursiveFilePendingStatus(fileSystemInfo, pendingStatus);
         }
@@ -223,22 +222,29 @@ namespace CloudSync
         /// <param name="fileSystemInfo">The fileSystemInfo of the file to set the pending state</param>
         /// <param name="pendingStatus">True to set the state that indicates the file is waiting to sync with the cloud</param>
 
-        public static void SetFilePendingStatus(FileSystemInfo fileSystemInfo, bool pendingStatus)
+        public static bool SetFilePendingStatus(FileSystemInfo fileSystemInfo, bool pendingStatus)
         {
             try
             {
                 if (pendingStatus)
                 {   // ADD
                     if (!fileSystemInfo.Attributes.HasFlag(Pending))
+                    {
                         fileSystemInfo.Attributes |= Pending;
+                        return true;
+                    }
                 }
                 else
                 {  // REMOVE
                     if (fileSystemInfo.Attributes.HasFlag(Pending))
+                    {
                         fileSystemInfo.Attributes &= ~Pending;
+                        return true;
+                    }
                 }
             }
             catch (Exception) { }
+            return false;
         }
 
         private Dictionary<ulong, int> FilePendingTree = [];

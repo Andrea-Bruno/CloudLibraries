@@ -123,15 +123,13 @@ namespace CloudSync
 
             if (File.Exists(fullFileName))
             {
-                using (var fileStream = new FileStream(fullFileName, FileMode.Open, FileAccess.Read))
-                using (var binaryReader = new BinaryReader(fileStream))
+                using var fileStream = new FileStream(fullFileName, FileMode.Open, FileAccess.Read);
+                using var binaryReader = new BinaryReader(fileStream);
+                while (fileStream.Position < fileStream.Length)
                 {
-                    while (fileStream.Position < fileStream.Length)
-                    {
-                        var fileIdBytes = binaryReader.ReadBytes(12);
-                        var fileId = FileId.GetFileId(fileIdBytes);
-                        fileIdList.fileIdList.Add(fileId);
-                    }
+                    var fileIdBytes = binaryReader.ReadBytes(12);
+                    var fileId = FileId.GetFileId(fileIdBytes);
+                    fileIdList.fileIdList.Add(fileId);
                 }
             }
             var newFileIdList = previousFileIdList == null ? fileIdList.fileIdList : fileIdList.fileIdList.Except(previousFileIdList).ToList();

@@ -180,26 +180,24 @@ namespace CloudSync
             {
                 try
                 {
-                    using (var fs = File.OpenWrite(fileName))
+                    using var fs = File.OpenWrite(fileName);
+                    if (chunkNumber == 1)
                     {
-                        if (chunkNumber == 1)
-                        {
-                            fs.SetLength(0);
-                            fs.Position = 0;
-                        }
-
-                        if (chunkSize > 0)
-                        {
-                            var expectedPart = fs.Length / DefaultChunkSize + 1;
-                            if (expectedPart != chunkNumber)
-                                return false;
-                        }
-
-                        fs.Position = fs.Length; // append
-                        fs.Write(data, 0, data.Length);
-                        fs.Flush();
-                        return true;
+                        fs.SetLength(0);
+                        fs.Position = 0;
                     }
+
+                    if (chunkSize > 0)
+                    {
+                        var expectedPart = fs.Length / DefaultChunkSize + 1;
+                        if (expectedPart != chunkNumber)
+                            return false;
+                    }
+
+                    fs.Position = fs.Length; // append
+                    fs.Write(data, 0, data.Length);
+                    fs.Flush();
+                    return true;
                 }
                 catch (IOException ex)
                 {

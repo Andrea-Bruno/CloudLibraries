@@ -9,9 +9,9 @@ namespace CloudSync
             try
             {
                 var ip = fromPublicIp ? GetPublicIpAddress() : GetLocalIpAddress();
-                using (var client = new TcpClient())
-                    return client.ConnectAsync(ip.ToString(), port).Wait(500);
-                       
+                using var client = new TcpClient();
+                return client.ConnectAsync(ip.ToString(), port).Wait(500);
+
             }
             catch (SocketException)
             {
