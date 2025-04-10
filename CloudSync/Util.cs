@@ -839,125 +839,125 @@ end tell";
         //    hashBlock(hashFileTable, ref hashList, ref elementInBlock);
         //    hashBlock(hashFileTable.Reverse(), ref hashList, ref elementInBlockReverse);
 
-            //    if (returnValue == null)
-            //    {
-            //        returnHashBlocks = new byte[hashList.Count * 8];
-            //        //Array.Resize(ref returnHashBlocks, hashList.Count * 8);
-            //        for (var i = 0; i < hashList.Count; i++)
-            //        {
-            //            var item = hashList[i];
-            //            var p = i * 8;
-            //            item.CopyTo(returnHashBlocks, p);
-            //        }
-            //    }
-            //    else
-            //    {
-            //        returnHashBlocks = null;
-            //        if (!PerformRange(false, ref elementInBlock, ref returnValue, delimitsRange.TakeAll, delimitsRange.BetweenHashBlock, delimitsRange.BetweenHasBlockIndex))
-            //            return null; // There is no block in the requested position, the operation must be canceled because there is something wrong
+        //    if (returnValue == null)
+        //    {
+        //        returnHashBlocks = new byte[hashList.Count * 8];
+        //        //Array.Resize(ref returnHashBlocks, hashList.Count * 8);
+        //        for (var i = 0; i < hashList.Count; i++)
+        //        {
+        //            var item = hashList[i];
+        //            var p = i * 8;
+        //            item.CopyTo(returnHashBlocks, p);
+        //        }
+        //    }
+        //    else
+        //    {
+        //        returnHashBlocks = null;
+        //        if (!PerformRange(false, ref elementInBlock, ref returnValue, delimitsRange.TakeAll, delimitsRange.BetweenHashBlock, delimitsRange.BetweenHasBlockIndex))
+        //            return null; // There is no block in the requested position, the operation must be canceled because there is something wrong
 
-            //        if (!PerformRange(true, ref elementInBlockReverse, ref returnValue, delimitsRange.ReverseTakeAll, delimitsRange.BetweenReverseHashBlock, delimitsRange.BetweenReverseHashBlockIndex))
-            //            return null; // There is no block in the requested position, the operation must be canceled because there is something wrong
-            //    }
+        //        if (!PerformRange(true, ref elementInBlockReverse, ref returnValue, delimitsRange.ReverseTakeAll, delimitsRange.BetweenReverseHashBlock, delimitsRange.BetweenReverseHashBlockIndex))
+        //            return null; // There is no block in the requested position, the operation must be canceled because there is something wrong
+        //    }
 
-            //    return returnValue;
-            //}
+        //    return returnValue;
+        //}
 
-            //private static bool PerformRange(bool reverseStep, ref List<KeyValuePair<ulong, HashFileTable>> elementInBlock, ref HashFileTable returnValue, bool takeAll, ulong? betweenHasBlock, int betweenHasBlockIndex)
-            //{
-            //    var startIndex = takeAll ? 0 : betweenHasBlockIndex;
-            //    if (betweenHasBlockIndex != -1 && (elementInBlock.Count <= betweenHasBlockIndex || elementInBlock[betweenHasBlockIndex].Key != betweenHasBlock))
-            //    {
-            //        return false; // There is no block in the requested position, the operation must be canceled because there is something wrong
-            //    }
+        //private static bool PerformRange(bool reverseStep, ref List<KeyValuePair<ulong, HashFileTable>> elementInBlock, ref HashFileTable returnValue, bool takeAll, ulong? betweenHasBlock, int betweenHasBlockIndex)
+        //{
+        //    var startIndex = takeAll ? 0 : betweenHasBlockIndex;
+        //    if (betweenHasBlockIndex != -1 && (elementInBlock.Count <= betweenHasBlockIndex || elementInBlock[betweenHasBlockIndex].Key != betweenHasBlock))
+        //    {
+        //        return false; // There is no block in the requested position, the operation must be canceled because there is something wrong
+        //    }
 
-            //    if (!reverseStep)
-            //    {
-            //        for (var i = startIndex; i < elementInBlock.Count; i++)
-            //        {
-            //            var block = elementInBlock[i].Value;
-            //            foreach (var item in block)
-            //            {
-            //                returnValue[item.Key] = item.Value;
-            //            }
-            //        }
-            //    }
-            //    else
-            //    {
-            //        if (!takeAll)
-            //        {
-            //            for (var i = 0; i <= betweenHasBlockIndex; i++)
-            //            {
-            //                var block = elementInBlock[i].Value;
-            //                foreach (var item in block)
-            //                {
-            //                    if (returnValue.ContainsKey(item.Key))
-            //                        returnValue.Remove(item.Key);
-            //                }
-            //            }
-            //        }
-            //    }
-            //    return true;
-            //}
+        //    if (!reverseStep)
+        //    {
+        //        for (var i = startIndex; i < elementInBlock.Count; i++)
+        //        {
+        //            var block = elementInBlock[i].Value;
+        //            foreach (var item in block)
+        //            {
+        //                returnValue[item.Key] = item.Value;
+        //            }
+        //        }
+        //    }
+        //    else
+        //    {
+        //        if (!takeAll)
+        //        {
+        //            for (var i = 0; i <= betweenHasBlockIndex; i++)
+        //            {
+        //                var block = elementInBlock[i].Value;
+        //                foreach (var item in block)
+        //                {
+        //                    if (returnValue.ContainsKey(item.Key))
+        //                        returnValue.Remove(item.Key);
+        //                }
+        //            }
+        //        }
+        //    }
+        //    return true;
+        //}
 
-            //public static BlockRange HashBlocksToBlockRange(byte[] hashBlocksRemote, byte[] hashBlocksLocal)
-            //{
-            //    var straightRemote = hashBlocksRemote.Take(hashBlocksRemote.Length / 2).ToArray();
-            //    var straightLocal = hashBlocksLocal.Take(hashBlocksLocal.Length / 2).ToArray();
-            //    HashBlockComparer(straightRemote, straightLocal, out var lastHashStraight, out var indexStraight);
+        //public static BlockRange HashBlocksToBlockRange(byte[] hashBlocksRemote, byte[] hashBlocksLocal)
+        //{
+        //    var straightRemote = hashBlocksRemote.Take(hashBlocksRemote.Length / 2).ToArray();
+        //    var straightLocal = hashBlocksLocal.Take(hashBlocksLocal.Length / 2).ToArray();
+        //    HashBlockComparer(straightRemote, straightLocal, out var lastHashStraight, out var indexStraight);
 
-            //    var reverseRemote = hashBlocksRemote.Skip(hashBlocksRemote.Length / 2).ToArray();
-            //    var reverseLocal = hashBlocksLocal.Skip(hashBlocksLocal.Length / 2).ToArray();
-            //    HashBlockComparer(reverseRemote, reverseLocal, out var lastHashReverse, out var indexReverse);
-            //    return new BlockRange(lastHashStraight, indexStraight, lastHashReverse, indexReverse);
-            //}
+        //    var reverseRemote = hashBlocksRemote.Skip(hashBlocksRemote.Length / 2).ToArray();
+        //    var reverseLocal = hashBlocksLocal.Skip(hashBlocksLocal.Length / 2).ToArray();
+        //    HashBlockComparer(reverseRemote, reverseLocal, out var lastHashReverse, out var indexReverse);
+        //    return new BlockRange(lastHashStraight, indexStraight, lastHashReverse, indexReverse);
+        //}
 
-            //private static void HashBlockComparer(byte[] hashBlocksRemote, byte[] hashBlocksLocal, out ulong? lastHashMatch, out int index)
-            //{
-            //    lastHashMatch = null;
-            //    index = -1;
-            //    var p = 0;
-            //    ulong h1, h2;
-            //    while (p < hashBlocksRemote.Length && p < hashBlocksLocal.Length)
-            //    {
-            //        try
-            //        {
-            //            h1 = BitConverter.ToUInt64(hashBlocksRemote, p);
-            //        }
-            //        catch (Exception ex)
-            //        {
-            //            throw new Exception("Wrong hashBlocksRemote: Length=" + hashBlocksRemote.Length + " p=" + p, ex);
-            //        }
+        //private static void HashBlockComparer(byte[] hashBlocksRemote, byte[] hashBlocksLocal, out ulong? lastHashMatch, out int index)
+        //{
+        //    lastHashMatch = null;
+        //    index = -1;
+        //    var p = 0;
+        //    ulong h1, h2;
+        //    while (p < hashBlocksRemote.Length && p < hashBlocksLocal.Length)
+        //    {
+        //        try
+        //        {
+        //            h1 = BitConverter.ToUInt64(hashBlocksRemote, p);
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            throw new Exception("Wrong hashBlocksRemote: Length=" + hashBlocksRemote.Length + " p=" + p, ex);
+        //        }
 
-            //        try
-            //        {
-            //            h2 = BitConverter.ToUInt64(hashBlocksLocal, p);
-            //        }
-            //        catch (Exception ex)
-            //        {
-            //            throw new Exception("Wrong hashBlocksLocal: Length=" + hashBlocksLocal.Length + " p=" + p, ex);
-            //        }
+        //        try
+        //        {
+        //            h2 = BitConverter.ToUInt64(hashBlocksLocal, p);
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            throw new Exception("Wrong hashBlocksLocal: Length=" + hashBlocksLocal.Length + " p=" + p, ex);
+        //        }
 
-            //        if (h1 == h2)
-            //        {
-            //            lastHashMatch = h1;
-            //            p += 8;
-            //            index++;
-            //        }
-            //        else
-            //        {
-            //            break;
-            //        }
-            //    }
-            //}
+        //        if (h1 == h2)
+        //        {
+        //            lastHashMatch = h1;
+        //            p += 8;
+        //            index++;
+        //        }
+        //        else
+        //        {
+        //            break;
+        //        }
+        //    }
+        //}
 
-            /// <summary>
-            /// Verify that the space occupied is sufficient and compatible with the assigned space
-            /// </summary>
-            /// <param name="cloudRoot">A path pointing to a disk location to test or a drive</param>
-            /// <param name="preserveSize">Space limit to preserve, default is one gigabyte. If the free space is less then it will return false, or generate an error if set by parameter throwError. If this value is less than MinimumPreserveDiskSize, then MinimumPreserveDiskSize will still be treated as the value.</param>
-            /// <returns>True if space is not running low</returns>
-            /// <exception cref="Exception">If set by parameter, an exception can be generated if the space is close to running out</exception>
+        /// <summary>
+        /// Verify that the space occupied is sufficient and compatible with the assigned space
+        /// </summary>
+        /// <param name="cloudRoot">A path pointing to a disk location to test or a drive</param>
+        /// <param name="preserveSize">Space limit to preserve, default is one gigabyte. If the free space is less then it will return false, or generate an error if set by parameter throwError. If this value is less than MinimumPreserveDiskSize, then MinimumPreserveDiskSize will still be treated as the value.</param>
+        /// <returns>True if space is not running low</returns>
+        /// <exception cref="Exception">If set by parameter, an exception can be generated if the space is close to running out</exception>
         internal static bool CheckDiskSPace(Sync context, long preserveSize = MinimumPreserveDiskSize)
         {
             if (context == null)
@@ -1005,20 +1005,20 @@ end tell";
         /// <param name="e">Unhandled exception event args</param>
         public static void UnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
-            if (Debugger.IsAttached)
+#if DEBUG
+            Debugger.Break();
+            return;
+#endif
+            if (e.ExceptionObject != null)
             {
-                Debugger.Break();
-            }
-            else
-            {
-                if (e.ExceptionObject is Exception exception)
+                if (e.ExceptionObject is not Exception exception)
                 {
-                    File.WriteAllText("x.txt", DateTime.Now.ToString());
-                    RecordError(exception);
-                    Thread.Sleep(60000); // 1 minute
-                    RestartApplication(sender, e);
+                    exception = new Exception(e.ExceptionObject.ToString());
                 }
+                RecordError(exception);
             }
+            Thread.Sleep(60000); // 1 minute (prevent error fast loop crash)
+            RestartApplication(sender, e);
         }
 
         public static void RestartApplication(object sender, EventArgs e)
@@ -1045,12 +1045,9 @@ end tell";
                 try
                 {
                     var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, nameof(RecordError));
-                    ;
                     if (!Directory.Exists(path))
                         Directory.CreateDirectory(path);
-                    File.WriteAllText(
-                        Path.Combine(path, DateTime.UtcNow.Ticks.ToString("X") + "_" + error.HResult + ".txt"),
-                        error.ToString());
+                    File.WriteAllText(Path.Combine(path, DateTime.UtcNow.Ticks.ToString("X") + "_" + error.HResult + ".txt"), error.ToString());
                     var files = (new DirectoryInfo(path)).GetFileSystemInfos("*.txt");
                     var orderedFiles = files.OrderBy(f => f.CreationTime).Reverse().ToArray();
                     // Keep 1024 errors
