@@ -54,11 +54,12 @@ namespace CloudSync
         /// <summary>
         /// The string to display as a QR code to set up 2FA
         /// </summary>
+        /// <param name="appName">Application name</param>
         /// <returns>2FA QR Code setting string</returns>
-        public string QrCode2FA()
+        public string QrCode2FA(string appName = "Cloud")
         {
             var twoFactorAuth = new TwoFactorAuth(Context.SecureStorage);
-            return twoFactorAuth.QRCodeUri(Context.InstanceId.ToString());
+            return twoFactorAuth.QRCodeUri(Context.InstanceId.ToString(), appName);
         }
 
         /// <summary>

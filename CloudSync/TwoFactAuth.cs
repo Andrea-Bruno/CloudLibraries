@@ -47,18 +47,23 @@ namespace CloudSync
         /// <summary>
         /// The string to display as a QR code to set up 2FA
         /// </summary>
+        /// <param name="issuer">Issuer identification</param>
+        /// <param name="appName">Application name</param>
         /// <returns>2FA QR Code setting string</returns>
-        public string QRCodeUri(string issuer)
+        public string QRCodeUri(string issuer, string appName = null)
         {
-            Assembly assembly = Assembly.GetEntryAssembly();
-            string appName = assembly.GetName().Name;
+            if (appName == null)
+            {
+                Assembly assembly = Assembly.GetEntryAssembly();
+                appName = assembly.GetName().Name;
+            }
             return $"otpauth://totp/{appName}?secret={SecretKey()}&issuer={issuer}";
         }
 
         public string CurrentTotpCode()
         {
             var totp = new Totp(Base32Encoding.ToBytes(SecretKey()));
-            return totp.ComputeTotp();   
+            return totp.ComputeTotp();
         }
 
         public string ComputeHash(string input)
