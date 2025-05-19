@@ -4,6 +4,5 @@
     {
         public byte[] PublicKey;
         public string Pin;
-
     }
 }

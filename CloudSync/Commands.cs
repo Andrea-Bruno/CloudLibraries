@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using static CloudSync.Util;
@@ -91,8 +93,8 @@ namespace CloudSync
         /// <param name="toUserId">Target user ID</param>
         /// <param name="randomDataForAuthentication"></param>
         private void Authentication(ulong? toUserId, byte[] randomDataForAuthentication)
-        {
-            SendCommand(toUserId, Commands.Authentication, null, [randomDataForAuthentication]);
+        {          
+            SendCommand(toUserId, Commands.Authentication, null, ZeroKnowledgeProof != null ? [randomDataForAuthentication, Util.Hash256(ZeroKnowledgeProof.FilenameObfuscationKey).Take(4).ToArray()] : [randomDataForAuthentication]);
         }
 
         private void SendHashStructure(ulong? toUserId)
@@ -157,7 +159,7 @@ namespace CloudSync
         private void SendChunkFile(ulong? toUserId, FileSystemInfo fileSystemInfo, uint chunkPart)
         {
             if (!fileSystemInfo.Exists)
-            {   
+            {
                 Debugger.Break();
                 return;
             }

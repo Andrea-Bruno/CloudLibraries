@@ -106,13 +106,15 @@ namespace CloudSync
         }
         private ProofOfPin AuthenticationProof;
         public void SetAuthenticationProof(ProofOfPin authenticationProof) => AuthenticationProof = authenticationProof;
-        public bool Authenticate(byte[] authenticationProof)
+        public bool Authenticate(byte[] authenticationProof, byte[] zeroKnowledgeChecksum = null)
         {
             var check = BitConverter.ToUInt32(authenticationProof, 0);
-            return Authenticate(check);
+            uint? zeroKnowledge = zeroKnowledgeChecksum == null ? null : BitConverter.ToUInt32(zeroKnowledgeChecksum, 0);
+            return Authenticate(check, zeroKnowledge);
         }
-        public bool Authenticate(uint authenticationProof)
+        public bool Authenticate(uint authenticationProof, uint? zeroKnowledgeChecksum = null)
         {
+
             // Prevention of brute force attacks (The first 3 attempts at a distance of 5 seconds then wait 10 minutes)
             Attempts++;
             var secFromLastAttempt = (DateTime.UtcNow - LastAttempt).TotalSeconds;
@@ -132,6 +134,14 @@ namespace CloudSync
                 Save();
             }
             AuthenticationProof = null;
+            zeroKnowledgeChecksum ??= uint.MaxValue; // set no setting value (Default value if you have chosen not to use encryption)
+            var checksum = Sync.SecureStorage.Values.Get(nameof(zeroKnowledgeChecksum), default(uint));
+            if (checksum != default && checksum != zeroKnowledgeChecksum)
+                return false;
+            if (checksum == default)
+            {
+                Sync.SecureStorage.Values.Set(nameof(zeroKnowledgeChecksum), zeroKnowledgeChecksum.Value);
+            }
             return passed;
         }
         private DateTime LastAttempt; // Prevention of brute force attacks

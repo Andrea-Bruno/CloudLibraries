@@ -70,7 +70,7 @@ namespace CloudSync
                     // The server must check if the client knows the PIN (If it has solved the cryptographic problem then the PIN is known)
                     if (RoleManager.TryToGetClient((ulong)fromUserId, out var client, out var isTemp))
                     {
-                        if (client.Authenticate(values[0]))
+                        if (client.Authenticate(values[0], values.Length == 1 ? null : values[1]))
                         {
                             if (isTemp)
                                 Console.WriteLine("New client connected " + fromUserId);

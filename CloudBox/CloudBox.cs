@@ -256,8 +256,7 @@ namespace CloudBox
 #endif
             // Creates a license activator if an OEM license is set during initialization
             var signLicense = string.IsNullOrEmpty(LicenseOEM) ? null : new OEM(LicenseOEM);
-            Context = new Context(routerEntryPoint, NetworkName, modality: Modality.Server,
-                privateKeyOrPassphrase: passphrase, licenseActivator: signLicense, instanceId: ID.ToString())
+            Context = new Context(routerEntryPoint, NetworkName, modality: Modality.Server, privateKeyOrPassphrase: passphrase, licenseActivator: signLicense, instanceId: ID.ToString())
             {
                 OnRouterConnectionChange = OnRouterConnectionChangeEvent,
                 OnCommunicationErrorEvent = OnCommunicationError
