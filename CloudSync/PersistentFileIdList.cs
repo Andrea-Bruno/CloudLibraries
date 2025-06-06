@@ -20,10 +20,10 @@ namespace CloudSync
     /// It uses a static dictionary to store all instances of FileIdList,
     /// identifying them by a key composed of UserID and Scope.
     /// </summary>
-    internal class FileIdList
+    internal class PersistentFileIdList : IDisposable
     {
         // Static dictionary to store all instances of FileIdList
-        private static readonly Dictionary<string, FileIdList> instances = [];
+        private static readonly Dictionary<string, PersistentFileIdList> instances = [];
 
         /// <summary>
         /// Action to be called on successful load with parameters scope, userId, and newFileIdList.
@@ -36,7 +36,7 @@ namespace CloudSync
         /// <param name="context">The synchronization context.</param>
         /// <param name="scope">The type of scope.</param>
         /// <param name="userId">The user ID.</param>
-        public FileIdList(Sync context, ScopeType scope, ulong userId)
+        public PersistentFileIdList(Sync context, ScopeType scope, ulong userId)
         {
             Context = context;
             Scope = scope;
@@ -52,8 +52,8 @@ namespace CloudSync
 
         private ScopeType Scope;
         public const int MaxItems = 1000;
-        internal const string CloudCache = ".cloud_cache";
-        private string FileName => Path.Combine(Context.CloudRoot, CloudCache, GetKey(UserID, Scope));
+        internal const string CloudCacheDirectory = ".cloud_cache";
+        private string FileName => Path.Combine(Context.CloudRoot, CloudCacheDirectory, GetKey(UserID, Scope));
         private Sync Context;
         private ulong UserID;
         private List<FileId> fileIdList = [];
@@ -65,10 +65,10 @@ namespace CloudSync
         /// <param name="fileId">The FileId to add.</param>
         private void AddItem(FileId fileId)
         {
-            if (fileIdList.Count > MaxItems)
-                fileIdList.RemoveAt(0);
             if (!fileIdList.Contains(fileId))
             {
+                if (fileIdList.Count > MaxItems)
+                    fileIdList.RemoveAt(0);
                 fileIdList.Add(fileId);
                 // Reset the timer to save after 1 second
                 saveTimer.Change(1000, Timeout.Infinite);
@@ -76,21 +76,37 @@ namespace CloudSync
         }
 
         /// <summary>
-        /// Saves the list of FileIds to a file.
+        /// Schedules the save operation with debounce logic.
         /// </summary>
         private void Save()
         {
-            var path = new DirectoryInfo(Path.GetDirectoryName(FileName));
-            if (!path.Exists)
+            lock (saveTimer)
             {
-                path.Create();
-                path.Attributes |= FileAttributes.Hidden;
-            }
-            using var fileStream = new FileStream(FileName, FileMode.Create, FileAccess.Write);
-            using var binaryWriter = new BinaryWriter(fileStream);
-            foreach (var fileId in fileIdList)
-            {
-                binaryWriter.Write(fileId.Bytes);
+                for (int attempts = 0; attempts < 5; attempts++)
+                {
+                    try
+                    {
+                        var path = new DirectoryInfo(Path.GetDirectoryName(FileName));
+                        if (!path.Exists)
+                        {
+                            path.Create();
+                            path.Attributes |= FileAttributes.Hidden;
+                            path.Refresh();
+                        }
+
+                        using var fileStream = new FileStream(FileName, FileMode.Create, FileAccess.Write);
+                        using var binaryWriter = new BinaryWriter(fileStream);
+                        foreach (var fileId in fileIdList)
+                        {
+                            binaryWriter.Write(fileId.Bytes);
+                        }
+                        return;
+                    }
+                    catch
+                    {
+                        Thread.Sleep(1000);
+                    }
+                }
             }
         }
 
@@ -98,9 +114,9 @@ namespace CloudSync
         /// Loads a FileIdList from a file.
         /// </summary>
         /// <param name="context">The synchronization context.</param>
-        /// <param name="fileName">The name of the file to load the list from.</param>
+        /// <param name="fullFileName">The name of the file to load the list from.</param>
         /// <returns>An instance of FileIdList.</returns>
-        public static FileIdList Load(Sync context, string fullFileName)
+        public static PersistentFileIdList Load(Sync context, string fullFileName)
         {
             var fileName = Path.GetFileName(fullFileName);
             var parts = fileName.Split('.');
@@ -119,7 +135,7 @@ namespace CloudSync
                 }
             }
 
-            var fileIdList = new FileIdList(context, scope, userId);
+            var fileIdList = new PersistentFileIdList(context, scope, userId);
 
             if (File.Exists(fullFileName))
             {
@@ -148,7 +164,7 @@ namespace CloudSync
                 return;
             Initialized = true;
             OnLoad = context.OnUpdateFileIdList;
-            var cloudCachePath = new DirectoryInfo(Path.Combine(context.CloudRoot, CloudCache));
+            var cloudCachePath = new DirectoryInfo(Path.Combine(context.CloudRoot, CloudCacheDirectory));
             if (!cloudCachePath.Exists)
                 return;
 
@@ -174,7 +190,7 @@ namespace CloudSync
 
             if (!instances.TryGetValue(key, out var fileIdList))
             {
-                fileIdList = new FileIdList(context, scope, userId);
+                fileIdList = new PersistentFileIdList(context, scope, userId);
             }
             fileIdList.AddItem(fileId);
         }
@@ -188,21 +204,38 @@ namespace CloudSync
         /// <returns>True if the FileId was removed, otherwise false.</returns>
         public static bool RemoveItem(ulong userId, ScopeType scope, FileId fileId)
         {
-            var key = GetKey(userId, scope);
-
-            if (instances.TryGetValue(key, out var fileIdList))
-            {
-                lock (fileIdList.fileIdList)
+                var key = GetKey((ulong)userId, scope);
+                if (instances.TryGetValue(key, out var fileIdList))
                 {
-                    if (fileIdList.fileIdList.Remove(fileId))
+                    lock (fileIdList.fileIdList)
                     {
-                        // Reset the timer to save after 1 second
-                        fileIdList.saveTimer.Change(1000, Timeout.Infinite);
-                        return true;
+                        if (fileIdList.fileIdList.Remove(fileId))
+                        {
+                            // Reset the timer to save after 1 second
+                            fileIdList.saveTimer.Change(1000, Timeout.Infinite);
+                            return true;
+                        }
+                    }
+                }
+            return false;
+        }
+
+
+        public static bool RemoveItem(ScopeType scope, FileId fileId)
+        {
+            var result = false;
+
+            foreach (var instance in instances)
+            {
+                if (instance.Value.Scope == scope)
+                {
+                    if (instance.Value.fileIdList.Remove(fileId))
+                    {
+                        result = true;
                     }
                 }
             }
-            return false;
+            return result;
         }
 
 
@@ -241,5 +274,36 @@ namespace CloudSync
         {
             return $"{userId}.{scope}";
         }
+
+        public static void DisposeAll()
+        {
+            lock (instances)
+            {
+                foreach (var instance in instances.Values)
+                {
+                    instance.Dispose();
+                }
+                instances.Clear();
+            }
+        }
+
+        /// <summary>
+        /// Disposes the FileIdList instance, releasing resources.
+        /// </summary>
+        public void Dispose()
+        {
+            lock (instances)
+            {
+                var key = GetKey(UserID, Scope);
+                instances.Remove(key);
+            }
+
+            lock (saveTimer)
+            {
+                saveTimer?.Dispose();
+                saveTimer = null;
+            }
+        }
+
     }
 }

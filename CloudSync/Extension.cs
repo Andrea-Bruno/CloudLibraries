@@ -69,9 +69,15 @@ namespace CloudSync
             return context.ZeroKnowledgeProof == null || fileSystemInfo.Name.EndsWith(ZeroKnowledgeProof.EncryptFileNameEndChar) ? name : context.ZeroKnowledgeProof.EncryptFullFileName(name);
         }
 
+        /// <summary>
+        /// Return Utc last write timestamp
+        /// </summary>
+        /// <param name="fileSystemInfo"></param>
+        /// <returns>Timestamp Utc</returns>
         public static uint UnixLastWriteTimestamp(this FileSystemInfo fileSystemInfo)
         {
-            return fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory) ? 0 : ToUnixTimestamp(fileSystemInfo.LastWriteTimeUtc);
+            return fileSystemInfo is DirectoryInfo ? default : ToUnixTimestamp(fileSystemInfo.LastWriteTimeUtc);
+            //return fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory) ? 0 : ToUnixTimestamp(fileSystemInfo.LastWriteTimeUtc);
         }
 
         /// <summary>
@@ -93,6 +99,7 @@ namespace CloudSync
         {
             var relativeName = CloudRelativeUnixFullName(fileSystemInfo, context);
             return HashFileName(relativeName, fileSystemInfo is DirectoryInfo);
+       
             // return HashFileName(relativeName, fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory));
         }
 

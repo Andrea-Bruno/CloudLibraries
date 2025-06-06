@@ -2,21 +2,25 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 
 namespace CloudSync
 {
     /// <summary>
     /// Queue for the operations that the client wants to do on the server
     /// </summary>
-    internal class Spooler
+    internal class Spooler : IDisposable
     {
         public Spooler(Sync context)
         {
             Context = context;
+            SpoolerStarterTimer = new Timer((x) => { ExecuteNext(); }, null, Timeout.Infinite, Timeout.Infinite);
         }
+
         private readonly Sync Context;
         private DateTime StartSyncUtc;
         private int Executed;
+
         /// <summary>
         /// Approximate value of the end of synchronization (calculated in a statistical way)
         /// </summary>
@@ -36,79 +40,113 @@ namespace CloudSync
             LastETAUpdate = DateTime.UtcNow;
             return LastETA;
         }
+
         private DateTime LastETAUpdate;
         private DateTime LastETA;
 
-        public void AddOperation(OperationType type, ulong? userId, ulong hashFile)
+        /// <summary>
+        /// Adds a new operation to the spooler queue
+        /// </summary>
+        /// <param name="type">Type of operation to perform</param>
+        /// <param name="hashFile">Hash of the file/directory to operate on</param>
+        /// <param name="timestamp">Timestamp for delete operations (optional)</param>
+        public void AddOperation(OperationType type, ulong hashFile, uint timestamp = 0)
         {
             // Check if the file was intentionally deleted            
 
-#if DEBUG_AND || DEBUG
+#if DEBUG_AND || DEBUG          
             if (Context.IsServer)
                 System.Diagnostics.Debugger.Break(); // the operations must be given by the client, it is preferable that the server works in slave mode
-
+            if (type == OperationType.DeleteDirectory && timestamp != default)
+                System.Diagnostics.Debugger.Break(); // The timestamp must be set only for the delete file operation, and not for the send or request operations
 #endif
-            //Context.ClientFileMonitoring?.Stop();
+            var fileId = FileId.GetFileId(hashFile, timestamp); ;
             lock (ToDoOperations)
             {
-                if (RemoteDriveOverLimit && type == OperationType.Send) // Do not add send operations if the remote disk is full
+                if (Context.RemoteDriveOverLimit && type == OperationType.SendFile) // Do not add send operations if the remote disk is full
                 {
                     Context.RaiseOnStatusChangesEvent(Sync.SyncStatus.RemoteDriveOverLimit);
                 }
                 else
                 {
                     // Remove duplicate
-                    if (ToDoOperations.ContainsKey(hashFile))
-                        ToDoOperations.Remove(hashFile);
-                    SetRecursiveFilePendingStatus(hashFile, true);
-                    ToDoOperations.Add(hashFile, new Operation { Type = type, UserId = userId, HashFile = hashFile });
+                    if (ToDoOperations.ContainsKey(fileId))
+                        ToDoOperations.Remove(fileId);
+                    if (!type.ToString().StartsWith("Delete"))
+                        SetFilePendingStatus(hashFile, true);
+                    ToDoOperations.Add(fileId, new Operation { Type = type, FileId = fileId });
                     Context.RaiseOnStatusChangesEvent(Sync.SyncStatus.Pending);
                 }
             }
             if (ToDoOperations.Count == 1)
             {
                 StartSyncUtc = DateTime.UtcNow;
-                ExecuteNext();
+                SpoolerRun();
             }
         }
 
-        private readonly Dictionary<ulong, Operation> ToDoOperations = [];
+        private readonly Dictionary<FileId, Operation> ToDoOperations = [];
+
+        /// <summary>
+        /// Gets the number of pending operations in the queue
+        /// </summary>
         public int PendingOperations => ToDoOperations.Count;
+
+        /// <summary>
+        /// Checks if there are any pending operations
+        /// </summary>
         public bool IsPending => PendingOperations > 0;
+
+        /// <summary>
+        /// Enumeration of possible operation types
+        /// </summary>
         public enum OperationType
         {
-            Send,
-            Request,
-        }
-        public class Operation
-        {
-            public OperationType Type;
-            public ulong? UserId;
-            public ulong HashFile;
+            /// <summary>
+            /// Send the file or create a directory on the remote server
+            /// </summary>
+            SendFile,
+            /// <summary>
+            /// Request remote file or info to create a missing directory
+            /// </summary>
+            RequestFile,
+            /// <summary>
+            /// Delete a file on the remote server
+            /// </summary>
+            DeleteFile,
+            /// <summary>
+            /// Delete a directory on the remote server
+            /// </summary>
+            DeleteDirectory
         }
 
         /// <summary>
-        /// It checks if there are any pending operations for a particular user, and if not, informs the client that there are no pending operations to be performed
+        /// Represents a single operation in the spooler queue
         /// </summary>
-        public void CheckOperationsInPending(ulong notifyToUserId)
+        public class Operation
         {
-            if (Context.IsServer)
-            {
-                lock (ToDoOperations)
-                {
-                    foreach (var item in ToDoOperations.Values)
-                    {
-                        if (item.UserId == notifyToUserId)
-                            return;
-                    }
-                }
-                Context.StatusNotification(notifyToUserId, Sync.Status.Ready);
-            }
+            public OperationType Type;
+            public FileId FileId;
         }
-        public static int MaxConcurrentOperations = 3;
 
+        /// <summary>
+        /// Maximum number of concurrent operations allowed
+        /// </summary>
+        public static int MaxConcurrentOperations = 1;
+
+
+        /// <summary>
+        /// Schedules the execution of the next operation after a delay
+        /// </summary>
+        public void SpoolerRun() => SpoolerStarterTimer.Change(1000, Timeout.Infinite);
+        private readonly Timer SpoolerStarterTimer;
+
+        /// <summary>
+        /// Executes the next operation in the queue
+        /// </summary>
         public void ExecuteNext()
         {
+            Thread.Sleep(1000);
             lock (ToDoOperations)
             {
                 Context.RaiseOnStatusChangesEvent(ToDoOperations.Count == 0 ? Sync.SyncStatus.Monitoring : Sync.SyncStatus.Pending);
@@ -118,27 +156,36 @@ namespace CloudSync
                     {
                         Executed++;
                         var toDo = ToDoOperations.Values.ToArray()[0];
-                        RemoveOperation(toDo.HashFile);
-                        if (toDo.Type == OperationType.Send)
+                        RemoveOperation(toDo.FileId);
+                        if (toDo.Type == OperationType.SendFile)
                         {
                             if (Context.GetHashFileTable(out var localHashes))
                             {
-                                if (localHashes.TryGetValue(toDo.HashFile, out var fileSystemInfo))
+                                if (localHashes.TryGetValue(toDo.FileId.HashFile, out var fileSystemInfo))
                                 {
-                                    Context.SendFile(toDo.UserId, fileSystemInfo);
+                                    Context.SendFile(null, fileSystemInfo);
                                 }
                                 // the file has been modified or no longer exists
                             }
                         }
-                        else
+                        else if (toDo.Type == OperationType.RequestFile)
                         {
-                            Context.RequestFile(toDo.UserId, toDo.HashFile);
+                            Context.RequestFile(null, toDo.FileId.HashFile);
+                        }
+                        else if (toDo.Type == OperationType.DeleteFile)
+                        {
+                            Context.DeleteFile(null, toDo.FileId.HashFile, toDo.FileId.UnixLastWriteTimestamp, null);
+                        }
+                        else if (toDo.Type == OperationType.DeleteDirectory)
+                        {
+                            Context.DeleteDirectory(null, toDo.FileId.HashFile, null);
                         }
                     }
                 }
             }
             if (ToDoOperations.Count == 0)
             {
+                Context.PendingConfirmation = 0;
                 StartSyncUtc = default;
                 Executed = 0;
             }
@@ -147,13 +194,8 @@ namespace CloudSync
         /// <summary>
         /// Remove all pending operations
         /// </summary>
-        public void Clear(bool removePendingFileAttribute = false)
+        public void Clear()
         {
-            if (removePendingFileAttribute)
-                foreach (var toDO in ToDoOperations.ToArray())
-                    SetRecursiveFilePendingStatus(toDO.Value.HashFile, false);
-            if (FilePendingTree.Count != 0)
-                FilePendingTree.Clear();
             lock (ToDoOperations)
             {
                 ToDoOperations.Clear();
@@ -161,125 +203,126 @@ namespace CloudSync
         }
 
         /// <summary>
-        /// Add a flag that shows the pending status in the operating system's file explorer
+        /// Adds or removes the pending status flag for a file/directory
         /// </summary>
-        /// <param name="hashFile">The hash of the file to set the pending state</param>
-        /// <param name="pendingStatus">True to set the state that indicates the file is waiting to sync with the cloud</param>
-        private void SetRecursiveFilePendingStatus(ulong hashFile, bool pendingStatus)
+        /// <param name="hashFile">Hash of the file/directory</param>
+        /// <param name="pendingStatus">True to set pending status, false to remove it</param>
+        /// <returns>True if the operation was successful</returns>
+        public bool SetFilePendingStatus(ulong hashFile, bool pendingStatus)
         {
             if (Context.GetHashFileTable(out var localHashes))
-                if (localHashes.TryGetValue(hashFile, out var fileSystemInfo))
-                    SetRecursiveFilePendingStatus(fileSystemInfo, pendingStatus);
-        }
-
-        /// <summary>
-        /// Add a flag that shows the pending status in the operating system's file explorer
-        /// </summary>
-        /// <param name="fileSystemInfo">The fileSystemInfo of the file to set the pending state</param>
-        /// <param name="pendingStatus">True to set the state that indicates the file is waiting to sync with the cloud</param>
-        private void SetRecursiveFilePendingStatus(FileSystemInfo fileSystemInfo, bool pendingStatus)
-        {
-            try
             {
-                if (pendingStatus)
-                {   // ADD
-                    if (fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory))
+                if (localHashes.TryGetValue(hashFile, out var fileSystemInfo))
+                {
+                    try
                     {
-                        var hash = fileSystemInfo.HashFileName(Context);
-                        if (!FilePendingTree.ContainsKey(hash))
-                            FilePendingTree[hash] = 0;
-                        FilePendingTree[hash]++;
-                    }
-                    SetFilePendingStatus(fileSystemInfo, pendingStatus);
-                    var parent = new DirectoryInfo(fileSystemInfo.FullName).Parent;
-                    if (Path.GetFullPath(parent.FullName) != Path.GetFullPath(Context.CloudRoot))
-                        SetRecursiveFilePendingStatus(parent, pendingStatus);
-                }
-                else
-                {  // REMOVE
-                    int subCount = 0;
-                    if (fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory))
-                    {
-                        var hash = fileSystemInfo.HashFileName(Context);
-                        if (FilePendingTree.ContainsKey(hash))
-                        {
-                            FilePendingTree[hash]--;
-                            subCount = FilePendingTree[hash];
-                            if (subCount == 0)
-                                FilePendingTree.Remove(hash);
+                        var parentDirectory = new DirectoryInfo(fileSystemInfo is FileInfo file ? file.DirectoryName : (fileSystemInfo as DirectoryInfo)?.Parent?.FullName);
+                        if (pendingStatus)
+                        {   // ADD
+                            fileSystemInfo.Attributes |= Pending;
+                            if (parentDirectory.FullName != LastDirAddPending)
+                            {
+                                LastDirAddPending = parentDirectory.FullName;
+                                parentDirectory.Attributes |= Pending; // Add pending status to the parent directory
+                            }
+                            return true;
+                        }
+                        else
+                        {  // REMOVE
+                            fileSystemInfo.Attributes &= ~Pending;
+                            if (parentDirectory.FullName != LastDirRemovePending)
+                            {
+                                LastDirRemovePending = parentDirectory.FullName;
+                                parentDirectory.Attributes &= ~Pending; // Remove pending status to the parent directory
+                            }
+                            return true;
                         }
                     }
-                    if (subCount == 0)
-                        SetFilePendingStatus(fileSystemInfo, pendingStatus);
+                    catch (Exception) { }
                 }
             }
-            catch (Exception) { }
+            return false;
+        }
+        private string LastDirAddPending;
+        private string LastDirRemovePending;
+
+        /// <summary>
+        /// Removes a specific operation from the queue
+        /// </summary>
+        /// <param name="fileId">Identifier of the operation to remove</param>
+        private void RemoveOperation(FileId fileId)
+        {
+            Context.ClientToolkit?.RestartTimerClientRequestSynchronization();
+            lock (ToDoOperations)
+            {
+                if (ToDoOperations.TryGetValue(fileId, out var operation))
+                {
+                    if (!operation.Type.ToString().StartsWith("Delete"))
+                        SetFilePendingStatus(fileId.HashFile, false);
+                    ToDoOperations.Remove(fileId);
+                    if (ToDoOperations.Count == 0)
+                        Context.RaiseOnStatusChangesEvent(Sync.SyncStatus.Analysing);
+                }
+            }
         }
 
         /// <summary>
-        /// Add a flag that shows the pending status in the operating system's file explorer
+        /// File attributes combination that represents the "pending sync" status
         /// </summary>
-        /// <param name="fileSystemInfo">The fileSystemInfo of the file to set the pending state</param>
-        /// <param name="pendingStatus">True to set the state that indicates the file is waiting to sync with the cloud</param>
-
-        public static bool SetFilePendingStatus(FileSystemInfo fileSystemInfo, bool pendingStatus)
-        {
-            try
-            {
-                if (pendingStatus)
-                {   // ADD
-                    if (!fileSystemInfo.Attributes.HasFlag(Pending))
-                    {
-                        fileSystemInfo.Attributes |= Pending;
-                        return true;
-                    }
-                }
-                else
-                {  // REMOVE
-                    if (fileSystemInfo.Attributes.HasFlag(Pending))
-                    {
-                        fileSystemInfo.Attributes &= ~Pending;
-                        return true;
-                    }
-                }
-            }
-            catch (Exception) { }
-            return false;
-        }
-
-        private Dictionary<ulong, int> FilePendingTree = [];
-
-
-        private void RemoveOperation(ulong hashFile)
-        {
-            SetRecursiveFilePendingStatus(hashFile, false);
-            ToDoOperations.Remove(hashFile);
-        }
-
         const FileAttributes Pending = FileAttributes.Archive | FileAttributes.Offline;
 
         /// <summary>
-        /// Memorize that the remote server device has a full disk and is no longer available to receive data
+        /// Removes all send operations from the queue
         /// </summary>
-        public bool RemoteDriveOverLimit
+        public void RemoveSendOperationFromSpooler()
         {
-            get { return _RemoteDriveOverLimit; }
-            set
+            lock (ToDoOperations)
             {
-                _RemoteDriveOverLimit = value;
-                if (value) // If the remote disk is full then remove the data send operations from the queue
+                ToDoOperations.Values.ToList().ForEach(toDo =>
                 {
-                    lock (ToDoOperations)
-                    {
-                        ToDoOperations.Values.ToList().ForEach(toDo =>
-                        {
-                            if (toDo.Type == OperationType.Send)
-                                RemoveOperation(toDo.HashFile);
-                        });
-                    }
-                }
+                    if (toDo.Type == OperationType.SendFile)
+                        RemoveOperation(toDo.FileId);
+                });
             }
         }
-        private bool _RemoteDriveOverLimit;
+
+        #region IDisposable Implementation
+
+        private bool _disposed = false;
+
+        /// <summary>
+        /// Disposes the spooler resources
+        /// </summary>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Protected implementation of Dispose pattern
+        /// </summary>
+        /// <param name="disposing">True if called from Dispose(), false if called from finalizer</param>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed)
+                return;
+
+            if (disposing)
+            {
+                // Dispose managed resources
+                SpoolerStarterTimer?.Dispose();
+                Clear();
+            }
+
+            _disposed = true;
+        }
+
+        ~Spooler()
+        {
+            Dispose(false);
+        }
+
+        #endregion
     }
 }

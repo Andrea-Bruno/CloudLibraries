@@ -10,7 +10,6 @@ using System.Threading;
 using CloudSync;
 using EncryptedMessaging;
 using NBitcoin;
-using SecureStorage;
 using static CommunicationChannel.Channel;
 
 namespace CloudBox
@@ -96,7 +95,7 @@ namespace CloudBox
 
             if (saveToCloud)
             {
-                if (CloudPath != null && Sync?.SyncIsEnabled == true)
+                if (CloudPath != null && Sync?.ClientToolkit?.SyncIsEnabled == true)
                 {
                     var n = 0;
                     string signatureDir;
@@ -378,12 +377,12 @@ namespace CloudBox
         public static string LastEntryPoint()
         {
             return GetStaticValue(nameof(LastEntryPoint));
-        }
+        }      
 
         /// <summary>
         /// True if logged
         /// </summary>
-        public bool IsLogged => Sync != null && Sync.IsLogged;
+        public bool IsLogged => Sync?.ClientToolkit?.IsLogged == true;
 
         private readonly bool DoNotCreateSpecialFolders;
 
@@ -599,7 +598,8 @@ namespace CloudBox
                 var sync = Sync;
                 if (sync != null)
                 {
-                    AddTx("Pending operations", sync.PendingOperations);
+                    if (sync?.ClientToolkit != null) // Ia a client
+                        AddTx("Pending operations", sync?.ClientToolkit?.PendingOperations);
                     // Reception
                     AddTx("# RECEPTION:");
                     AddTx("Last Command received",

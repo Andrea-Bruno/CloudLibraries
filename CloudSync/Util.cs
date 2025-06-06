@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -68,20 +69,18 @@ namespace CloudSync
                 return Sha256Hash.ComputeHash(data);
         }
 
-
-        /// <summary>
-        /// Wait for directory exists 
-        /// </summary>
-        /// <param name="path">Directory path</param>
-        /// <param name="timeout">Timeout in milliseconds</param>
-        /// <returns></returns>
-        public static bool WaitForDirectory(string path, int timeout = 10000)
+        private const long BlockSize = 4096;
+        public static long GetAllocatedStorageSize(this FileSystemInfo fileSystemInfo)
         {
-            return SpinWait.SpinUntil(() => Directory.Exists(path), timeout);
+            if (fileSystemInfo is FileInfo file)
+            {
+                return ((file.Length + BlockSize - 1) / BlockSize) * BlockSize;
+            }
+            return BlockSize;
         }
 
         /// <summary>
-        /// Create user subfolders: Documents, Pictures, Movies, etc..
+        /// Create user sub-folders: Documents, Pictures, Movies, etc..
         /// </summary>
         /// <param name="userPath"></param>
         /// <param name="createSubFolder"></param>
@@ -111,7 +110,8 @@ namespace CloudSync
             {
                 var client = new TcpClient(uri.Host, uri.Port)
                 {
-                    LingerState = new LingerOption(true, 0)
+                    LingerState = new LingerOption(true, 0),
+                    NoDelay = true
                 };
                 client.Close();
                 client.Dispose();
@@ -326,7 +326,10 @@ namespace CloudSync
             return false;
         }
 
-        private static readonly List<string> ExcludeName = ["desktop.ini", "tmp", "temp", "cache", "bin", "obj"];
+        /// <summary>
+        /// Since the cloud can be shared with multiple clients, files and directories typical of local use (for example temporary files) are not synchronized so as not to interfere with other clients.
+        /// </summary>
+        private static readonly List<string> ExcludeName = ["desktop.ini", "tmp", "temp", "cache", "bin", "obj", ".vs", "packages", "apppackages"];
         private static readonly List<string> ExcludeExtension = [".desktop", ".tmp", ".cache"];
 
         /// <summary>
@@ -336,7 +339,7 @@ namespace CloudSync
         /// <returns>A Boolean value indicating whether the file is subject to synchronization or not</returns>
         public static bool CanBeSeen(FileSystemInfo fileSystemInfo, bool checkAttribute = true)
         {
-            if (fileSystemInfo.Attributes.HasFlag(FileAttributes.Directory) && SpecialDirectories.Contains(fileSystemInfo.Name))
+            if (fileSystemInfo is DirectoryInfo && SpecialDirectories.Contains(fileSystemInfo.Name))
                 return true;
             if (checkAttribute && (!fileSystemInfo.Exists || fileSystemInfo.Attributes.HasFlag(FileAttributes.Hidden)))
                 return false;
@@ -346,14 +349,71 @@ namespace CloudSync
             return !fileSystemInfo.Name.StartsWith("~") && !fileSystemInfo.Name.StartsWith(".") && !fileSystemInfo.Name.EndsWith("_") && !excludeName && !excludeExtension;
         }
 
+        public static bool FileIsAvailable(string filePath, [NotNullWhen(true)] out FileSystemInfo? fileSystemInfo)
+        {
+            bool FileExists(string fullFileName, [NotNullWhen(true)] out FileSystemInfo? fileSystemInfo)
+            {
+                DirectoryInfo directoryInfo = new DirectoryInfo(fullFileName);
+                if (directoryInfo.Exists)
+                {
+                    fileSystemInfo = directoryInfo;
+                    return true;
+                }
+                FileInfo fileInfo = new FileInfo(fullFileName);
+                if (fileInfo.Exists)
+                {
+                    fileSystemInfo = fileInfo;
+                    return true;
+                }
+                fileSystemInfo = null;
+                return false;
+            }
+            if (FileExists(filePath, out fileSystemInfo))
+            {
+                if (fileSystemInfo is not FileInfo fileInfo)
+                    return true;
+                if (fileInfo.LastWriteTimeUtc == default)
+                    return false; // If the file has never been written to, consider it unavailable
+                try
+                {
+                    using FileStream stream = File.Open(filePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                    return true;
+                }
+                catch (Exception)
+                {
+                    return false;
+                }
+            }
+            return false;
+        }
+
         /// <summary>
         /// Return true if it is a hidden file or not subject to synchronization between cloud client and server
         /// </summary>
         /// <param name="fullNameFile">Full name file</param>
         /// <returns>A Boolean value indicating whether the file is subject to synchronization or not</returns>
-        public static bool CanBeSeen(string fullNameFile, bool checkAttribute = true) => CanBeSeen(new FileInfo(fullNameFile), checkAttribute);
+        public static bool CanBeSeen(Sync context, string fullNameFile, bool checkAttribute = true)
+        {
+            if (context.GetHashFileTable(out HashFileTable hashTable))
+            {
+                if (hashTable.GetByFileName(fullNameFile, out _) != null)
+                    return true;
+            }
+            FileSystemInfo fileSystemInfo = Directory.Exists(fullNameFile) ? new DirectoryInfo(fullNameFile) : new FileInfo(fullNameFile);
+            var root = new DirectoryInfo(context.CloudRoot);
+            while (fileSystemInfo != null && fileSystemInfo.FullName != root.FullName)
+            {
+                if (!CanBeSeen(fileSystemInfo, checkAttribute))
+                    return false;
+                if (fileSystemInfo is DirectoryInfo dirInfo)
+                    fileSystemInfo = dirInfo.Parent;
+                else if (fileSystemInfo is FileInfo fileInfo)
+                    fileSystemInfo = fileInfo.Directory;
+            }
+            return true;
+        }
 
-        internal static readonly string[] SpecialDirectories = [FileIdList.CloudCache];
+        internal static readonly string[] SpecialDirectories = [PersistentFileIdList.CloudCacheDirectory];
 
         /// <summary>
         /// Convert a date to Unix timestamp format
@@ -381,44 +441,36 @@ namespace CloudSync
         public static ulong HashFileName(string relativeName, bool isDirectory)
         {
             var bytes = relativeName.GetBytes();
-            var startValue = isDirectory ? 5120927932783021125ul : 2993167789729610286ul;
-            var hash = ULongHash(startValue, bytes);
-            if (Debugger.IsAttached)
+            byte[] hash;
+            lock (Sha256) // ComputeHash in one case has generate StackOverFlow error, i try to fix by lock the instance
             {
-                try
-                {
-                    lock (Sha256)
-                    {
-                        var fileName = "HashFileName.log";
-                        if (!FlasLog)
-                        {
-                            FlasLog = true;
-                            File.Delete(fileName);
-                        }
-                        using StreamWriter sw = new StreamWriter(fileName, true);
-                        sw.WriteLine(hash + ", " + relativeName + ", dir=" + isDirectory);
-                        sw.Flush();
-                    }
-                }
-                catch (Exception) { }
+                hash = Sha256.ComputeHash(bytes);
             }
-            return hash;
+            var hash64 = BitConverter.ToUInt64(hash);
+
+            if (isDirectory)
+                hash64 |= 1UL; // Set the least significant bit (LSB) to 1
+            else
+                hash64 &= ~1UL; // Set the least significant bit (LSB) to 0
+            return hash64;
         }
-        private static bool FlasLog;
 
         internal static readonly SHA256 Sha256 = SHA256.Create();
 
         public static ulong ULongHash(ulong startValue, byte[] bytes)
         {
             var add = BitConverter.GetBytes((ulong)bytes.Length ^ startValue);
-            var concat = new byte[add.Length + bytes.Length];
-            Buffer.BlockCopy(bytes, 0, concat, 0, bytes.Length);
-            Buffer.BlockCopy(add, 0, concat, bytes.Length, add.Length);
-            lock (Sha256) // ComputeHash in one case has generate StackOverFlow error, i try to fix by lock the instance
-            {
-                var hash = Sha256.ComputeHash(concat);
-                return BitConverter.ToUInt64(hash, 0);
-            }
+            var dataLen = add.Length + bytes.Length;
+
+            dataLen = (dataLen + 7) & ~7;
+
+            var data = new byte[dataLen];
+            Buffer.BlockCopy(bytes, 0, data, 0, bytes.Length);
+            Buffer.BlockCopy(add, 0, data, bytes.Length, add.Length);
+            ulong crc = 0;
+            for (int i = 0; i < dataLen; i += 8)
+                crc ^= BitConverter.ToUInt64(data, i);
+            return crc;
         }
 
         /// <summary>
@@ -447,13 +499,13 @@ namespace CloudSync
         /// <returns></returns>
         public static string GetTmpFile(Sync sync, ulong? userId, ulong hashFileName)
         {
-            return Path.Combine(GetTempPath(), ((ulong)userId).ToString("X") + hashFileName.ToString("X") + sync.InstanceId);
+            userId ??= 0;
+            return Path.Combine(GetTempPath(), ((ulong)userId).ToString("X16") + hashFileName.ToString("X16") + sync.UserId.ToString("X16"));
         }
 
         public const int DefaultChunkSize = 1024 * 1000; // 1 mb
 
-        public static byte[] GetChunk(uint chunkPart, string fullFileName, out uint parts, out long fileLength,
-            int chunkSize = DefaultChunkSize)
+        public static byte[]? GetChunk(uint chunkPart, string fullFileName, out uint parts, out long fileLength, int chunkSize = DefaultChunkSize)
         {
             if (chunkSize == 0)
                 chunkSize = DefaultChunkSize;
@@ -736,221 +788,6 @@ end tell";
             }
         }
 
-        //        public class BlockRange
-        //        {
-        //            public BlockRange(ulong? betweenHashBlock, int betweenHashBlockIndex, ulong? betweenReverseHashBlock, int betweenReverseHashBlockIndex)
-        //            {
-        //                BetweenHashBlock = betweenHashBlock;
-        //                BetweenHasBlockIndex = betweenHashBlockIndex;
-        //                BetweenReverseHashBlock = betweenReverseHashBlock;
-        //                BetweenReverseHashBlockIndex = betweenReverseHashBlockIndex;
-        //#if (DEBUG)
-        //                if (BetweenHashBlock == null && BetweenHasBlockIndex != -1)
-        //                    Debugger.Break(); // wrong !
-        //                if (BetweenReverseHashBlock == null && BetweenReverseHashBlockIndex != -1)
-        //                    Debugger.Break(); // wrong !
-        //#endif
-        //            }
-
-        //            public BlockRange(byte[] betweenHasBlockBinary, byte[] betweenHasBlockIndex, byte[] betweenReverseHasBlockBinary, byte[] betweenReverseHasBlockPIndex)
-        //            {
-        //                BetweenHashBlock = betweenHasBlockBinary.Length == 8 ? BitConverter.ToUInt64(betweenHasBlockBinary, 0) : (ulong?)null;
-        //                BetweenHasBlockIndex = BitConverter.ToInt32(betweenHasBlockIndex, 0);
-        //                BetweenReverseHashBlock = betweenReverseHasBlockBinary.Length == 8 ? BitConverter.ToUInt64(betweenReverseHasBlockBinary, 0) : (ulong?)null;
-        //                BetweenReverseHashBlockIndex = BitConverter.ToInt32(betweenReverseHasBlockPIndex, 0);
-        //#if (DEBUG)
-        //                if (BetweenHashBlock == null && BetweenHasBlockIndex != -1)
-        //                    Debugger.Break(); // wrong !
-        //                if (BetweenReverseHashBlock == null && BetweenReverseHashBlockIndex != -1)
-        //                    Debugger.Break(); // wrong !
-        //#endif
-        //            }
-
-        //            public readonly ulong? BetweenHashBlock;
-        //            public byte[] BetweenHashBlockBinary => BetweenHashBlock == null ? [] : BitConverter.GetBytes((ulong)BetweenHashBlock);
-
-        //            public readonly int BetweenHasBlockIndex;
-        //            public byte[] BetweenHashBlockIndexBinary => BitConverter.GetBytes(BetweenHasBlockIndex);
-
-        //            public readonly ulong? BetweenReverseHashBlock;
-        //            public byte[] BetweenReverseHashBlockBinary => BetweenReverseHashBlock == null ? [] : BitConverter.GetBytes((ulong)BetweenReverseHashBlock);
-
-        //            public readonly int BetweenReverseHashBlockIndex;
-        //            public byte[] BetweenReverseHashBlockIndexBinary => BitConverter.GetBytes(BetweenReverseHashBlockIndex);
-
-        //            public bool TakeAll => BetweenHashBlock == null;
-        //            public bool ReverseTakeAll => BetweenReverseHashBlock == null;
-        //        }
-
-        //        private const int BlockFileSize = 256; // Each hash represents a block of 256 files
-
-        [Obsolete("Remove all reference and all function that use this")]
-        public static byte[] HashFileTableToHashBlock(HashFileTable hashFileTable)
-        {
-            Debugger.Break(); // obsolete
-            return null;
-            //GetRestrictedHashFileTable(hashFileTable, out var hashBlocks);
-            //return hashBlocks;
-        }
-
-        /// <summary>
-        /// If delimitsRange != Null, returns HashFileTable of range, otherwise returns HashBlocks(out byte[] returnHashBlocks)
-        /// </summary>
-        /// <param name = "hashFileTable" > The whole hash table without delimits</param>
-        /// <param name = "returnHashBlocks" > Return hash block if delimitsRange is null</param>
-        /// <param name = "delimitsRange" > An object that indicates the portion of the FileTable hash to take</param>
-        /// <returns></returns>
-        //public static HashFileTable GetRestrictedHashFileTable(HashFileTable hashFileTable, out byte[] returnHashBlocks, BlockRange delimitsRange = null)
-        //{
-        //    var returnValue = delimitsRange == null ? null : new HashFileTable();
-        //    var elementInBlock = delimitsRange == null ? null : new List<KeyValuePair<ulong, HashFileTable>>();
-        //    var elementInBlockReverse = delimitsRange == null ? null : new List<KeyValuePair<ulong, HashFileTable>>();
-        //    var hashList = new List<byte[]>();
-
-        //    static void hashBlock(IEnumerable<KeyValuePair<ulong, FileSystemInfo>> hashTable, ref List<byte[]> result, ref List<KeyValuePair<ulong, HashFileTable>> outElementInBlock)
-        //    {
-        //        var toAdd = outElementInBlock == null ? null : new HashFileTable();
-        //        ulong hash1 = 0;
-        //        ulong hash2 = 0;
-        //        var n = 1;
-        //        var total = hashTable.Count();
-        //        foreach (var item in hashTable)
-        //        {
-        //            toAdd?.Add(item.Key, item.Value);
-        //            hash1 ^= item.Key;
-        //            hash2 ^= item.Value.UnixLastWriteTimestamp();
-        //            if (1 % BlockFileSize == 0 || n == total)
-        //            {
-        //                var hash = (hash1 ^ hash2).GetBytes();
-        //                var hash = hash1.GetBytes().Concat(hash2.GetBytes());
-        //                result.Add(hash);
-        //                hash1 = 0;
-        //                hash2 = 0;
-        //                if (outElementInBlock != null)
-        //                {
-        //                    outElementInBlock.Add(new KeyValuePair<ulong, HashFileTable>(BitConverter.ToUInt64(hash, 0), toAdd));
-        //                    toAdd = [];
-        //                }
-        //            }
-        //            n++;
-        //        }
-        //    }
-
-        //    hashBlock(hashFileTable, ref hashList, ref elementInBlock);
-        //    hashBlock(hashFileTable.Reverse(), ref hashList, ref elementInBlockReverse);
-
-        //    if (returnValue == null)
-        //    {
-        //        returnHashBlocks = new byte[hashList.Count * 8];
-        //        //Array.Resize(ref returnHashBlocks, hashList.Count * 8);
-        //        for (var i = 0; i < hashList.Count; i++)
-        //        {
-        //            var item = hashList[i];
-        //            var p = i * 8;
-        //            item.CopyTo(returnHashBlocks, p);
-        //        }
-        //    }
-        //    else
-        //    {
-        //        returnHashBlocks = null;
-        //        if (!PerformRange(false, ref elementInBlock, ref returnValue, delimitsRange.TakeAll, delimitsRange.BetweenHashBlock, delimitsRange.BetweenHasBlockIndex))
-        //            return null; // There is no block in the requested position, the operation must be canceled because there is something wrong
-
-        //        if (!PerformRange(true, ref elementInBlockReverse, ref returnValue, delimitsRange.ReverseTakeAll, delimitsRange.BetweenReverseHashBlock, delimitsRange.BetweenReverseHashBlockIndex))
-        //            return null; // There is no block in the requested position, the operation must be canceled because there is something wrong
-        //    }
-
-        //    return returnValue;
-        //}
-
-        //private static bool PerformRange(bool reverseStep, ref List<KeyValuePair<ulong, HashFileTable>> elementInBlock, ref HashFileTable returnValue, bool takeAll, ulong? betweenHasBlock, int betweenHasBlockIndex)
-        //{
-        //    var startIndex = takeAll ? 0 : betweenHasBlockIndex;
-        //    if (betweenHasBlockIndex != -1 && (elementInBlock.Count <= betweenHasBlockIndex || elementInBlock[betweenHasBlockIndex].Key != betweenHasBlock))
-        //    {
-        //        return false; // There is no block in the requested position, the operation must be canceled because there is something wrong
-        //    }
-
-        //    if (!reverseStep)
-        //    {
-        //        for (var i = startIndex; i < elementInBlock.Count; i++)
-        //        {
-        //            var block = elementInBlock[i].Value;
-        //            foreach (var item in block)
-        //            {
-        //                returnValue[item.Key] = item.Value;
-        //            }
-        //        }
-        //    }
-        //    else
-        //    {
-        //        if (!takeAll)
-        //        {
-        //            for (var i = 0; i <= betweenHasBlockIndex; i++)
-        //            {
-        //                var block = elementInBlock[i].Value;
-        //                foreach (var item in block)
-        //                {
-        //                    if (returnValue.ContainsKey(item.Key))
-        //                        returnValue.Remove(item.Key);
-        //                }
-        //            }
-        //        }
-        //    }
-        //    return true;
-        //}
-
-        //public static BlockRange HashBlocksToBlockRange(byte[] hashBlocksRemote, byte[] hashBlocksLocal)
-        //{
-        //    var straightRemote = hashBlocksRemote.Take(hashBlocksRemote.Length / 2).ToArray();
-        //    var straightLocal = hashBlocksLocal.Take(hashBlocksLocal.Length / 2).ToArray();
-        //    HashBlockComparer(straightRemote, straightLocal, out var lastHashStraight, out var indexStraight);
-
-        //    var reverseRemote = hashBlocksRemote.Skip(hashBlocksRemote.Length / 2).ToArray();
-        //    var reverseLocal = hashBlocksLocal.Skip(hashBlocksLocal.Length / 2).ToArray();
-        //    HashBlockComparer(reverseRemote, reverseLocal, out var lastHashReverse, out var indexReverse);
-        //    return new BlockRange(lastHashStraight, indexStraight, lastHashReverse, indexReverse);
-        //}
-
-        //private static void HashBlockComparer(byte[] hashBlocksRemote, byte[] hashBlocksLocal, out ulong? lastHashMatch, out int index)
-        //{
-        //    lastHashMatch = null;
-        //    index = -1;
-        //    var p = 0;
-        //    ulong h1, h2;
-        //    while (p < hashBlocksRemote.Length && p < hashBlocksLocal.Length)
-        //    {
-        //        try
-        //        {
-        //            h1 = BitConverter.ToUInt64(hashBlocksRemote, p);
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            throw new Exception("Wrong hashBlocksRemote: Length=" + hashBlocksRemote.Length + " p=" + p, ex);
-        //        }
-
-        //        try
-        //        {
-        //            h2 = BitConverter.ToUInt64(hashBlocksLocal, p);
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            throw new Exception("Wrong hashBlocksLocal: Length=" + hashBlocksLocal.Length + " p=" + p, ex);
-        //        }
-
-        //        if (h1 == h2)
-        //        {
-        //            lastHashMatch = h1;
-        //            p += 8;
-        //            index++;
-        //        }
-        //        else
-        //        {
-        //            break;
-        //        }
-        //    }
-        //}
-
         /// <summary>
         /// Verify that the space occupied is sufficient and compatible with the assigned space
         /// </summary>
@@ -960,9 +797,9 @@ end tell";
         /// <exception cref="Exception">If set by parameter, an exception can be generated if the space is close to running out</exception>
         internal static bool CheckDiskSPace(Sync context, long preserveSize = MinimumPreserveDiskSize)
         {
-            if (context == null)
+            if (context?._HashFileTable == null)
                 return true;
-            if (context.StorageLimitGB != -1 && (context.UsedSpace / 1000000000) > context.StorageLimitGB) // check over limit quota
+            if (context.StorageLimitGB != -1 && (int)(context._HashFileTable.UsedSpace / 1000000000) > context.StorageLimitGB) // check over limit quota
                 return false;
             var result = PreserveDriveSpace(context.CloudRoot, false, preserveSize);
             return result;
@@ -1047,7 +884,7 @@ end tell";
                     var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, nameof(RecordError));
                     if (!Directory.Exists(path))
                         Directory.CreateDirectory(path);
-                    File.WriteAllText(Path.Combine(path, DateTime.UtcNow.Ticks.ToString("X") + "_" + error.HResult + ".txt"), error.ToString());
+                    File.WriteAllText(Path.Combine(path, DateTime.UtcNow.Ticks.ToString("X16") + "_" + error.HResult + ".txt"), error.ToString());
                     var files = (new DirectoryInfo(path)).GetFileSystemInfos("*.txt");
                     var orderedFiles = files.OrderBy(f => f.CreationTime).Reverse().ToArray();
                     // Keep 1024 errors

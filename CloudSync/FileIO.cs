@@ -354,8 +354,15 @@ namespace CloudSync
                     {
                         if (decrypt)
                         {
+                            var tmpDecryption = source + ".decrypted";
+                            File.Delete(tmpDecryption);
+                            var sourceFIleInfo = new FileInfo(source);
+                            sourceFIleInfo.Decrypt(tmpDecryption, context);
+                            var tmpDecryptionFileInfo = new FileInfo(tmpDecryption);                            
+                            tmpDecryptionFileInfo.LastWriteTimeUtc = sourceFIleInfo.LastWriteTimeUtc;
                             File.Delete(target);
-                            new FileInfo(source).Decrypt(target, context);
+                            File.Move(tmpDecryption, target);
+                            sourceFIleInfo.Delete();
                         }
                         else
                             File.Move(source, target);
@@ -364,6 +371,7 @@ namespace CloudSync
                     }
                     catch (IOException ex)
                     {
+                        Debugger.Break();
                         exception = ex;
                         Thread.Sleep(pauseBetweenAttempts);
                     }

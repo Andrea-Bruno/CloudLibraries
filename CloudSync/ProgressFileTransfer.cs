@@ -10,11 +10,7 @@ namespace CloudSync
     /// </summary>
     public class ProgressFileTransfer : IDisposable
     {
-        public ProgressFileTransfer(Sync context)
-        {
-            Context = context;
-        }
-        private readonly Sync Context;
+
         private readonly Dictionary<ulong, DateTime> TimeoutChunkFileToTransfer = [];
         /// <summary>
         /// Property indicating the number of file transfers currently in progress

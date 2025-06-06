@@ -9,7 +9,7 @@ namespace CloudSync
         // =================== Events about the current remote status =====================
         // ===============================================================================
 
-        private void OnNotify(ulong? fromUserId, Notice notice)
+        internal void OnNotify(ulong? fromUserId, Notice notice)
         {
             RemoteStatus = notice;
             if (OnNotification != null)
@@ -24,12 +24,15 @@ namespace CloudSync
         // ===============================================================================
 
         public SyncStatus LocalSyncStatus { get; private set; }
-        public int PendingFiles => Spooler.PendingOperations;
+        public int PendingFiles => ClientToolkit?.Spooler?.PendingOperations ?? 0;
 
         public enum SyncStatus
         {
             Undefined,
+            Active,
+            Analysing,
             Pending,
+            UpToDate,
             Monitoring,
             RemoteDriveOverLimit,
         }
@@ -44,9 +47,8 @@ namespace CloudSync
                 LocalSyncStatus = localSyncStatus;
                 if (OnLocalSyncStatusChanges != null)
                     new Thread(() => OnLocalSyncStatusChanges?.Invoke(LocalSyncStatus, PendingFiles)).Start();
-                if (!SyncIsInPending)
-                    ClientRequestSynchronization(); //when synced, try syncing again to verify that no files changed while running commands in the spooler
-                RestartTimerClientRequestSynchronization();
+                if (ClientToolkit?.SyncIsInPending == false)
+                    ClientToolkit?.RestartTimerClientRequestSynchronization(); //when synced, try syncing again to verify that no files changed while running commands in the spooler
             }
         }
 
@@ -79,10 +81,10 @@ namespace CloudSync
         // ===============================================================================
 
 
-        public delegate void OnCommandEventHandler(ulong? userId, Commands command, string infoData, bool isOutput);
+        public delegate void OnCommandEventHandler(ulong? userId, Commands command, string? infoData, bool isOutput);
         public event OnCommandEventHandler OnCommandEvent;
 
-        internal void RaiseOnCommandEvent(ulong? userId, Commands command, string infoData = null, bool isOutput = false)
+        internal void RaiseOnCommandEvent(ulong? userId, Commands command, string? infoData = null, bool isOutput = false)
         {
             if (OnCommandEvent != null)
                 new Thread(() => OnCommandEvent?.Invoke(userId, command, infoData, isOutput)).Start();

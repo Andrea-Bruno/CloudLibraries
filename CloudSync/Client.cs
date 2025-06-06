@@ -70,7 +70,7 @@ namespace CloudSync
         /// <summary>
         /// True if this client is currently connected
         /// </summary>
-        public bool IsConnected => (DateTime.UtcNow - LastInteraction).TotalMinutes <= Sync.CheckSyncEveryMinutes;
+        public bool IsConnected => (DateTime.UtcNow - LastInteraction).TotalMinutes <= ClientToolkit.recheckSyncEveryMinutes;
 
         /// <summary>
         /// Indicates the type of client, i.e. how it operates and its purpose

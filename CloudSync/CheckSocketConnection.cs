@@ -9,9 +9,12 @@ namespace CloudSync
             try
             {
                 var ip = fromPublicIp ? GetPublicIpAddress() : GetLocalIpAddress();
-                using var client = new TcpClient();
+                using var client = new TcpClient
+                {
+                    LingerState = new LingerOption(true, 0), // Close the connection immediately after the Close() method
+                    NoDelay = true, // Reduces latency
+                };
                 return client.ConnectAsync(ip.ToString(), port).Wait(500);
-
             }
             catch (SocketException)
             {
