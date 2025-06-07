@@ -163,16 +163,14 @@ namespace CloudSync
         public readonly string CloudRoot;
         public string AppDataPath => Path.Combine(CloudRoot, PersistentFileIdList.CloudCacheDirectory);
 
-        public int ConcurrentOperations()
+        public int CurrentConcurrentSpoolerOperations()
         {
-            return SendingInProgress == null
-                ? 0
-                : SendingInProgress.TransferInProgress + ReceptionInProgress.TransferInProgress + PendingConfirmation;
+            return SendingInProgress == null ? 0 : SendingInProgress.TransferInProgress + ReceptionInProgress.TransferInProgress + PendingConfirmation;
         }
 
         public bool IsTransferring()
         {
-            return ConcurrentOperations() > 0;
+            return CurrentConcurrentSpoolerOperations() > 0;
         }
 
         public static readonly ushort AppId = BitConverter.ToUInt16(Encoding.ASCII.GetBytes("sync"), 0);
@@ -269,7 +267,7 @@ namespace CloudSync
 
         public void ExecuteNext()
         {
-            ClientToolkit?.Spooler.ExecuteNext();
+            ClientToolkit?.Spooler.ExecuteNext(true);
         }
 
         internal void OnUpdateFileIdList(ScopeType scope, ulong user, List<FileId> fileIdList)

@@ -15,6 +15,7 @@ namespace CloudSync
         {
             Context = context;
             SpoolerStarterTimer = new Timer((x) => { ExecuteNext(); }, null, Timeout.Infinite, Timeout.Infinite);
+            SpoolerUnlockTimer = new Timer((x) => { TryUnlockSpooler(); }, null, Timeout.Infinite, Timeout.Infinite);
         }
 
         private readonly Sync Context;
@@ -132,25 +133,50 @@ namespace CloudSync
         /// <summary>
         /// Maximum number of concurrent operations allowed
         /// </summary>
-        public static int MaxConcurrentOperations = 1;
+        public static int MaxConcurrentOperations = 3;
 
 
         /// <summary>
         /// Schedules the execution of the next operation after a delay
         /// </summary>
-        public void SpoolerRun() => SpoolerStarterTimer.Change(1000, Timeout.Infinite);
+        public void SpoolerRun() => SpoolerStarterTimer.Change(5000, Timeout.Infinite);
         private readonly Timer SpoolerStarterTimer;
+
+        /// <summary>
+        /// In case the connection is lost, or the router is offline, and there are scheduled jobs still in the spooler, this timer helps to verify the connection is restored and restart the spooler.
+        /// </summary>
+        /// <param name="enable"></param>
+        public void SpoolerUnlock(bool enable)
+        {
+            var timespan = enable ? TimeSpan.FromMinutes(5) : Timeout.InfiniteTimeSpan;
+            SpoolerUnlockTimer.Change(timespan, timespan);
+        }
+
+        private readonly Timer SpoolerUnlockTimer;
+        private void TryUnlockSpooler()
+        {
+            if (IsPending && Context.CurrentConcurrentSpoolerOperations() == 0)
+            {
+                Context.StatusNotification(null, Sync.Status.Ready);
+            }
+        }
 
         /// <summary>
         /// Executes the next operation in the queue
         /// </summary>
-        public void ExecuteNext()
+        public void ExecuteNext(bool forceExecution = false)
         {
-            Thread.Sleep(1000);
             lock (ToDoOperations)
-            {
+            {               
                 Context.RaiseOnStatusChangesEvent(ToDoOperations.Count == 0 ? Sync.SyncStatus.Monitoring : Sync.SyncStatus.Pending);
-                for (int i = Context.ConcurrentOperations(); i < MaxConcurrentOperations; i++)
+                var start = Context.CurrentConcurrentSpoolerOperations();
+                var end = MaxConcurrentOperations;
+                if (forceExecution)
+                {
+                    start = 0;
+                    end = 1;
+                }
+                for (int i = start; i < end; i++)
                 {
                     if (ToDoOperations.Count > 0)
                     {
@@ -185,9 +211,15 @@ namespace CloudSync
             }
             if (ToDoOperations.Count == 0)
             {
+                SpoolerUnlock(false);
+
                 Context.PendingConfirmation = 0;
                 StartSyncUtc = default;
                 Executed = 0;
+            }
+            else
+            {
+                SpoolerUnlock(true);
             }
         }
 
@@ -312,6 +344,7 @@ namespace CloudSync
             {
                 // Dispose managed resources
                 SpoolerStarterTimer?.Dispose();
+                SpoolerUnlockTimer?.Dispose();
                 Clear();
             }
 

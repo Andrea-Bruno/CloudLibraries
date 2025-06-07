@@ -1,88 +1,89 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
 
 namespace CloudSync
 {
-    /// <summary>
-    /// Class that controls file transfer in progress and timeout of the operation
-    /// </summary>
     public class ProgressFileTransfer : IDisposable
     {
-
         private readonly Dictionary<ulong, DateTime> TimeoutChunkFileToTransfer = [];
+
         /// <summary>
-        /// Property indicating the number of file transfers currently in progress
+        /// Returns the number of ongoing file transfers
         /// </summary>
         public int TransferInProgress
         {
             get
             {
-                RemoveOverTimeout();
+                RemoveOverTimeout(); // Ensure expired transfers are cleaned up
                 return TimeoutChunkFileToTransfer.Count;
             }
         }
-        /// <summary>
-        /// Counter that indicates how many transfers have failed (timeout failure could indicate an unsuitable data line or no connection)
-        /// </summary>
-        public int FailedByTimeout { get; private set; }
 
         /// <summary>
-        /// Method that is called when the file transfer has completed
+        /// Number of transfers failed due to timeout
         /// </summary>
-        /// <param name="hashFileName">Hash file</param>
-        /// <param name="userId">Target user ID</param>
-        /// <param name="executeNext">If true, then execute the next operation in spooler</param>
+        public int FailedByTimeout
+        {
+            get
+            {
+                RemoveOverTimeout(); // Ensure expired transfers are accounted for
+                return _failedByTimeout;
+            }
+        }
+        private int _failedByTimeout = 0;
+
+        /// <summary>
+        /// Mark a file transfer as completed and remove its timeout entry
+        /// </summary>
         public void Completed(ulong hashFileName, ulong? userId = null, bool executeNext = true)
         {
             lock (TimeoutChunkFileToTransfer)
-                if (TimeoutChunkFileToTransfer.ContainsKey(hashFileName))
-                {
-                    TimeoutChunkFileToTransfer.Remove(hashFileName);
-                }
-            //if (executeNext)
-            //    Context.Spooler.ExecuteNext(userId);
+            {
+                TimeoutChunkFileToTransfer.Remove(hashFileName);
+            }
         }
+
         /// <summary>
-        /// When file transfer starts, this method sets the timeout. When the timeout expires, the transfer will be considered failed.
+        /// Set the timeout for a new file transfer operation
         /// </summary>
-        /// <param name="hashFileName">Hasfile</param>
-        /// <param name="chunkLength">Length of data to send</param>
         public void SetTimeout(ulong hashFileName, int chunkLength = Util.DefaultChunkSize)
         {
             var timeout = Util.DataTransferTimeOut(chunkLength);
             lock (TimeoutChunkFileToTransfer)
             {
-                if (TimeoutChunkFileToTransfer.ContainsKey(hashFileName))
-                    TimeoutChunkFileToTransfer.Remove(hashFileName);
-                TimeoutChunkFileToTransfer.Add(hashFileName, DateTime.UtcNow.Add(timeout));
-            }
-            // https://stackoverflow.com/questions/5230897/can-i-dispose-a-threading-timer-in-its-callback
-            lock (Timers)
-            {
-                if (Disposed)
-                    return;
-                var timer = new Timer(o =>
-                {
-                    var t = (Timer)o;
-                    lock (Timers)
-                    {
-                        _ = Timers.Remove(t);
-                    }
-                    t.Dispose();
-                    RemoveOverTimeout();
-                });
-                timer.Change((int)timeout.TotalMilliseconds + 1000, Timeout.Infinite);
-                Timers.Add(timer);
+                TimeoutChunkFileToTransfer[hashFileName] = DateTime.UtcNow.Add(timeout);
             }
         }
-        private readonly List<Timer> Timers = [];
 
         /// <summary>
-        /// Returns a descriptive information that specifies how long it is to timeout for operations in progress
+        /// Remove all file transfers that exceeded their timeout limit
         /// </summary>
-        /// <returns>How long before the timeout (description)</returns>
+        private void RemoveOverTimeout()
+        {
+            var expiredKeys = new List<ulong>();
+
+            lock (TimeoutChunkFileToTransfer)
+            {
+                foreach (var kvp in TimeoutChunkFileToTransfer)
+                {
+                    if (DateTime.UtcNow >= kvp.Value)
+                    {
+                        expiredKeys.Add(kvp.Key);
+                        _failedByTimeout++;
+                    }
+                }
+
+                // Remove expired entries from the dictionary
+                foreach (var key in expiredKeys)
+                {
+                    TimeoutChunkFileToTransfer.Remove(key);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns a descriptive information specifying time remaining for operations in progress
+        /// </summary>
         public string TimeOutInfo()
         {
             string result = null;
@@ -96,46 +97,24 @@ namespace CloudSync
                 }
             return result ?? "No transfer in progress";
         }
-        private void RemoveOverTimeout()
-        {
-            var expired = new List<ulong>();
-            lock (TimeoutChunkFileToTransfer)
-                foreach (var key in TimeoutChunkFileToTransfer.Keys)
-                {
-                    if (DateTime.UtcNow >= TimeoutChunkFileToTransfer[key])
-                    {
-                        expired.Add(key);
-                        FailedByTimeout++;
-                    }
-                }
-            foreach (var key in expired)
-                Completed(key, executeNext: false);
-        }
 
+        /// <summary>
+        /// Stop all active transfers
+        /// </summary>
         public void Stop()
         {
             lock (TimeoutChunkFileToTransfer)
             {
-                foreach (var key in TimeoutChunkFileToTransfer.Keys)
-                {
-                    Completed(key, executeNext: false);
-                }
                 TimeoutChunkFileToTransfer.Clear();
             }
         }
-
-        public bool Disposed;
 
         /// <summary>
         /// Dispose the instance of the object
         /// </summary>
         public void Dispose()
         {
-            Disposed = true;
-            lock (Timers)
-            {
-                Timers.ToList().ForEach(timer => { timer.Change(Timeout.Infinite, Timeout.Infinite); timer.Dispose(); });
-            }
+            TimeoutChunkFileToTransfer.Clear();
         }
     }
 }

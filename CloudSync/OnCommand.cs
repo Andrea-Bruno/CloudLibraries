@@ -558,6 +558,8 @@ namespace CloudSync
                         onCommandEvent(status.ToString());
                         if (status == Status.Busy)
                             return;
+                        if (IsServer)
+                            StatusNotification(null, Sync.Status.Ready);
                     }
                     #endregion
 

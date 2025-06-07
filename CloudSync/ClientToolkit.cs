@@ -203,7 +203,7 @@ namespace CloudSync
         /// Gets whether there are pending synchronization operations
         /// </summary>
         internal bool SyncIsInPending => Context.RemoteStatus != Notice.Synchronized ||
-                                       Context.ConcurrentOperations() != 0 ||
+                                       Context.CurrentConcurrentSpoolerOperations() != 0 ||
                                        Context.LocalSyncStatus != SyncStatus.Monitoring ||
                                        Spooler.IsPending;
 
