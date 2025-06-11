@@ -133,7 +133,7 @@ namespace CloudSync
         /// <summary>
         /// Maximum number of concurrent operations allowed
         /// </summary>
-        public static int MaxConcurrentOperations = 3;
+        public static int MaxConcurrentOperations = 1;
 
 
         /// <summary>

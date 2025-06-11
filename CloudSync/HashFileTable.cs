@@ -179,7 +179,12 @@ namespace CloudSync
                     if (unloadTimer == null)
                     {
                         var saveTimeSpan = Context.IsServer ? TimeSpan.FromMinutes(4) : TimeSpan.FromSeconds(15);
+#if NET6_0
+                        unloadTimer = new Timer();
+                        unloadTimer.Interval = saveTimeSpan.TotalMilliseconds;
+#else
                         unloadTimer = new Timer(saveTimeSpan);
+#endif
                         unloadTimer.Elapsed += (sender, e) => SerializeToDisk();
                         unloadTimer.AutoReset = false; // Ensure the timer only triggers once unless restarted
                     }

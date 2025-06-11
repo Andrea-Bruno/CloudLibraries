@@ -149,14 +149,14 @@ namespace CloudBox
         /// </summary>
         public string Name
         {
-            get { return Context.SecureStorage.Values.Get(nameof(Name), null); }
+            get { return Context?.SecureStorage.Values.Get(nameof(Name), null); }
             set { Context.SecureStorage.Values.Set(nameof(Name), value); }
         }
 
         private int _StorageLimitGB;
         public int StorageLimitGB
         {
-            get { return Context.SecureStorage.Values.Get(nameof(StorageLimitGB), -1); }
+            get { return Context == null ? 0 : Context.SecureStorage.Values.Get(nameof(StorageLimitGB), -1); }
             set { Context.SecureStorage.Values.Set(nameof(StorageLimitGB), value); }
         }
 
@@ -237,8 +237,8 @@ namespace CloudBox
         /// <param name="passphrase">If you want to recover the account, you can specify the passphrase</param>
         /// <returns>True for Successful, or false if something went wrong</returns>  
         public Context CreateContext(string routerEntryPoint, string passphrase = null)
-        {
-            var isQRCode = !routerEntryPoint.Contains('.');
+        {        
+            var isQRCode = !routerEntryPoint.Contains('.') && !routerEntryPoint.StartsWith("pipe:");
             string serverPublicKey = null;
             if (isQRCode)
             {

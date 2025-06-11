@@ -70,8 +70,8 @@ namespace CloudSync
             if (tryRestore)
             {
                 var oldDownload = part == 1 ? new FileInfo(transmittedFile) : null;
-                if (oldDownload?.Exists == true)
-                {
+                if (oldDownload?.Exists == true && oldDownload?.Length !=0)
+                {                    
                     // Verify existing file matches expected chunk size
                     if (chunkData != null && chunkData.LongLength > 0 && (oldDownload.Length % chunkData.LongLength) == 0)
                     {

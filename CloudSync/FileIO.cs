@@ -23,8 +23,12 @@ namespace CloudSync
             }
             try
             {
+#if NET6_0
+                throw new NotSupportedException();
+#else
                 var uintMode = PermissionsBase10ToUnixOctal(permissionsMode);
                 File.SetUnixFileMode(filePath, (UnixFileMode)uintMode);
+#endif
             }
             catch (Exception e)
             {
