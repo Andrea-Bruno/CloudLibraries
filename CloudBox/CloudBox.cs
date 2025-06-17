@@ -255,7 +255,10 @@ namespace CloudBox
 #endif
             // Creates a license activator if an OEM license is set during initialization
             var signLicense = string.IsNullOrEmpty(LicenseOEM) ? null : new OEM(LicenseOEM);
-            Context = new Context(routerEntryPoint, NetworkName, modality: Modality.Server, privateKeyOrPassphrase: passphrase, licenseActivator: signLicense, instanceId: ID.ToString())
+            var modality = Modality.Server;
+            if (!IsServer)
+                modality &= ~Modality.StayConnected; // remove the "stay connected" modality for clients
+            Context = new Context(routerEntryPoint, NetworkName, modality: modality, privateKeyOrPassphrase: passphrase, licenseActivator: signLicense, instanceId: ID.ToString())
             {
                 OnRouterConnectionChange = OnRouterConnectionChangeEvent,
                 OnCommunicationErrorEvent = OnCommunicationError
@@ -560,7 +563,6 @@ namespace CloudBox
                     AddTx("Public Key", context?.My.GetPublicKey());
                     if (ShowEntryPoint)
                         AddTx("Entry point (router address)", context?.EntryPoint.ToString());
-                    AddTx("Keep Alive Failures", context?.KeepAliveFailures);
                 }
 
                 if (LicenseOEM != null)
@@ -588,7 +590,6 @@ namespace CloudBox
                 if (context != null)
                 {
                     AddTx("# CHANNEL:");
-                    AddTx("Last keep alive check", context?.LastKeepAliveCheck);
                     AddTx("Last IN (UTC)", context?.LastIN);
                     AddTx("Last command IN", context?.LastCommandIN);
                     AddTx("Last OUT (UTC)", context?.LastOUT);
@@ -817,7 +818,7 @@ namespace CloudBox
 
         private bool SendSyncCommand(ulong? toContactId, ushort command, byte[][] values)
         {
-            if (Context?.IsConnected != true)
+            if (Context?.HasConnectivity != true)
                 return false;
             var sendToContact = ServerCloud;
             if (sendToContact == null && toContactId != null)
@@ -864,7 +865,7 @@ namespace CloudBox
                     parameters = [.. new[] { data }];
                 }
 
-                if (appId == CloudAppId) // The server application that communicates with smartphones
+                if (appId == CloudAppId) // The server application that communicates with device
                 {
                     var answeredToCommand = (Command)command;
                     OnCommandEvent?.Invoke(message.AuthorId, answeredToCommand, parameters);

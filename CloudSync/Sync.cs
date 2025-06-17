@@ -251,7 +251,7 @@ namespace CloudSync
                     }
                 }
                 hashTable = _HashFileTable;
-                ClientToolkit?.RestartTimerClientRequestSynchronization(); // It's already logged in, so start syncing immediately
+                // ClientToolkit?.RestartTimerClientRequestSynchronization(); // It's already logged in, so start syncing immediately
                 return true;
             }
             catch (Exception ex)

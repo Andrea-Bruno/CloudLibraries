@@ -37,7 +37,12 @@ namespace CloudSync
             OnCommandRunning++;
             try
             {
-                OnCommand(fromUserId, (Commands)command, values);
+                bool notRestartSync = false;
+                OnCommand(fromUserId, (Commands)command, ref notRestartSync, values);
+                if (!notRestartSync)
+                    // Restart synchronization timer on command receipt
+                    ClientToolkit?.RestartTimerClientRequestSynchronization();
+
             }
             catch (Exception ex)
             {
@@ -77,7 +82,7 @@ namespace CloudSync
         /// <param name="fromUserId">ID of the user sending the command</param>
         /// <param name="command">Command type</param>
         /// <param name="values">Command parameters</param>
-        private void OnCommand(ulong? fromUserId, Commands command, params byte[][] values)
+        private void OnCommand(ulong? fromUserId, Commands command, ref bool notRestartSync, params byte[][] values)
         {
             bool onCommandEventFlag = false;
 
@@ -148,9 +153,6 @@ namespace CloudSync
                 }
                 else
                 {
-                    // Restart synchronization timer on command receipt
-                    ClientToolkit?.RestartTimerClientRequestSynchronization();
-
                     #region Notification
                     if (command == Commands.Notification)
                     {
@@ -170,6 +172,7 @@ namespace CloudSync
 
                         if (notice == Notice.Synchronized)
                         {
+                            notRestartSync = true; // Do not restart sync timer on synchronization completion
                             if (_HashFileTable?.ResetIsRequired == true)
                             {
                                 // Reset hash table for more secure sync
