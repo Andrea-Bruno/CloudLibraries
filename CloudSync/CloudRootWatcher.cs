@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 
@@ -38,11 +39,17 @@ namespace CloudSync
             _checkPendingTimer.Stop();
             foreach (var fileName in PendingFiles.ToArray())
             {
-                if (Util.FileIsAvailable(fileName, out _))
+                if (Util.FileIsAvailable(fileName, out _, out bool notExists))
                 {
                     PendingFiles.Remove(fileName);
                     // If the file is no longer locked, notify the change
                     OnChanged(fileName);
+                }
+                if (notExists)
+                {
+                    PendingFiles.Remove(fileName);
+                    // If the file does not exist anymore, treat it as deleted
+                    OnDeleted(fileName);
                 }
             }
             if (PendingFiles.Count != 0)
@@ -215,7 +222,7 @@ namespace CloudSync
         /// <param name="fileName">Path of the changed item</param>
         private void OnChanged(string fileName, bool isOnCreated = false)
         {
-            if (!Util.FileIsAvailable(fileName, out var fileSystemInfo))
+            if (!Util.FileIsAvailable(fileName, out var fileSystemInfo, out _))
             {
                 PendingFiles.Add(fileName);
                 _checkPendingTimer.Start();

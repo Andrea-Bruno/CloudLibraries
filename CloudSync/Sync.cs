@@ -270,6 +270,11 @@ namespace CloudSync
             ClientToolkit?.Spooler.ExecuteNext(true);
         }
 
+        public void SendReadyMessage()
+        {
+            StatusNotification(null, Sync.Status.Ready);
+        }
+
         internal void OnUpdateFileIdList(ScopeType scope, ulong user, List<FileId> fileIdList)
         {
             if (scope == ScopeType.Deleted)

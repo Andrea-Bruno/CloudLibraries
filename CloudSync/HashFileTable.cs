@@ -284,10 +284,10 @@ namespace CloudSync
 
         public bool Add(string fullFileName)
         {
-            if (Util.FileIsAvailable(fullFileName, out var fileSystemInfo))
+            if (Util.FileIsAvailable(fullFileName, out var fileSystemInfo, out bool notExists))
             {
                 return Add(fileSystemInfo);
-            }
+            }            
             HasChanged = true; // If the file is not available, regenerate the hash table
             Debugger.Break(); // The file does not exist or is not available, this should not happen!! Investigate!
             return false;
@@ -516,7 +516,7 @@ namespace CloudSync
                     LoadFailure = true;
                     Dictionary.Clear();
                     UsedSpace = 0;
-
+                    Debugger.Break();
                     try
                     {
                         if (File.Exists(filePath))

@@ -167,7 +167,7 @@ namespace CloudSync
         public void ExecuteNext(bool forceExecution = false)
         {
             lock (ToDoOperations)
-            {               
+            {
                 Context.RaiseOnStatusChangesEvent(ToDoOperations.Count == 0 ? Sync.SyncStatus.Monitoring : Sync.SyncStatus.Pending);
                 var start = Context.CurrentConcurrentSpoolerOperations();
                 var end = MaxConcurrentOperations;
@@ -176,36 +176,45 @@ namespace CloudSync
                     start = 0;
                     end = 1;
                 }
-                for (int i = start; i < end; i++)
+                int i = start;
+                while (i < end)
                 {
-                    if (ToDoOperations.Count > 0)
+                    if (ToDoOperations.Count == 0)
+                        break;
+                    bool skip = false;
+                    var toDo = ToDoOperations.Values.First();
+                    RemoveOperation(toDo.FileId);
+                    if (toDo.Type == OperationType.SendFile)
                     {
-                        Executed++;
-                        var toDo = ToDoOperations.Values.ToArray()[0];
-                        RemoveOperation(toDo.FileId);
-                        if (toDo.Type == OperationType.SendFile)
+                        if (Context.GetHashFileTable(out var localHashes))
                         {
-                            if (Context.GetHashFileTable(out var localHashes))
+                            if (localHashes.TryGetValue(toDo.FileId.HashFile, out var fileSystemInfo))
                             {
-                                if (localHashes.TryGetValue(toDo.FileId.HashFile, out var fileSystemInfo))
-                                {
-                                    Context.SendFile(null, fileSystemInfo);
-                                }
+                                Context.SendFile(null, fileSystemInfo);
+                            }
+                            else
+                            {
                                 // the file has been modified or no longer exists
+                                skip = true;
                             }
                         }
-                        else if (toDo.Type == OperationType.RequestFile)
-                        {
-                            Context.RequestFile(null, toDo.FileId.HashFile);
-                        }
-                        else if (toDo.Type == OperationType.DeleteFile)
-                        {
-                            Context.DeleteFile(null, toDo.FileId.HashFile, toDo.FileId.UnixLastWriteTimestamp, null);
-                        }
-                        else if (toDo.Type == OperationType.DeleteDirectory)
-                        {
-                            Context.DeleteDirectory(null, toDo.FileId.HashFile, null);
-                        }
+                    }
+                    else if (toDo.Type == OperationType.RequestFile)
+                    {
+                        Context.RequestFile(null, toDo.FileId.HashFile);
+                    }
+                    else if (toDo.Type == OperationType.DeleteFile)
+                    {
+                        Context.DeleteFile(null, toDo.FileId.HashFile, toDo.FileId.UnixLastWriteTimestamp, null);
+                    }
+                    else if (toDo.Type == OperationType.DeleteDirectory)
+                    {
+                        Context.DeleteDirectory(null, toDo.FileId.HashFile, null);
+                    }
+                    if (!skip)
+                    {
+                        Executed++;
+                        i++;
                     }
                 }
             }

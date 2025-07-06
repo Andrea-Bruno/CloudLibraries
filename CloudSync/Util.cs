@@ -349,7 +349,7 @@ namespace CloudSync
             return !fileSystemInfo.Name.StartsWith("~") && !fileSystemInfo.Name.StartsWith(".") && !fileSystemInfo.Name.EndsWith("_") && !excludeName && !excludeExtension;
         }
 
-        public static bool FileIsAvailable(string filePath, [NotNullWhen(true)] out FileSystemInfo? fileSystemInfo)
+        public static bool FileIsAvailable(string filePath, [NotNullWhen(true)] out FileSystemInfo? fileSystemInfo, out bool notExists)
         {
             bool FileExists(string fullFileName, [NotNullWhen(true)] out FileSystemInfo? fileSystemInfo)
             {
@@ -357,6 +357,7 @@ namespace CloudSync
                 if (directoryInfo.Exists)
                 {
                     fileSystemInfo = directoryInfo;
+                    
                     return true;
                 }
                 FileInfo fileInfo = new FileInfo(fullFileName);
@@ -368,7 +369,9 @@ namespace CloudSync
                 fileSystemInfo = null;
                 return false;
             }
-            if (FileExists(filePath, out fileSystemInfo))
+            var exists = FileExists(filePath, out fileSystemInfo);
+            notExists = !exists;
+            if (exists)
             {
                 if (fileSystemInfo is not FileInfo fileInfo)
                     return true;
