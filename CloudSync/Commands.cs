@@ -147,7 +147,19 @@ namespace CloudSync
         /// <summary>
         /// Counter for pending confirmations
         /// </summary>
-        internal int PendingConfirmation;
+        internal int PendingConfirmation
+        {
+            get
+            {   
+                if (DateTime.UtcNow - _PendingConfirmationTime > _PendingConfirmationTimeout)
+                    _PendingConfirmation = 0;
+                return _PendingConfirmation;
+            }
+            set { _PendingConfirmation = value; _PendingConfirmationTime = DateTime.UtcNow; }
+        }
+        private int _PendingConfirmation { get; set; }
+        private DateTime _PendingConfirmationTime;
+        private TimeSpan _PendingConfirmationTimeout = Spooler.SpoolerUnlockTimespan / 5; // this value must be < of Spooler.SpoolerUnlockTimespan
 
         /// <summary>
         /// Sends a notification to the specified user

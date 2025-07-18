@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using static CloudSync.Sync;
+using static System.Net.WebRequestMethods;
 
 namespace CloudSync
 {
@@ -356,7 +358,11 @@ namespace CloudSync
                         if (Context.UserId != userId)
                         {
                             // Load the updated deleted files list from another user
-                            Context.ClientToolkit?.LoadDeletedFilePersistentList(fileName);
+                            try
+                            {
+                                Context.ClientToolkit?.LoadDeletedFilePersistentList(fileName);
+                            }
+                            catch { }
                         }
                     }
                 }
@@ -380,30 +386,56 @@ namespace CloudSync
             {
                 var savedHashFileTable = new HashFileTable(Context, HashFileTable.LoadMode.LoadFormFile);
                 FlagLogin = false;
-
+                List<string> directoriesRemoved = [];
                 // Only process deletions if cloud folder isn't empty and previous state loaded successfully
                 if (newHashFileTable.Count > 0 && !savedHashFileTable.LoadFailure)
                 {
                     // Check for deleted files/directories
-                    foreach (var element in savedHashFileTable.KeyTimestampCollection())
+                    foreach (var element in savedHashFileTable.SortedElements())
                     {
                         if (!newHashFileTable.ContainsKey(element.Key))
                         {
-                            if (element.UnixLastWriteTimestamp == default)
-                            {
-                                // Queue directory deletion
-                                Spooler.AddOperation(Spooler.OperationType.DeleteDirectory, element.Key);
-                            }
-                            else
+                            var fileIsInsideRemovedDirectories = directoriesRemoved.Any(dir => IsFileInsidePath(dir, element.FileName));
+                            if (element.UnixLastWriteTimestamp != default)
                             {
                                 // Queue file deletion and add to persistent list
                                 var fileId = FileId.GetFileId(element.Key, element.UnixLastWriteTimestamp);
                                 AddDeletedFileToPersistentList(fileId);
-                                Spooler.AddOperation(Spooler.OperationType.DeleteFile, element.Key, element.UnixLastWriteTimestamp);
+                                if (!fileIsInsideRemovedDirectories)
+                                {
+                                    Spooler.AddOperation(Spooler.OperationType.DeleteFile, element.Key, element.UnixLastWriteTimestamp);
+                                }
+                            }
+                            else if (!fileIsInsideRemovedDirectories)
+                            {
+                                directoriesRemoved.Add(element.FileName);
+                                // Queue directory deletion
+                                Spooler.AddOperation(Spooler.OperationType.DeleteDirectory, element.Key);
                             }
                         }
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// Returns true if the fullNameFile is located inside the specified path.
+        /// </summary>
+        private static bool IsFileInsidePath(string path, string fullNameFile)
+        {
+            try
+            {
+                // Normalize both paths to their absolute form
+                string normalizedPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                string normalizedFile = Path.GetFullPath(fullNameFile);
+
+                // Check if the file path starts with the directory path
+                return normalizedFile.StartsWith(normalizedPath, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                // In case of invalid paths or other IO issues
+                return false;
             }
         }
 

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Timers;
@@ -553,6 +554,35 @@ namespace CloudSync
                 return elements;
             }
         }
+
+        /// <summary>
+        /// Returns all elements in tuples with Key, Filename, UnixLastWriteTimestamp sorted by "is directory" (UnixLastWriteTimestamp = default) and filename length
+        /// </summary>
+        /// <returns></returns>
+        public (ulong Key, string FileName, uint UnixLastWriteTimestamp)[] SortedElements()
+        {
+            lock (this)
+            {
+                EnsureDictionaryLoaded();
+                var elements = new (ulong Key, string FileName, uint UnixLastWriteTimestamp)[Dictionary.Count];
+                int index = 0;
+                foreach (var kvp in Dictionary)
+                {
+                    elements[index] = (kvp.Key, kvp.Value.FullName, kvp.Value.UnixLastWriteTimestamp);
+                    index++;
+                }
+
+                // Sort: first group elements with UnixLastWriteTimestamp = default (0), 
+                // then within each group, sort by FileName length in ascending order
+                var sorted = elements
+                    .OrderBy(e => e.UnixLastWriteTimestamp != default) // false (default) comes before true
+                    .ThenBy(e => e.FileName.Length)
+                    .ToArray();
+
+                return sorted;
+            }
+        }
+
 
         /// <summary>
         /// Returns the contained elements as a tuple containing both the file info and the last write date Utc (useful for getting the last write date Utc for files that have been deleted)

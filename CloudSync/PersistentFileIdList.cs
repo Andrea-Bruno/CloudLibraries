@@ -118,14 +118,15 @@ namespace CloudSync
         /// <returns>An instance of FileIdList.</returns>
         public static PersistentFileIdList Load(Sync context, string fullFileName)
         {
-            var fileName = Path.GetFileName(fullFileName);
-            var parts = fileName.Split('.');
+            string fileName = Path.GetFileName(fullFileName);
+            string[] parts = fileName.Split('.');
             if (parts.Length != 2)
                 return null;
             if (!ulong.TryParse(parts[0], out var userId))
                 return null;
             if (!Enum.TryParse(parts[1], out ScopeType scope))
                 return null;
+
             List<FileId> previousFileIdList = null;
             lock (instances)
             {
@@ -139,20 +140,44 @@ namespace CloudSync
 
             if (File.Exists(fullFileName))
             {
-                using var fileStream = new FileStream(fullFileName, FileMode.Open, FileAccess.Read);
-                using var binaryReader = new BinaryReader(fileStream);
-                while (fileStream.Position < fileStream.Length)
+                const int maxRetries = 5;
+                int delayMilliseconds = 300;
+
+                for (int attempt = 0; attempt < maxRetries; attempt++)
                 {
-                    var fileIdBytes = binaryReader.ReadBytes(12);
-                    var fileId = FileId.GetFileId(fileIdBytes);
-                    fileIdList.fileIdList.Add(fileId);
+                    try
+                    {
+                        using var fileStream = new FileStream(fullFileName, FileMode.Open, FileAccess.Read, FileShare.Read);
+                        using var binaryReader = new BinaryReader(fileStream);
+
+                        while (fileStream.Position < fileStream.Length)
+                        {
+                            byte[] fileIdBytes = binaryReader.ReadBytes(12);
+                            var fileId = FileId.GetFileId(fileIdBytes);
+                            fileIdList.fileIdList.Add(fileId);
+                        }
+
+                        break; // Successful read
+                    }
+                    catch (IOException)
+                    {
+                        if (attempt == maxRetries - 1)
+                            throw;
+                        Thread.Sleep(delayMilliseconds);
+                        delayMilliseconds *= 2; // Exponential backoff
+                    }
                 }
             }
-            var newFileIdList = previousFileIdList == null ? fileIdList.fileIdList : fileIdList.fileIdList.Except(previousFileIdList).ToList();
+
+            var newFileIdList = previousFileIdList == null
+                ? fileIdList.fileIdList
+                : fileIdList.fileIdList.Except(previousFileIdList).ToList();
+
             OnLoad?.Invoke(scope, userId, newFileIdList);
 
             return fileIdList;
         }
+
 
         /// <summary>
         /// Initializes all saved instances of FileIdList.

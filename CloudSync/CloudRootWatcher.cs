@@ -222,6 +222,12 @@ namespace CloudSync
         /// <param name="fileName">Path of the changed item</param>
         private void OnChanged(string fileName, bool isOnCreated = false)
         {
+            if (fileName == null)
+            {
+                Debugger.Break(); // It happens on Linux, investigate!
+                return;
+            }
+
             if (!Util.FileIsAvailable(fileName, out var fileSystemInfo, out _))
             {
                 PendingFiles.Add(fileName);

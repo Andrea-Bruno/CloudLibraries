@@ -148,9 +148,11 @@ namespace CloudSync
         /// <param name="enable"></param>
         public void SpoolerUnlock(bool enable)
         {
-            var timespan = enable ? TimeSpan.FromMinutes(5) : Timeout.InfiniteTimeSpan;
+            var timespan = enable ? SpoolerUnlockTimespan : Timeout.InfiniteTimeSpan;
             SpoolerUnlockTimer.Change(timespan, timespan);
         }
+
+        internal static TimeSpan SpoolerUnlockTimespan => TimeSpan.FromMinutes(5);
 
         private readonly Timer SpoolerUnlockTimer;
         private void TryUnlockSpooler()

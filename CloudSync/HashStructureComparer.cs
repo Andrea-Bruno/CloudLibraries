@@ -22,6 +22,7 @@ namespace CloudSync
                 var toRemove = new List<ulong>();
 
                 // Remove unnecessary directory to server
+                // The TemporaryDeletedHashFileDictionary dictionary contains the locally deleted items
                 List<string> deletedDirectories = new List<string>();
                 foreach (var hash in remoteHashes.Keys)
                 {

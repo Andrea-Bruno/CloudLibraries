@@ -723,6 +723,10 @@ namespace CloudBox
                         }
                     }
                     defaultPath = GetStaticValue(nameof(defaultPath));
+#if DEBUG
+                    if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && defaultPath.StartsWith("C:"))
+                        defaultPath = null;
+#endif
                     if (string.IsNullOrEmpty(defaultPath))
                     {
                         string home;
