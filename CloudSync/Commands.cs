@@ -297,11 +297,6 @@ namespace CloudSync
         /// <param name="chunkPart">Current chunk number</param>
         private void SendChunkFile(ulong? toUserId, FileSystemInfo fileSystemInfo, uint chunkPart)
         {
-            if (!fileSystemInfo.Exists)
-            {
-                Debugger.Break();
-                return;
-            }
 
 #if RELEASE
             try
@@ -309,6 +304,14 @@ namespace CloudSync
 #endif
             if (RemoteDriveOverLimit)
                 return; // The remote disk is full, do not send any more data
+
+            if (!fileSystemInfo.Exists)
+            {
+                Debugger.Break();
+                // Execute next spooler operation if available
+                ClientToolkit?.Spooler.ExecuteNext();
+                return;
+            }
 
             if (fileSystemInfo is DirectoryInfo)
             {

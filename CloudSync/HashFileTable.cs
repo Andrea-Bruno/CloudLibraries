@@ -139,7 +139,7 @@ namespace CloudSync
         /// Dictionary that associates the hash with the FullNameFile
         /// </summary>
         private Dictionary<ulong, FileData> Dictionary = [];
-        private readonly struct FileData
+        public readonly struct FileData
         {
             public readonly string FullName;
             public readonly uint UnixLastWriteTimestamp;
@@ -307,6 +307,19 @@ namespace CloudSync
 
                 // Convert the file path into a FileSystemInfo object
                 return CreateFileSystemInfo(fileData);
+            }
+        }
+
+        public FileData GetFileData(ulong key)
+        {
+            lock (this)
+            {
+                EnsureDictionaryLoaded(); // Load the dictionary before locking
+                if (Dictionary.TryGetValue(key, out FileData fileData))
+                {
+                    return fileData;
+                }
+                return default;
             }
         }
 

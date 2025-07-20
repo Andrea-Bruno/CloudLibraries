@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 
 namespace CloudSync
@@ -34,23 +36,40 @@ namespace CloudSync
         /// Checks if there are any files pending for processing
         /// </summary>
         public bool IsPending => PendingFiles.Count > 0;
+
+        private int _isCheckingPending = 0;
+
         private void CheckPendingFiles(object sender, System.Timers.ElapsedEventArgs e)
         {
-            _checkPendingTimer.Stop();
-            foreach (var fileName in PendingFiles.ToArray())
+            if (Interlocked.CompareExchange(ref _isCheckingPending, 1, 0) != 0)
+                return;
+            try
             {
-                if (Util.FileIsAvailable(fileName, out _, out bool notExists))
+                _checkPendingTimer.Stop();
+                string[] files;
+                lock (PendingFiles)
+                    files = PendingFiles.ToArray();
+                foreach (var fileName in files)
                 {
-                    PendingFiles.Remove(fileName);
-                    // If the file is no longer locked, notify the change
-                    OnChanged(fileName);
+                    if (Util.FileIsAvailable(fileName, out _, out bool notExists))
+                    {
+                        lock (PendingFiles)
+                            PendingFiles.Remove(fileName);
+                        // If the file is no longer locked, notify the change
+                        OnChanged(fileName);
+                    }
+                    if (notExists)
+                    {
+                        lock (PendingFiles)
+                            PendingFiles.Remove(fileName);
+                        // If the file does not exist anymore, treat it as deleted
+                        OnDeleted(fileName);
+                    }
                 }
-                if (notExists)
-                {
-                    PendingFiles.Remove(fileName);
-                    // If the file does not exist anymore, treat it as deleted
-                    OnDeleted(fileName);
-                }
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _isCheckingPending, 0);
             }
             if (PendingFiles.Count != 0)
                 _checkPendingTimer.Start();
@@ -65,7 +84,7 @@ namespace CloudSync
         public void StopWatch()
         {
             if (Watcher != null)
-            Watcher.EnableRaisingEvents = false;
+                Watcher.EnableRaisingEvents = false;
         }
 
         /// <summary>
@@ -105,6 +124,7 @@ namespace CloudSync
                         {
                             if (!Util.CanBeSeen(Context, e.FullPath))
                                 return;
+                            LastCreatedHash = e.FullPath;
                             OnCreated(e.FullPath);
                             Context.ClientToolkit?.RestartTimerClientRequestSynchronization();
                         };
@@ -114,6 +134,11 @@ namespace CloudSync
                         {
                             if (!Util.CanBeSeen(Context, e.FullPath))
                                 return;
+                            if (LastCreatedHash == e.FullPath) // The event has already been generated with the creation of the file
+                            {
+                                LastCreatedHash = null;
+                                return;
+                            }
                             OnChanged(e.FullPath);
                             Context.ClientToolkit?.RestartTimerClientRequestSynchronization();
                         };
@@ -155,6 +180,10 @@ namespace CloudSync
                 return false;
             }
         }
+        /// <summary>
+        /// Prevents duplication of events for created files (Both Created and Changed events are created when a file is created, the Changed event is not necessary)
+        /// </summary>
+        private string? LastCreatedHash;
 
         #region Events associated with file operations
 
@@ -177,16 +206,17 @@ namespace CloudSync
 
         private void OnDeletedUnderlying(HashFileTable hashFileTable, string fullName, bool isDirectory, ulong hash, uint unixLastWriteTimestamp, bool removeSubdirectorycontents = false)
         {
-            Context.ClientToolkit?.TemporaryDeletedHashFileDictionary.Add(hash, fullName);
-            if ( isDirectory && removeSubdirectorycontents)
+            if (Context.ClientToolkit?.TemporaryDeletedHashFileDictionary.ContainsKey(hash) == false)
+                Context.ClientToolkit?.TemporaryDeletedHashFileDictionary.Add(hash, fullName);
+            if (isDirectory && removeSubdirectorycontents)
             {
                 // Handle directory deletion
                 var deleted = hashFileTable.RemoveDirectory(fullName);
                 foreach (var element in deleted)
                 {
                     if (hash != element.fileId.HashFile)
-                    // Recursively delete contents of the directory
-                    OnDeletedUnderlying(hashFileTable, element.fullName, element.fileId.IsDirectory, element.fileId.HashFile, element.fileId.UnixLastWriteTimestamp, false);
+                        // Recursively delete contents of the directory
+                        OnDeletedUnderlying(hashFileTable, element.fullName, element.fileId.IsDirectory, element.fileId.HashFile, element.fileId.UnixLastWriteTimestamp, false);
                 }
 
             }
@@ -206,7 +236,7 @@ namespace CloudSync
                 }
             }
         }
-        
+
         /// <summary>
         /// Handles creation of files or directories
         /// </summary>
@@ -230,7 +260,8 @@ namespace CloudSync
 
             if (!Util.FileIsAvailable(fileName, out var fileSystemInfo, out _))
             {
-                PendingFiles.Add(fileName);
+                lock (PendingFiles)
+                    PendingFiles.Add(fileName);
                 _checkPendingTimer.Start();
             }
             else
@@ -243,12 +274,28 @@ namespace CloudSync
                         var fileId = FileId.GetFileId(fileSystemInfo, Context);
                         Context.ClientToolkit?.RemoveDeletedFileFromPersistentList(fileId);
                     }
-
                 }
 
                 // Update the hash file table with the changed item
                 if (Context.GetHashFileTable(out var hashFileTable))
                 {
+                    if (isOnCreated == false && fileSystemInfo is FileInfo)
+                    {
+                        // If the data regarding the date of the last modification of the file has not changed, wait for the update
+                        if ((DateTime.UtcNow - Util.UnixTimestampToDateTime(fileSystemInfo.UnixLastWriteTimestamp())) > TimeSpan.FromSeconds(1))
+                        {
+                            var oldFileData = hashFileTable.GetFileData(fileSystemInfo.HashFileName(Context));
+#if DEBUG
+                            if (oldFileData.UnixLastWriteTimestamp == fileSystemInfo.UnixLastWriteTimestamp())
+                                Debugger.Break();
+#endif
+                            for (int i = 0; i < 3 && oldFileData.UnixLastWriteTimestamp == fileSystemInfo.UnixLastWriteTimestamp(); i++)
+                            {
+                                Thread.Sleep(200 + 200 * i);
+                                fileSystemInfo.Refresh();
+                            }
+                        }
+                    }
                     hashFileTable.Add(fileSystemInfo);
                 }
             }
