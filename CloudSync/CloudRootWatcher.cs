@@ -279,27 +279,38 @@ namespace CloudSync
                 // Update the hash file table with the changed item
                 if (Context.GetHashFileTable(out var hashFileTable))
                 {
-                    if (isOnCreated == false && fileSystemInfo is FileInfo)
+                    if (fileSystemInfo is FileInfo)
                     {
-                        // If the data regarding the date of the last modification of the file has not changed, wait for the update
-                        if ((DateTime.UtcNow - Util.UnixTimestampToDateTime(fileSystemInfo.UnixLastWriteTimestamp())) > TimeSpan.FromSeconds(1))
+                        if (isOnCreated == false)
                         {
-                            var oldFileData = hashFileTable.GetFileData(fileSystemInfo.HashFileName(Context));
-#if DEBUG
-                            if (oldFileData.UnixLastWriteTimestamp == fileSystemInfo.UnixLastWriteTimestamp())
-                                Debugger.Break();
-#endif
-                            for (int i = 0; i < 3 && oldFileData.UnixLastWriteTimestamp == fileSystemInfo.UnixLastWriteTimestamp(); i++)
+                            // If the data regarding the date of the last modification of the file has not changed, wait for the update
+                            if ((DateTime.UtcNow - Util.UnixTimestampToDateTime(fileSystemInfo.UnixLastWriteTimestamp())) > TimeSpan.FromSeconds(1))
                             {
-                                Thread.Sleep(200 + 200 * i);
-                                fileSystemInfo.Refresh();
+                                var oldFileData = hashFileTable.GetFileData(fileSystemInfo.HashFileName(Context));
+                                if (oldFileData.UnixLastWriteTimestamp == fileSystemInfo.UnixLastWriteTimestamp())
+                                {
+#if DEBUG
+                                    if (fileSystemInfo.FullName != LastFileChanged)
+                                        Debugger.Break();
+#endif
+                                    Thread.Sleep(50);
+                                    fileSystemInfo.Refresh();
+                                    if (oldFileData.UnixLastWriteTimestamp == fileSystemInfo.UnixLastWriteTimestamp())
+                                        return; // Nothing has changed
+                                }
                             }
                         }
+#if DEBUG
+                        LastFileChanged = fileSystemInfo.FullName;
+#endif
                     }
-                    hashFileTable.Add(fileSystemInfo);
+                    hashFileTable.Add(fileSystemInfo); // Update hash filetable
                 }
             }
         }
+#if DEBUG
+        private string LastFileChanged;
+#endif
 
         #endregion
 

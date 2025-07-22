@@ -589,7 +589,7 @@ namespace CloudBox
                 //addTx("Public IP", Util.PublicIpAddressInfo());
                 if (context != null)
                 {
-                    AddTx("# CHANNEL:");
+                    AddTx(" CHANNEL:");
                     AddTx("Last IN (UTC)", context?.LastIN);
                     AddTx("Last command IN", context?.LastCommandIN);
                     AddTx("Last OUT (UTC)", context?.LastOUT);
@@ -602,7 +602,7 @@ namespace CloudBox
                     if (sync?.ClientToolkit != null) // Ia a client
                         AddTx("Pending operations", sync?.ClientToolkit?.PendingOperations);
                     // Reception
-                    AddTx("# RECEPTION:");
+                    AddTx(" RECEPTION:");
                     AddTx("Last Command received",
                         sync.LastCommandReceived != default
                             ? (int)((DateTime.UtcNow - sync.LastCommandReceived).TotalSeconds) + " seconds ago"
@@ -612,7 +612,7 @@ namespace CloudBox
                     AddTx("Reception file in progress", sync.ReceptionInProgress.TransferInProgress);
                     AddTx("Reception timeout", sync.ReceptionInProgress.TimeOutInfo());
                     AddTx("Total received failed by timeout", sync.ReceptionInProgress.FailedByTimeout);
-                    AddTx("# SENDING:");
+                    AddTx(" SENDING:");
                     // Sending
                     AddTx("Last Command sent",
                         sync.LastCommandSent != default
@@ -724,8 +724,19 @@ namespace CloudBox
                     }
                     defaultPath = GetStaticValue(nameof(defaultPath));
 #if DEBUG
-                    if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && defaultPath.StartsWith("C:"))
-                        defaultPath = null;
+                    if (defaultPath != null)
+                    {
+                        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                        {
+                            if (defaultPath.StartsWith("\\\\\\"))
+                                defaultPath = null;
+                        }
+                        else
+                        {
+                            if (defaultPath.StartsWith("C:"))
+                                defaultPath = null;
+                        }
+                    }
 #endif
                     if (string.IsNullOrEmpty(defaultPath))
                     {

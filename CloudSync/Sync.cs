@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading;
 using static CloudSync.Util;
 using System.Collections.Generic;
-
+using System.Runtime.CompilerServices;
 
 namespace CloudSync
 {
@@ -94,6 +94,25 @@ namespace CloudSync
         internal ulong UserId;
         internal (uint, uint)? Owner;
         public readonly Share Share;
+
+        public long GetFreeSpace()
+        {
+            if (_HashFileTable == null)
+                return 0;
+            if (StorageLimitGB == -1) // - 1 values = unlimited
+                return -1;
+            var free = _HashFileTable.UsedSpace - StorageLimitGB * 1000000000U;
+            return free < 0 ? 0 : free;
+
+        }
+
+        public long GetUsedSpace()
+        {
+            if (_HashFileTable == null)
+                return 0;
+            return _HashFileTable.UsedSpace;
+        }
+
         /// <summary>
         /// The amount of space reserved for file storage expressed in gigabytes
         /// </summary>
@@ -137,6 +156,10 @@ namespace CloudSync
         /// </summary>
         public void Destroy()
         {
+            if (GetHashFileTable(out var hashFileTable))
+            {
+                hashFileTable.RemoveCache();
+            }
             SecureStorage?.Destroy();
         }
 

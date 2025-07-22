@@ -200,6 +200,16 @@ namespace CloudSync
         }
 
         private readonly string filePath;
+        public void RemoveCache()
+        {
+            try
+            {
+                File.Delete(filePath);
+            }
+            catch (Exception)
+            {
+            }
+        }
         private Timer? unloadTimer;
 
         private readonly Sync Context;
