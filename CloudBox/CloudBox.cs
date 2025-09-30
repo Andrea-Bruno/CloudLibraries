@@ -237,7 +237,7 @@ namespace CloudBox
         /// <param name="passphrase">If you want to recover the account, you can specify the passphrase</param>
         /// <returns>True for Successful, or false if something went wrong</returns>  
         public Context CreateContext(string routerEntryPoint, string passphrase = null)
-        {        
+        {
             var isQRCode = !routerEntryPoint.Contains('.') && !routerEntryPoint.StartsWith("pipe:");
             string serverPublicKey = null;
             if (isQRCode)
@@ -380,7 +380,7 @@ namespace CloudBox
         public static string LastEntryPoint()
         {
             return GetStaticValue(nameof(LastEntryPoint));
-        }      
+        }
 
         /// <summary>
         /// True if logged
@@ -701,7 +701,10 @@ namespace CloudBox
             if (string.IsNullOrEmpty(defaultPath))
                 if (isServer)
                 {
-                    defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), nameof(CloudBox));
+                    if (Directory.Exists("/cloudpool"))
+                        defaultPath = "/cloudpool";
+                    else
+                        defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), nameof(CloudBox));
                     if (id != null)
                         defaultPath = Path.Combine(defaultPath, CloudDirName + id);
                 }

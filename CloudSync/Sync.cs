@@ -97,20 +97,23 @@ namespace CloudSync
 
         public long GetFreeSpace()
         {
-            if (_HashFileTable == null)
-                return 0;
-            if (StorageLimitGB == -1) // - 1 values = unlimited
-                return -1;
-            var free = _HashFileTable.UsedSpace - StorageLimitGB * 1000000000U;
-            return free < 0 ? 0 : free;
-
+            if (GetHashFileTable(out var hashFileTable))
+            {
+                if (StorageLimitGB == -1) // - 1 values = unlimited
+                    return -1;
+                var free = hashFileTable.UsedSpace - StorageLimitGB * 1000000000U;
+                return free < 0 ? 0 : free;
+            }
+            return 0;
         }
 
         public long GetUsedSpace()
         {
-            if (_HashFileTable == null)
-                return 0;
-            return _HashFileTable.UsedSpace;
+            if (GetHashFileTable(out var hashFileTable))
+            {
+                return hashFileTable.UsedSpace;
+            }
+            return 0;
         }
 
         /// <summary>
