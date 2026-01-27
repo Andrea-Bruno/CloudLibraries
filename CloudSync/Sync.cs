@@ -101,7 +101,7 @@ namespace CloudSync
             {
                 if (StorageLimitGB == -1) // - 1 values = unlimited
                     return -1;
-                var free = hashFileTable.UsedSpace - StorageLimitGB * 1000000000U;
+                var free = StorageLimitGB * 1000000000L - hashFileTable.UsedSpace;
                 return free < 0 ? 0 : free;
             }
             return 0;
@@ -115,6 +115,7 @@ namespace CloudSync
             }
             return 0;
         }
+
 
         /// <summary>
         /// The amount of space reserved for file storage expressed in gigabytes
