@@ -840,12 +840,18 @@ namespace CloudBox
                 return false;
             var sendToContact = ServerCloud;
             if (sendToContact == null && toContactId != null)
-                CloudSyncUsers.TryGetValue((ulong)toContactId, out sendToContact);
+            {
+                sendToContact = Context.Contacts.GetContactByUserID((ulong)toContactId);
+ //                CloudSyncUsers.TryGetValue((ulong)toContactId, out sendToContact);
+            }
             if (sendToContact != null)
             {
                 Context?.Messaging.SendCommandToSubApplication(sendToContact, Sync.AppId, command, true, true, values);
                 return true;
             }
+#if DEBUG
+            Debugger.Break();
+#endif
             return false;
         }
 
@@ -893,15 +899,15 @@ namespace CloudBox
                     if (message.Contact.UserId != null)
                     {
                         var userId = (ulong)message.Contact.UserId;
-                        if (!CloudSyncUsers.ContainsKey(userId))
-                            CloudSyncUsers.Add(userId, message.Contact);
+                        //if (!CloudSyncUsers.ContainsKey(userId))
+                        //    CloudSyncUsers.Add(userId, message.Contact);
                         OnSyncCommand?.Invoke(userId, command, parameters?.ToArray());
                     }
                 }
             }
         }
 
-        private static readonly Dictionary<ulong, Contact> CloudSyncUsers = [];
+        // private static readonly Dictionary<ulong, Contact> CloudSyncUsers = [];
 
         /// <summary>
         /// Get the report of all the instantiated clouds (server and client), i.e. the detailed status of operation
