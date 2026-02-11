@@ -17,7 +17,8 @@ namespace CloudSync
             Context = context;
 
             var idRoot = BitConverter.ToUInt16(Util.Hash256(context.CloudRoot.GetBytes())).ToString("X4");
-            filePath = context.UserId + "_" + idRoot + "." + nameof(HashFileTable);
+            filePath = Path.Combine(nameof(HashFileTable), context.UserId + "_" + idRoot + "." + nameof(HashFileTable));
+            Directory.CreateDirectory(Path.GetDirectoryName(filePath));
             context.RaiseOnStatusChangesEvent(Sync.SyncStatus.Analysing);
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -298,7 +299,7 @@ namespace CloudSync
             if (Util.FileIsAvailable(fullFileName, out var fileSystemInfo, out bool notExists))
             {
                 return Add(fileSystemInfo);
-            }            
+            }
             HasChanged = true; // If the file is not available, regenerate the hash table
             Debugger.Break(); // The file does not exist or is not available, this should not happen!! Investigate!
             return false;
