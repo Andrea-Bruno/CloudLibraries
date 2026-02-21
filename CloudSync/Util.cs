@@ -357,7 +357,7 @@ namespace CloudSync
                 if (directoryInfo.Exists)
                 {
                     fileSystemInfo = directoryInfo;
-                    
+
                     return true;
                 }
                 FileInfo fileInfo = new FileInfo(fullFileName);
@@ -589,7 +589,10 @@ namespace CloudSync
 
             if (Directory.Exists(pathDirectory))
             {
-                // new FileInfo(pathDirectory).IsReadOnly = true; NOTE: Removed because it has inheritance problems in Linux
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) // NOTE: Removed because it has inheritance problems in Linux
+                {
+                    new FileInfo(pathDirectory).IsReadOnly = true; // Mandatory to show custom icon in Windows
+                }
                 var cloudIcoPath = IcoFullName(directoryName);
                 if (File.Exists(cloudIcoPath))
                 {
