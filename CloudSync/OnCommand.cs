@@ -408,12 +408,7 @@ namespace CloudSync
                                         RaiseOnFileTransfer(false, hashFileName, part, total, target, (int)length);
 
                                         // Update hash table with new file
-                                        if (GetHashFileTable(out var hashFileTable))
-                                        {
-                                            hashFileTable.Add(fileInfo);
-                                        }
-
-                                        ClientToolkit?.UpdateDeletedFileList(fileInfo.FullName);
+                                        FileTransferCompleted(fileInfo);
                                     }
                                 }
                                 else
@@ -445,47 +440,8 @@ namespace CloudSync
                         var hash = values[0].ToUint64();
                         onCommandEvent(hash.ToString());
                         var timestamp = values[1].ToUint32();
-
-                        if (GetHashFileTable(out var hashDirTable))
-                        {
-                            if (hashDirTable.TryGetValue(hash, out var fileSystemInfo))
-                            {
-                                if (fileSystemInfo is FileInfo fileInfo && fileInfo.Exists)
-                                {
-                                    if (fileInfo.UnixLastWriteTimestamp() == timestamp)
-                                    {
-                                        // Track deletion request
-                                        ClientToolkit?.WatchCloudRoot?.AddDeletedByRemoteRequest(FileId.GetFileId(hash, fileInfo.UnixLastWriteTimestamp()));
-
-                                        // Perform deletion
-                                        FileDelete(fileInfo.FullName, out Exception exception);
-                                        if (exception != null)
-                                            RaiseOnFileError(exception, fileInfo.FullName);
-
-                                        bool fileNotExists()
-                                        {
-                                            fileInfo.Refresh();
-                                            return !fileInfo.Exists;
-                                        }
-
-                                        if (exception == null || fileNotExists())
-                                            hashDirTable.Remove(hash);
-
-                                        // Check if disk space was freed
-                                        lock (FlagsDriveOverLimit)
-                                            if (FlagsDriveOverLimit.Contains(fromUserId))
-                                            {
-                                                if (CheckDiskSPace(this))
-                                                {
-                                                    FlagsDriveOverLimit.Remove(fromUserId);
-                                                    SendNotification(fromUserId, Notice.FullSpaceOff);
-                                                    return;
-                                                }
-                                            }
-                                    }
-                                }
-                            }
-                        }
+                        if (!DeleteFile(hash, timestamp, fromUserId))
+                            return;
                     }
                     #endregion
 
@@ -495,28 +451,8 @@ namespace CloudSync
                         var fullDirectoryName = FullName(values[0], out _, out string nameFile);
                         onCommandEvent(fullDirectoryName);
 
-                        // Check disk space before creating directory
-                        lock (FlagsDriveOverLimit)
-                            if (!CheckDiskSPace(this))
-                            {
-                                if (!FlagsDriveOverLimit.Contains(fromUserId))
-                                    FlagsDriveOverLimit.Add(fromUserId);
-                                SendNotification(fromUserId, Notice.FullSpace);
-                                return;
-                            }
-
-                        DirectoryCreate(fullDirectoryName, Owner, out Exception exception);
-                        if (exception != null)
-                            RaiseOnFileError(exception, fullDirectoryName);
-                        else
-                        {
-                            // Add new directory to hash table
-                            if (GetHashFileTable(out var hashFileTable))
-                            {
-                                var directoryInfo = new DirectoryInfo(fullDirectoryName);
-                                hashFileTable.Add(directoryInfo);
-                            }
-                        }
+                        if (!CreateDirectory(fullDirectoryName))
+                            return;
 
                         var hash = HashFileName(values[0].ToText(), true);
                         ReceptionInProgress.Completed(hash);
@@ -530,27 +466,8 @@ namespace CloudSync
                         SendNotification(fromUserId, Notice.OperationCompleted);
                         var hash = values[0].ToUint64();
                         onCommandEvent(hash.ToString());
-
-                        if (GetHashFileTable(out var hashDirTable))
-                        {
-                            if (hashDirTable.TryGetValue(hash, out var fileSystemInfo))
-                            {
-                                if (fileSystemInfo is DirectoryInfo directoryInfo && directoryInfo.Exists)
-                                {
-                                    // Remove directory and all contents from hash table
-                                    var removed = hashDirTable.RemoveDirectory(directoryInfo.FullName);
-                                    var removedIds = removed.Select(x => x.fileId).ToList();
-
-                                    // Track deletion requests
-                                    ClientToolkit?.WatchCloudRoot?.AddDeletedByRemoteRequest(removedIds);
-
-                                    // Perform directory deletion
-                                    DirectoryDelete(directoryInfo.FullName, out Exception exception);
-                                    if (exception != null)
-                                        RaiseOnFileError(exception, directoryInfo.FullName);
-                                }
-                            }
-                        }
+                        if (!DeleteDirectory(hash))
+                            return;
                     }
                     #endregion
 
