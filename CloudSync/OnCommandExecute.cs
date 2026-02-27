@@ -76,7 +76,9 @@ namespace CloudSync
                         if (timestamp == null || fileInfo.UnixLastWriteTimestamp() == timestamp)
                         {
                             // Track deletion request
-                            ClientToolkit?.WatchCloudRoot?.AddDeletedByRemoteRequest(FileId.GetFileId(hash, fileInfo.UnixLastWriteTimestamp()));
+                            var fid = FileId.GetFileId(hash, fileInfo.UnixLastWriteTimestamp());
+                            ClientToolkit?.WatchCloudRoot?.AddDeletedByRemoteRequest(fid);
+                            ClientToolkit?.AddDeletedFileToPersistentList(fid);
 
                             // Perform deletion
                             FileDelete(fileInfo.FullName, out Exception exception);
@@ -155,6 +157,11 @@ namespace CloudSync
 
                         // Track deletion requests
                         ClientToolkit?.WatchCloudRoot?.AddDeletedByRemoteRequest(removedIds);
+                        if (ClientToolkit != null)
+                        {
+                            foreach (var fid in removedIds)
+                                ClientToolkit.AddDeletedFileToPersistentList(fid);
+                        }
 
                         // Perform directory deletion
                         DirectoryDelete(directoryInfo.FullName, out Exception exception);
@@ -169,17 +176,18 @@ namespace CloudSync
         /// <summary>
         /// At the end of a file transfer (when the last chunk is received), and the file is written, we add its hash to the filetable hash.
         /// </summary>
-        public void FileTransferCompleted(string fullFilename)
+        public void FileTransferCompleted(string fullFilename, ulong? fromUserId = null)
         {
             var fileInfo = new FileInfo(fullFilename);
-            FileTransferCompleted(fileInfo);
+            FileTransferCompleted(fileInfo, fromUserId);
         }
 
 
         /// <summary>
         /// At the end of a file transfer (when the last chunk is received), and the file is written, we add its hash to the filetable hash.
+        /// Optional fromUserId is used to notify client-specific space flags when file was uploaded remotely.
         /// </summary>
-        public void FileTransferCompleted(FileInfo fileInfo)
+        public void FileTransferCompleted(FileInfo fileInfo, ulong? fromUserId = null)
         {
             // Update hash table with new file
             if (GetHashFileTable(out var hashFileTable))
@@ -187,6 +195,20 @@ namespace CloudSync
                 hashFileTable.Add(fileInfo);
             }
             ClientToolkit?.UpdateDeletedFileList(fileInfo.FullName);
+
+            // If a remote user uploaded a file, verify disk-space flags and notify if needed
+            if (fromUserId != null)
+            {
+                lock (FlagsDriveOverLimit)
+                {
+                    if (!CheckDiskSPace(this))
+                    {
+                        if (!FlagsDriveOverLimit.Contains(fromUserId))
+                            FlagsDriveOverLimit.Add(fromUserId);
+                        SendNotification(fromUserId, Notice.FullSpace);
+                    }
+                }
+            }
         }
 
         // -------------------------
@@ -250,7 +272,7 @@ namespace CloudSync
 
                 var removed = hashDirTable.RemoveDirectory(directoryInfo.FullName);
                 if (removed != null)
-                    result = removed.Select(x => x.fileId).ToList();
+                    result = removed.Select(x => x.fileId.HashFile).ToList();
             }
             return result;
         }

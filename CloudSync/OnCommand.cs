@@ -408,7 +408,7 @@ namespace CloudSync
                                         RaiseOnFileTransfer(false, hashFileName, part, total, target, (int)length);
 
                                         // Update hash table with new file
-                                        FileTransferCompleted(fileInfo);
+                                        FileTransferCompleted(fileInfo, fromUserId);
                                     }
                                 }
                                 else
@@ -451,7 +451,7 @@ namespace CloudSync
                         var fullDirectoryName = FullName(values[0], out _, out string nameFile);
                         onCommandEvent(fullDirectoryName);
 
-                        if (!CreateDirectory(fullDirectoryName))
+                        if (!CreateDirectory(fullDirectoryName, fromUserId))
                             return;
 
                         var hash = HashFileName(values[0].ToText(), true);
