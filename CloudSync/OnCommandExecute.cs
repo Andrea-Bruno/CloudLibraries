@@ -319,5 +319,59 @@ namespace CloudSync
             }
             return false;
         }
+
+        public void ForceSyncAllClients()
+        {
+            // Only server should perform broadcast
+            if (!IsServer)
+                return;
+
+            // Get local root hash
+            if (!GetHashFileTable(out var hashFileTable))
+                return;
+
+            var rootHashBytes = hashFileTable.GetHasRoot(); // 8 bytes expected by protocol
+
+            // Try simple broadcast (Send with null target) if supported
+            try
+            {
+                _ = Send?.Invoke(null, (ushort)Commands.SendHashRoot, rootHashBytes);
+                return;
+            }
+            catch
+            {
+                // ignore and fallback to per-client send
+            }
+
+            // Fallback: send individually to connected clients
+            try
+            {
+                var clients = RoleManager?.Clients?.Values;
+                if (clients == null)
+                    return;
+
+                // Make a snapshot to avoid concurrency issues
+                var snapshot = new List<Client>(clients);
+
+                foreach (var client in snapshot)
+                {
+                    try
+                    {
+                        if (client?.IsConnected == true)
+                        {
+                            _ = Send?.Invoke(client.Id, (ushort)Commands.SendHashRoot, rootHashBytes);
+                        }
+                    }
+                    catch
+                    {
+                        // ignore single client failures
+                    }
+                }
+            }
+            catch
+            {
+                // silent: do not throw from force-sync
+            }
+        }
     }
 }
