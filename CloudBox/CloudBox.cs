@@ -348,14 +348,14 @@ namespace CloudBox
                 {
 #if RELEASE
                     ShowEntryPoint = false;
-                    ep = "proxy.tc0.it";
+                    ep = DefaultProxy;
 #elif DEBUG
                     ep = "test.tc0.it";
 #endif
                 }
                 else if (!ep.Contains("."))
                 {
-                    ep += ".tc0.it";
+                    ep += "." + DefaultDomain;
                 }
 
                 if (!string.IsNullOrEmpty(ep))
@@ -372,6 +372,9 @@ namespace CloudBox
 
             return true;
         }
+
+        public const string DefaultDomain = "tc0.it";
+        public const string DefaultProxy = "proxy." + DefaultDomain; 
 
         /// <summary>
         /// Last client entry. If the application was used as a client and the client was logged in, this function returns the last entry point used. Null if the application was not logged in as a client.
