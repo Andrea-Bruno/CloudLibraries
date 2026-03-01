@@ -348,7 +348,7 @@ namespace CloudBox
                 {
 #if RELEASE
                     ShowEntryPoint = false;
-                    ep = "server.tc0.it";
+                    ep = "proxy.tc0.it";
 #elif DEBUG
                     ep = "test.tc0.it";
 #endif
