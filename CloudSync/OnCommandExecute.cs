@@ -8,10 +8,15 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using static CloudSync.Util;
+using System.Timers;
 namespace CloudSync
 {
     public partial class Sync
     {
+        // Timer used to debounce ForceSyncAllClients calls (reuse instance, reset with Stop/Start)
+        private Timer? _forceSyncTimer;
+        private readonly object _forceSyncTimerLock = new object();
+
         public bool CreateDirectory(string fullDirectoryName, ulong? fromUserId = null)
         {
 
@@ -326,24 +331,42 @@ namespace CloudSync
             if (!IsServer)
                 return;
 
+            lock (_forceSyncTimerLock)
+            {
+                if (_forceSyncTimer == null)
+                {
+                    _forceSyncTimer = new Timer(30_000) { AutoReset = false };
+                    _forceSyncTimer.Elapsed += (s, e) =>
+                    {
+                        try
+                        {
+                            PerformForceSyncAllClients();
+                        }
+                        catch
+                        {
+                            // swallow exceptions from background handler
+                        }
+                    };
+                }
+                else
+                {
+                    // reset countdown by stopping; Start will restart from zero
+                    try { _forceSyncTimer.Stop(); } catch { }
+                }
+
+                _forceSyncTimer.Start();
+            }
+        }
+
+        // Extracted original logic to be invoked by timer
+        private void PerformForceSyncAllClients()
+        {
             // Get local root hash
             if (!GetHashFileTable(out var hashFileTable))
                 return;
 
-            var rootHashBytes = hashFileTable.GetHasRoot(); // 8 bytes expected by protocol
+            var rootHashBytes = hashFileTable.GetHasRoot(); //8 bytes expected by protocol
 
-            // Try simple broadcast (Send with null target) if supported
-            try
-            {
-                _ = Send?.Invoke(null, (ushort)Commands.SendHashRoot, rootHashBytes);
-                return;
-            }
-            catch
-            {
-                // ignore and fallback to per-client send
-            }
-
-            // Fallback: send individually to connected clients
             try
             {
                 var clients = RoleManager?.Clients?.Values;
