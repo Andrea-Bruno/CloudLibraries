@@ -361,28 +361,19 @@ namespace CloudSync
         // Extracted original logic to be invoked by timer
         private void PerformForceSyncAllClients()
         {
-            // Get local root hash
-            if (!GetHashFileTable(out var hashFileTable))
-                return;
-
-            var rootHashBytes = hashFileTable.GetHasRoot(); //8 bytes expected by protocol
-
             try
             {
                 var clients = RoleManager?.Clients?.Values;
                 if (clients == null)
                     return;
 
-                // Make a snapshot to avoid concurrency issues
-                var snapshot = new List<Client>(clients);
-
-                foreach (var client in snapshot)
+                foreach (var client in clients.ToList())
                 {
                     try
                     {
-                        if (client?.IsConnected == true)
+                        if (client?.IsConnected == true && client?.TypeOfClient == Client.ClientType.Socket)
                         {
-                            _ = Send?.Invoke(client.Id, (ushort)Commands.SendHashRoot, rootHashBytes);
+                            SendHashStructure(client.Id);
                         }
                     }
                     catch

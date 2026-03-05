@@ -479,7 +479,7 @@ namespace CloudSync
                         if (status == Status.Busy)
                             return;
                         if (IsServer)
-                            StatusNotification(null, Sync.Status.Ready);
+                            StatusNotification(fromUserId, Sync.Status.Ready);
                     }
                     #endregion
 

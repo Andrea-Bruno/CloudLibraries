@@ -289,10 +289,10 @@ namespace CloudSync
                                 var oldFileData = hashFileTable.GetFileData(fileSystemInfo.HashFileName(Context));
                                 if (oldFileData.UnixLastWriteTimestamp == fileSystemInfo.UnixLastWriteTimestamp())
                                 {
-#if DEBUG
-                                    if (fileSystemInfo.FullName != LastFileChanged)
-                                        Debugger.Break();
-#endif
+//#if DEBUG
+//                                    if (fileSystemInfo.FullName != LastFileChanged)
+//                                        Debugger.Break();
+//#endif
                                     Thread.Sleep(50);
                                     fileSystemInfo.Refresh();
                                     if (oldFileData.UnixLastWriteTimestamp == fileSystemInfo.UnixLastWriteTimestamp())

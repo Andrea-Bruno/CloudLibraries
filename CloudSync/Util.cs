@@ -416,7 +416,7 @@ namespace CloudSync
             return true;
         }
 
-        internal static readonly string[] SpecialDirectories = [PersistentFileIdList.CloudCacheDirectory];
+        public static readonly string[] SpecialDirectories = [PersistentFileIdList.CloudCacheDirectory];
 
         /// <summary>
         /// Convert a date to Unix timestamp format

@@ -451,8 +451,10 @@ namespace CloudSync
             if (!Disposed)
             {
                 LastCommandSent = DateTime.UtcNow;
+#if !DEBUG
                 Task.Run(() =>
                 {
+#endif
                     try
                     {
                         Debug.WriteLine("OUT " + command);
@@ -465,7 +467,9 @@ namespace CloudSync
                         Debugger.Break(); // Error! Investigate the cause of the error!
                         Debug.WriteLine(ex);
                     }
+#if !DEBUG
                 });
+#endif
             }
         }
     }
