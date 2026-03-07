@@ -373,7 +373,7 @@ namespace CloudSync
                     {
                         if (client?.IsConnected == true && client?.TypeOfClient == Client.ClientType.Socket)
                         {
-                            SendHashStructure(client.Id);
+                            SendHashStructure(client.Id, true);
                         }
                     }
                     catch

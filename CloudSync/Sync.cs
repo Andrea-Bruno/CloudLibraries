@@ -204,7 +204,7 @@ namespace CloudSync
 
         public delegate bool SendCommandDelegate(ulong? contactId, ushort command, params byte[][] values);
 
-        public DateTime LastCommandSent { get; private set; }
+        public DateTime LastCommandSentTime { get; private set; }
 
 
         private readonly SendCommandDelegate Send;

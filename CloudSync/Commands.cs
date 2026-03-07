@@ -209,11 +209,12 @@ namespace CloudSync
         /// Sends the hash structure to the specified user
         /// </summary>
         /// <param name="toUserId">Target user ID</param>
-        private void SendHashStructure(ulong? toUserId)
+        private void SendHashStructure(ulong? toUserId, bool isServerRequest =  false)
         {
             if (GetHashFileTable(out HashFileTable hashFileTable))
             {
-                SendCommand(toUserId, Commands.SendHashStructure, null, hashFileTable.GetHashStructure());
+                var isServerRequestFLag = new byte[] { isServerRequest ? (byte)1 : (byte)0 };
+                SendCommand(toUserId, Commands.SendHashStructure, null, hashFileTable.GetHashStructure(), isServerRequestFLag);
             }
         }
 
@@ -441,6 +442,7 @@ namespace CloudSync
         /// <param name="values">Parameters associated with the sent command</param>
         private void SendCommand(ulong? toContactId, Commands command, string? infoData, params byte[][] values)
         {
+            LastCommandSent = command;
 #if DEBUG
             if (toContactId == UserId)
             {
@@ -450,7 +452,7 @@ namespace CloudSync
 
             if (!Disposed)
             {
-                LastCommandSent = DateTime.UtcNow;
+                LastCommandSentTime = DateTime.UtcNow;
 #if !DEBUG
                 Task.Run(() =>
                 {
@@ -472,5 +474,6 @@ namespace CloudSync
 #endif
             }
         }
+        private Commands LastCommandSent;
     }
 }

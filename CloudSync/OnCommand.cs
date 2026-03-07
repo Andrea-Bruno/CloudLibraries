@@ -209,6 +209,7 @@ namespace CloudSync
                     if (command == Commands.SendHashStructure)
                     {
                         var structure = values[0];
+                        bool isServerRequest = values.Length > 1 && values[1][0] == 1 ; // This means that this command doesn't arrive via a client request as usual, but rather the server sends it. This happens when an API client modifies files on the server, and the server then requests synchronization.
                         var remoteHashes = new Dictionary<ulong, uint>();
 
                         // Parse hash structure into dictionary
@@ -223,7 +224,7 @@ namespace CloudSync
                             remoteHashes.Add(hash, timestamp);
                         }
 
-                        OnSendHashStructure(fromUserId, remoteHashes);
+                        OnSendHashStructure(fromUserId, remoteHashes, isServerRequest);
                     }
                     #endregion
 
@@ -520,7 +521,8 @@ namespace CloudSync
         /// </summary>
         /// <param name="fromUserId">User who sent the hash structure</param>
         /// <param name="remoteHashes">Dictionary of remote file hashes and timestamps</param>
-        private void OnSendHashStructure(ulong? fromUserId, Dictionary<ulong, uint> remoteHashes)
+        /// <param name="isServerRequest">This means that this command doesn't arrive via a client request as usual, but rather the server sends it. This happens when an API client modifies files on the server, and the server then requests synchronization.</param>
+        private void OnSendHashStructure(ulong? fromUserId, Dictionary<ulong, uint> remoteHashes, bool isServerRequest)
         {
 #if DEBUG
             if (ClientToolkit == null)
@@ -532,7 +534,7 @@ namespace CloudSync
 
             if (GetHashFileTable(out var localHashes))
             {
-                HashStructureComparer.Compare(this, remoteHashes, localHashes);
+                HashStructureComparer.Compare(this, remoteHashes, localHashes, isServerRequest);
             }
         }
 

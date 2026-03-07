@@ -618,8 +618,8 @@ namespace CloudBox
                     AddTx(" SENDING:");
                     // Sending
                     AddTx("Last Command sent",
-                        sync.LastCommandSent != default
-                            ? (int)((DateTime.UtcNow - sync.LastCommandSent).TotalSeconds) + " seconds ago"
+                        sync.LastCommandSentTime != default
+                            ? (int)((DateTime.UtcNow - sync.LastCommandSentTime).TotalSeconds) + " seconds ago"
                             : (IsServer ? "No client connected" : "ERROR! cloud unreachable"));
                     AddTx("Total files sent", sync.TotalFilesSent);
                     AddTx("Total bytes sent", sync.TotalBytesSent);

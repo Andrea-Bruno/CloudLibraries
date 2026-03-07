@@ -10,7 +10,25 @@ namespace CloudSync
 {
     public static class HashStructureComparer
     {
-        public static void Compare(Sync context, FileHashToLastWriteTable remoteHashes, HashFileTable localHashes)
+        /// <summary>
+        /// Compares a remote hash table with the local hash table and schedules synchronization operations.
+        /// </summary>
+        /// <remarks>
+        /// This method analyzes differences between the provided remote hash-to-timestamp dictionary and
+        /// the local hash file table, and enqueues the required operations into the client's spooler to
+        /// bring the two sides into sync. Typical actions include requesting missing files from the remote,
+        /// sending local files that are absent remotely, deleting files or directories remotely that were
+        /// locally deleted, and resolving conflicts by comparing last-write timestamps. The method also
+        /// takes into account temporary and persistent deletion tracking so that deletions are not
+        /// inadvertently propagated back and forth. Any exceptions are recorded and a debugger break is
+        /// triggered for investigation in debug scenarios. At the end of processing the temporary deleted
+        /// dictionary is cleared.
+        /// </remarks>
+        /// <param name="context">Synchronization context providing access to client toolkit, spooler and state.</param>
+        /// <param name="remoteHashes">Dictionary mapping file/directory hash (ulong) to UNIX last-write timestamp (uint). A timestamp of zero typically denotes a directory.</param>
+        /// <param name="localHashes">Local hash file table representing known files and directories on disk.</param>
+        /// <param name="isServerRequest">If true, indicates the hash structure was initiated by the server (for example after an API client modified server-side files) rather than by a client request.</param>
+        public static void Compare(Sync context, FileHashToLastWriteTable remoteHashes, HashFileTable localHashes, bool isServerRequest)
         {
             if (context?.ClientToolkit?.Spooler.IsPending == true)
             {
@@ -96,13 +114,39 @@ namespace CloudSync
 
                 toRemove.ForEach(x => remoteHashes.Remove(x)); //Remove files and directories scheduled for deletion from the server list
 
-
-                // Send missing files to the remote create directory if it does not exist
+                // Operations for missing files on the server
                 foreach (var element in localHashes.KeyTimestampCollection())
                 {
                     if (!remoteHashes.ContainsKey(element.Key))
                     {
-                        context.ClientToolkit?.Spooler.AddOperation(Spooler.OperationType.SendFile, element.Key, element.UnixLastWriteTimestamp);
+                        if (isServerRequest)
+                        {
+                            //Files are missing because they have been deleted from the server. Sync must therefore delete these files from the local server.
+                            try
+                            {
+                                var ts = element.UnixLastWriteTimestamp;
+                                var isDir = ts == default;
+                                if (isDir)
+                                {
+                                    // Delete local directory by hash
+                                    context?.DeleteDirectory(element.Key);
+                                }
+                                else
+                                {
+                                    // Delete local file by hash and timestamp
+                                    context?.DeleteFile(element.Key, ts);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Util.RecordError(ex);
+                            }
+                        }
+                        else
+                        {
+                            // Send missing files to the remote and create directory if it does not exist
+                            context.ClientToolkit?.Spooler.AddOperation(Spooler.OperationType.SendFile, element.Key, element.UnixLastWriteTimestamp);
+                        }
                     }
                 }
 
@@ -111,7 +155,7 @@ namespace CloudSync
                 {
                     var timestamp = remoteHashes[hash];
                     var wasDeleted = context.ClientToolkit?.FileWasDeletedLocally(new FileId(hash, timestamp)) == true;
-                    if (!localHashes.ContainsKey(hash) && !wasDeleted)
+                    if (!localHashes.ContainsKey(hash) && (!wasDeleted || isServerRequest))
                     {
                         context.ClientToolkit?.Spooler.AddOperation(Spooler.OperationType.RequestFile, hash, timestamp);
                     }
