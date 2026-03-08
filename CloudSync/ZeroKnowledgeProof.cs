@@ -134,6 +134,89 @@ namespace CloudSync
         }
 
         /// <summary>
+        /// Encrypts or decrypts a chunk of data at a specific byte offset within a file stream.
+        /// This allows individual file chunks to be encrypted independently while maintaining
+        /// consistency with the full-file <see cref="EncryptFile(FileInfo, string)"/> encryption,
+        /// enabling seekable access to the XOR stream cipher at any file position.
+        /// The operation is symmetric: applying it twice returns the original data.
+        /// </summary>
+        /// <param name="data">The chunk data to encrypt or decrypt.</param>
+        /// <param name="file">The source file, used to derive the per-file encryption key.</param>
+        /// <param name="byteOffset">The byte offset of this chunk within the original file stream.</param>
+        /// <returns>The encrypted (or decrypted) chunk data of the same length as the input.</returns>
+        public byte[] EncryptChunk(byte[] data, FileInfo file, long byteOffset)
+        {
+            return EncryptChunk(data, DerivedEncryptionKey(file), byteOffset);
+        }
+
+        /// <summary>
+        /// Encrypts or decrypts a chunk of data starting at the specified byte offset within the key stream.
+        /// Seeks to the correct position in the XOR key stream before processing so that chunks
+        /// can be encrypted individually and remain consistent with full-file encryption.
+        /// </summary>
+        /// <param name="data">The chunk data to process.</param>
+        /// <param name="key">The 64-byte encryption key.</param>
+        /// <param name="byteOffset">The byte offset of the chunk within the file stream.</param>
+        /// <returns>The processed chunk data.</returns>
+        private static byte[] EncryptChunk(byte[] data, byte[] key, long byteOffset)
+        {
+            if (data == null || data.Length == 0)
+                return data;
+            if (key == null || key.Length != 64)
+                throw new ArgumentException("Key must be 64 bytes.", nameof(key));
+
+            // Block size (8 bytes for ulong)
+            const int blockSize = 8;
+
+            // Number of cycles before recomputing the hash
+            const int cyclesPerHash = 8;
+
+            // Initialize the seal and key stream using Blake2b (same as EncryptFile)
+            byte[] sealt = Blake2b.ComputeHash(key);
+            byte[] currentKey = Blake2b.ComputeHash(sealt);
+
+            // Seek to the correct position in the key stream for this chunk's byte offset.
+            // This requires iterating through hash cycles sequentially; for very large files
+            // the seek cost grows linearly with the chunk position. In practice, the chunk size
+            // is 1 MB so seek cost for a given file is bounded by file_size / (blockSize * cyclesPerHash).
+            long startBlock = byteOffset / blockSize;
+            long hashCycle = startBlock / cyclesPerHash;
+            int cycleCounter = (int)(startBlock % cyclesPerHash);
+
+            for (long i = 0; i < hashCycle; i++)
+                currentKey = Blake2b.ComputeHash(sealt, currentKey);
+
+            byte[] inputBuffer = new byte[blockSize];
+            byte[] result = new byte[data.Length];
+
+            for (int i = 0; i < data.Length; i += blockSize)
+            {
+                int bytesAvailable = Math.Min(blockSize, data.Length - i);
+
+                // Zero-pad the input buffer, then copy available bytes
+                Array.Clear(inputBuffer, 0, blockSize);
+                Buffer.BlockCopy(data, i, inputBuffer, 0, bytesAvailable);
+
+                // Perform XOR on 8-byte blocks
+                ulong inputBlock = BitConverter.ToUInt64(inputBuffer, 0);
+                ulong keyBlock = BitConverter.ToUInt64(currentKey, cycleCounter * blockSize);
+                ulong outputBlock = inputBlock ^ keyBlock;
+
+                byte[] outputBytes = BitConverter.GetBytes(outputBlock);
+                Buffer.BlockCopy(outputBytes, 0, result, i, bytesAvailable);
+
+                cycleCounter++;
+                if (cycleCounter >= cyclesPerHash)
+                {
+                    currentKey = Blake2b.ComputeHash(sealt, currentKey);
+                    cycleCounter = 0;
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
         /// Decrypts a file using a key derived from recursive hashing and XOR.
         /// This method processes data in 8-byte (64-bit) blocks and computes the hash every 8 cycles.
         /// </summary>

@@ -325,6 +325,20 @@ namespace CloudSync
                 // Get the requested file chunk
                 var chunk = GetChunk(chunkPart, fileSystemInfo.FullName, out var parts, out var fileLength);
 
+                // Encrypt the chunk before sending if zero-knowledge encryption is enabled.
+                // The encryption is applied per-chunk using a seekable XOR stream cipher so each
+                // chunk can be encrypted independently, consistently with full-file encryption.
+                // Files under special directories (e.g. .cloud_cache) are excluded from encryption.
+                if (chunk != null && ZeroKnowledgeProof != null)
+                {
+                    var pathParts = fileSystemInfo.CloudRelativeUnixFullName(this).Split('/');
+                    if (!pathParts.Intersect(SpecialDirectories).Any())
+                    {
+                        var byteOffset = (long)(chunkPart - 1) * (long)DefaultChunkSize;
+                        chunk = ZeroKnowledgeProof.EncryptChunk(chunk, (FileInfo)fileSystemInfo, byteOffset);
+                    }
+                }
+
 #if DEBUG
                 if (chunk == null && chunkPart != parts + 1)
                     Debugger.Break();
