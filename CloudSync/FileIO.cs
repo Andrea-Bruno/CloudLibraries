@@ -361,7 +361,16 @@ namespace CloudSync
                             var tmpDecryption = source + ".decrypted";
                             File.Delete(tmpDecryption);
                             var sourceFIleInfo = new FileInfo(source);
-                            sourceFIleInfo.Decrypt(tmpDecryption, context);
+                            if (context?.ZeroKnowledgeProof != null)
+                            {
+                                // Derive key from final cloud target path, not tmp path in %TEMP%.
+                                var targetVirtualRelativeName = new FileInfo(target).CloudRelativeUnixFullName(context);
+                                context.ZeroKnowledgeProof.DecryptFile(sourceFIleInfo, tmpDecryption, targetVirtualRelativeName, sourceFIleInfo.UnixLastWriteTimestamp());
+                            }
+                            else
+                            {
+                                sourceFIleInfo.Decrypt(tmpDecryption, context);
+                            }
                             var tmpDecryptionFileInfo = new FileInfo(tmpDecryption);                            
                             tmpDecryptionFileInfo.LastWriteTimeUtc = sourceFIleInfo.LastWriteTimeUtc;
                             File.Delete(target);
