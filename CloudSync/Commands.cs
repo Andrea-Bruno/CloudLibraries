@@ -290,6 +290,11 @@ namespace CloudSync
         /// <param name="fileSystemInfo">File or directory to send</param>
         public void SendFile(ulong? toUserId, FileSystemInfo fileSystemInfo) => SendChunkFile(toUserId, fileSystemInfo, 1);
 
+        private string GetZkEncryptedSendTmpFile(ulong? toUserId, ulong hashFileName)
+        {
+            return GetTmpFile(this, toUserId, hashFileName) + ".zkenc";
+        }
+
         /// <summary>
         /// Sends a chunk of a file to the specified user
         /// </summary>
@@ -321,9 +326,26 @@ namespace CloudSync
             else
             {
                 var hashFileName = fileSystemInfo.HashFileName(this);
+                // adding zero knowledge encyption. If enabled. we encrypt the file to a temp location and send the encrypted file.
+                var virtualFullName = fileSystemInfo.CloudRelativeUnixFullName(this);
+                var useZkContentEncryption = ZeroKnowledgeProof != null &&
+                                             virtualFullName.EndsWith(ZeroKnowledgeProof.EncryptFileNameEndChar);
+                var sourceFileNameForTransfer = fileSystemInfo.FullName;
+                var encryptedTmpFile = useZkContentEncryption ? GetZkEncryptedSendTmpFile(toUserId, hashFileName) : null;
+
+                if (useZkContentEncryption)
+                {
+                    var mustRecreateEncryptedTmp = chunkPart == 1 || !File.Exists(encryptedTmpFile);
+                    if (mustRecreateEncryptedTmp)
+                    {
+                        FileDelete(encryptedTmpFile, out _);
+                        ZeroKnowledgeProof.EncryptFile((FileInfo)fileSystemInfo, encryptedTmpFile);
+                    }
+                    sourceFileNameForTransfer = encryptedTmpFile;
+                }
 
                 // Get the requested file chunk
-                var chunk = GetChunk(chunkPart, fileSystemInfo.FullName, out var parts, out var fileLength);
+                var chunk = GetChunk(chunkPart, sourceFileNameForTransfer, out var parts, out var fileLength);
 
 #if DEBUG
                 if (chunk == null && chunkPart != parts + 1)
@@ -334,11 +356,15 @@ namespace CloudSync
                 {
                     // File send completed or File error
                     CRC.RemoveCRC(IsClient, toUserId, hashFileName);
+                    if (useZkContentEncryption)
+                    {
+                        FileDelete(encryptedTmpFile, out _);
+                    }
                     TotalFilesSent++;
                     TotalBytesSent += (uint)fileLength;
                     SendingInProgress.Completed(hashFileName, (ulong)toUserId);
                 }
-                else if (CRC.Update(IsClient, toUserId, hashFileName, ref chunkPart, chunk, fileSystemInfo.FullName, false, out _))
+                else if (CRC.Update(IsClient, toUserId, hashFileName, ref chunkPart, chunk, sourceFileNameForTransfer, false, out _))
                 {
                     // Prepare the chunk data for sending
                     var values = new List<byte[]>([
@@ -353,7 +379,7 @@ namespace CloudSync
                         // Add final file metadata for the last chunk
                         values.Add(BitConverter.GetBytes(fileSystemInfo.UnixLastWriteTimestamp()));
                         values.Add(BitConverter.GetBytes((uint)((FileInfo)fileSystemInfo).Length));
-                        values.Add(fileSystemInfo.CloudRelativeUnixFullName(this).GetBytes());
+                        values.Add(virtualFullName.GetBytes());
                         values.Add(CRC.GetCRC(IsClient, toUserId, hashFileName, parts).GetBytes());
                     }
 
