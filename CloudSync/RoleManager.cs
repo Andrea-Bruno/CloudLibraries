@@ -227,6 +227,36 @@ namespace CloudSync
             }
         }
 
+        /// <summary>
+        /// Searches the registered clients and returns those that match the specified criteria.
+        /// Each returned <see cref="Client"/> exposes <see cref="Client.GetProfileSummary"/> for a
+        /// concise textual overview of its profile.
+        /// </summary>
+        /// <param name="query">
+        /// Optional text to match against the client label (case-insensitive substring search).
+        /// When <c>null</c> or empty, all labels are accepted.
+        /// Clients that have no label set are excluded when a non-empty query is supplied.
+        /// </param>
+        /// <param name="status">
+        /// Optional status filter. When provided, only clients whose <see cref="Client.CurrentStatus"/>
+        /// equals this value are returned.
+        /// </param>
+        /// <param name="type">
+        /// Optional client-type filter. When provided, only clients whose <see cref="Client.TypeOfClient"/>
+        /// equals this value are returned.
+        /// </param>
+        /// <returns>
+        /// An enumerable of <see cref="Client"/> objects that satisfy all supplied filters.
+        /// </returns>
+        public IEnumerable<Client> SearchClients(string query = null, Client.Status? status = null, Client.ClientType? type = null)
+        {
+            return Clients.Values
+                .Where(c =>
+                    (string.IsNullOrEmpty(query) || (!string.IsNullOrEmpty(c.Label) && c.Label.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0))
+                    && (status == null || c.CurrentStatus == status)
+                    && (type == null || c.TypeOfClient == type));
+        }
+
 
     }
 }
