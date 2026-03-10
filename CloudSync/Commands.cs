@@ -150,7 +150,7 @@ namespace CloudSync
         internal int PendingConfirmation
         {
             get
-            {   
+            {
                 if (DateTime.UtcNow - _PendingConfirmationTime > _PendingConfirmationTimeout)
                     _PendingConfirmation = 0;
                 return _PendingConfirmation;
@@ -209,7 +209,7 @@ namespace CloudSync
         /// Sends the hash structure to the specified user
         /// </summary>
         /// <param name="toUserId">Target user ID</param>
-        private void SendHashStructure(ulong? toUserId, bool isServerRequest =  false)
+        private void SendHashStructure(ulong? toUserId, bool isServerRequest = false)
         {
             if (GetHashFileTable(out HashFileTable hashFileTable))
             {
@@ -321,34 +321,35 @@ namespace CloudSync
             else
             {
                 var hashFileName = fileSystemInfo.HashFileName(this);
-                var tmpFile = GetTmpFile(this, toUserId, hashFileName);
-                if (!File.Exists(tmpFile)) // old if (chunkPart == 1)
+                var fileName = IsServer ? fileSystemInfo.FullName : GetTmpFile(this, toUserId, hashFileName);
+                if (!IsServer && !File.Exists(fileName)) // old if (chunkPart == 1)
                 {
-                    FileCopy(fileSystemInfo, tmpFile, out Exception exception, context: this);
+                    FileCopy(fileSystemInfo, fileName, out Exception exception, context: this);
                     if (exception != null)
                         RaiseOnFileError(exception, fileSystemInfo.FullName);
                 }
 
                 // Get the requested file chunk
-                var chunk = GetChunk(chunkPart, tmpFile, out var parts, out var fileLength);
-
+                var chunk = GetChunk(chunkPart, fileName, out var parts, out var fileLength);
 #if DEBUG
                 if (chunk == null && chunkPart != parts + 1)
                     Debugger.Break();
 #endif
-
                 if (chunk == null)
                 {
                     // File send completed or File error
                     CRC.RemoveCRC(IsClient, toUserId, hashFileName);
-                    FileDelete(tmpFile, out Exception exception);
-                    if (exception != null)
-                        RaiseOnFileError(exception, fileSystemInfo.FullName);
+                    if (!IsServer)
+                    {
+                        FileDelete(fileName, out Exception exception);
+                        if (exception != null)
+                            RaiseOnFileError(exception, fileSystemInfo.FullName);
+                    }
                     TotalFilesSent++;
                     TotalBytesSent += (uint)fileLength;
                     SendingInProgress.Completed(hashFileName, (ulong)toUserId);
                 }
-                else if (CRC.Update(IsClient, toUserId, hashFileName, ref chunkPart, chunk, tmpFile, false, out _))
+                else if (CRC.Update(IsClient, toUserId, hashFileName, ref chunkPart, chunk, fileName, false, out _))
                 {
                     // Prepare the chunk data for sending
                     var values = new List<byte[]>([
@@ -467,18 +468,18 @@ namespace CloudSync
                 Task.Run(() =>
                 {
 #endif
-                    try
-                    {
-                        Debug.WriteLine("OUT " + command);
-                        RaiseOnCommandEvent(toContactId, command, infoData, true);
-                        Send.Invoke(toContactId, (ushort)command, values);
-                    }
-                    catch (Exception ex)
-                    {
-                        RecordError(ex);
-                        Debugger.Break(); // Error! Investigate the cause of the error!
-                        Debug.WriteLine(ex);
-                    }
+                try
+                {
+                    Debug.WriteLine("OUT " + command);
+                    RaiseOnCommandEvent(toContactId, command, infoData, true);
+                    Send.Invoke(toContactId, (ushort)command, values);
+                }
+                catch (Exception ex)
+                {
+                    RecordError(ex);
+                    Debugger.Break(); // Error! Investigate the cause of the error!
+                    Debug.WriteLine(ex);
+                }
 #if !DEBUG
                 });
 #endif
