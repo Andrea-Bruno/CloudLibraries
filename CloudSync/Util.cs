@@ -435,11 +435,10 @@ namespace CloudSync
         /// <returns></returns>
         public static DateTime UnixTimestampToDateTime(uint unixTimeStamp)
         {
-            // IMPORTANT: keep UTC semantics.
-            // ZK key derivation includes unix last-write timestamp.
-            // Local-time conversion here is a bug.
-            // Example: encrypted with key at 12:00 UTC, but timestamp saved as 13:00 -> decrypt uses wrong key and fails.
-            return DateTimeOffset.FromUnixTimeSeconds(unixTimeStamp).UtcDateTime;
+            // Unix timestamp is seconds past epoch
+            var dateTime = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+            dateTime = dateTime.AddSeconds(unixTimeStamp).ToLocalTime();
+            return dateTime;
         }
 
         public static ulong HashFileName(string relativeName, bool isDirectory)
