@@ -321,9 +321,16 @@ namespace CloudSync
             else
             {
                 var hashFileName = fileSystemInfo.HashFileName(this);
+                var tmpFile = GetTmpFile(this, toUserId, hashFileName);
+                if (!File.Exists(tmpFile)) // old if (chunkPart == 1)
+                {
+                    FileCopy(fileSystemInfo, tmpFile, out Exception exception, context: this);
+                    if (exception != null)
+                        RaiseOnFileError(exception, fileSystemInfo.FullName);
+                }
 
                 // Get the requested file chunk
-                var chunk = GetChunk(chunkPart, fileSystemInfo.FullName, out var parts, out var fileLength);
+                var chunk = GetChunk(chunkPart, tmpFile, out var parts, out var fileLength);
 
 #if DEBUG
                 if (chunk == null && chunkPart != parts + 1)
@@ -334,11 +341,14 @@ namespace CloudSync
                 {
                     // File send completed or File error
                     CRC.RemoveCRC(IsClient, toUserId, hashFileName);
+                    FileDelete(tmpFile, out Exception exception);
+                    if (exception != null)
+                        RaiseOnFileError(exception, fileSystemInfo.FullName);
                     TotalFilesSent++;
                     TotalBytesSent += (uint)fileLength;
                     SendingInProgress.Completed(hashFileName, (ulong)toUserId);
                 }
-                else if (CRC.Update(IsClient, toUserId, hashFileName, ref chunkPart, chunk, fileSystemInfo.FullName, false, out _))
+                else if (CRC.Update(IsClient, toUserId, hashFileName, ref chunkPart, chunk, tmpFile, false, out _))
                 {
                     // Prepare the chunk data for sending
                     var values = new List<byte[]>([
