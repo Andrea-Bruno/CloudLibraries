@@ -108,6 +108,11 @@ namespace CloudSync
             context.ZeroKnowledgeProof.DecryptFile(encryptedFile, outputFile);
         }
 
+        public static void Decrypt(this FileInfo encryptedFile, string outputFile, string virtualRelativeName, Sync context)
+        {
+            context.ZeroKnowledgeProof.DecryptFile(encryptedFile, outputFile, virtualRelativeName);
+        }
+
         // =============== END   FileSystemInfo extension ===============
 
         /// <summary>
