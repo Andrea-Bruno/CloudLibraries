@@ -361,7 +361,10 @@ namespace CloudSync
                             var tmpDecryption = source + ".decrypted";
                             File.Delete(tmpDecryption);
                             var sourceFIleInfo = new FileInfo(source);
-                            sourceFIleInfo.Decrypt(tmpDecryption, context);
+                            // to use correct key We must derive from the original virtual cloud-relative path from transfer metadata,
+                            // bacause tmpDecryption locates in temporary directory so  Decrypt(tmpDecryption, context) picks wrong key.
+                            var virtualRelativeName = new FileInfo(target).CloudRelativeUnixFullName(context);
+                            sourceFIleInfo.Decrypt(tmpDecryption, virtualRelativeName, context);
                             var tmpDecryptionFileInfo = new FileInfo(tmpDecryption);                            
                             tmpDecryptionFileInfo.LastWriteTimeUtc = sourceFIleInfo.LastWriteTimeUtc;
                             File.Delete(target);

@@ -37,7 +37,12 @@ namespace CloudSync
         {
             unixLastWriteTimestamp = unixLastWriteTimestamp != default ? unixLastWriteTimestamp : file.UnixLastWriteTimestamp();
             var relativeName = file.CloudRelativeUnixFullName(Context);
-            var bytes = relativeName.GetBytes();
+            return DerivedEncryptionKey(relativeName, unixLastWriteTimestamp);
+        }
+
+        internal byte[] DerivedEncryptionKey(string virtualRelativeName, uint unixLastWriteTimestamp)
+        {
+            var bytes = virtualRelativeName.GetBytes();
             var len = BitConverter.GetBytes((ulong)bytes.Length);
             var date = unixLastWriteTimestamp.GetBytes();
             var concat = new byte[len.Length + bytes.Length + date.Length + EncryptionMasterKey.Length];
@@ -144,6 +149,16 @@ namespace CloudSync
             DecryptFile(inputFile, outputFile, DerivedEncryptionKey(new FileInfo(outputFile), inputFile.UnixLastWriteTimestamp()));
         }
 
+        /// <summary>
+        /// This overload is required for receive/decrypt flow:
+        /// decrypt  run on temp files in tmp folder so deriving from FileInfo path would be wrong.
+        /// We must derive from the original virtual cloud-relative path from transfer metadata.   
+        /// </summary>
+        public void DecryptFile(FileInfo inputFile, string outputFile, string virtualRelativeName)
+        {
+            // Use explicit virtual path to avoid temp-path based key derivation mismatches.
+            DecryptFile(inputFile, outputFile, DerivedEncryptionKey(virtualRelativeName, inputFile.UnixLastWriteTimestamp()));
+        }
 
         public string EncryptFullFileName(string fullFileName) => EncryptFullFileName(fullFileName, FilenameObfuscationKey);
 

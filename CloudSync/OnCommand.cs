@@ -390,7 +390,8 @@ namespace CloudSync
                                     }
 
                                     // Set correct timestamp for decryption
-                                    infoTmpFile.LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp);
+                                    // We switch to UTC to avoid issues with different time zones between devices while syncing.
+                                    infoTmpFile.LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp).ToUniversalTime();
                                     infoTmpFile.Refresh();
 
                                     // Move temp file to final location
