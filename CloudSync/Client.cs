@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using System.Text;
 using System.Xml.Serialization;
 using static CloudSync.RoleManager;
 
@@ -293,6 +294,30 @@ namespace CloudSync
         public enum Status
         {
             Enabled = 0, Blocked = 1, AuthenticationRequired = 2,
+        }
+
+        /// <summary>
+        /// Returns a concise human-readable summary of this client's profile information,
+        /// including its identifier, label, type, status, connectivity state and last-access details.
+        /// </summary>
+        /// <returns>A single-line string summarising the client profile.</returns>
+        public string GetProfileSummary()
+        {
+            var sb = new StringBuilder();
+            sb.Append($"Id: {Id}");
+            if (!string.IsNullOrEmpty(Label))
+                sb.Append($", Label: {Label}");
+            sb.Append($", Type: {TypeOfClient}");
+            sb.Append($", Status: {CurrentStatus}");
+            sb.Append($", Connected: {IsConnected}");
+            if (Accesses != null && Accesses.Length > 0)
+            {
+                var last = Accesses[Accesses.Length - 1];
+                sb.Append($", LastAccess: {last.DateTime:u}");
+                if (!string.IsNullOrEmpty(last.Host))
+                    sb.Append($" from {last.Host}");
+            }
+            return sb.ToString();
         }
     }
 }
