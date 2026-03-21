@@ -347,8 +347,9 @@ namespace CloudSync
                     }
                     TotalFilesSent++;
                     TotalBytesSent += (uint)fileLength;
-                    SendingInProgress.Completed(hashFileName, (ulong)toUserId);
+                    SendingInProgress.Completed(hashFileName, toUserId); // cant cast null to ulong.
                 }
+                //CRC sets ClientId to 0 when creating in case of client. so no need to pass IsClient ? null : toUserId here to solve issue of 2 CRC with inital null and with subseqient not null ID.
                 else if (CRC.Update(IsClient, toUserId, hashFileName, ref chunkPart, chunk, fileName, false, out _))
                 {
                     // Prepare the chunk data for sending
