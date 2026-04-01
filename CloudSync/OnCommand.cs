@@ -276,7 +276,7 @@ namespace CloudSync
 
                             if (hashDirTable.TryGetValue(hash, out var fileSystemInfo))
                             {
-                                SendChunkFile(fromUserId, fileSystemInfo, chunkPart);
+                                SendChunkFile(IsClient ? null: fromUserId, fileSystemInfo, chunkPart);
                             }
                             else
                             {
@@ -311,6 +311,13 @@ namespace CloudSync
                                 SendNotification(fromUserId, Notice.FullSpace);
                                 return;
                             }
+                        // If this is the first chunk, remove any existing CRC and temp file to start fresh for precaution.
+                        // if (part == 1)
+                        // {
+                        //     CRC.RemoveCRC(IsClient, fromUserId, hashFileName);
+                        //     if (File.Exists(tmpFile))
+                        //         File.Delete(tmpFile);
+                        // }
 
                         if (part != 1)
                         {
@@ -390,7 +397,8 @@ namespace CloudSync
                                     }
 
                                     // Set correct timestamp for decryption
-                                    infoTmpFile.LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp);
+                                    // We switch to UTC to avoid issues with different time zones between devices while syncing.
+                                    infoTmpFile.LastWriteTimeUtc = UnixTimestampToDateTime(unixTimestamp).ToUniversalTime();
                                     infoTmpFile.Refresh();
 
                                     // Move temp file to final location
